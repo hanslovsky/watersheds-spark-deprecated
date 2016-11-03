@@ -137,18 +137,7 @@ public class WatershedsSpark
 
 		final Img< LongType > labelsTarget = new CellImgFactory< LongType >( dimsIntvInt ).create( Views.collapseReal( input ), new LongType() );
 
-		final double threshold = 0;// 1e-20;
-
-
-//		final Cells< ?, ? > cells = input.getCells();
-//		int n = 0;
-//		for ( final Cursor< ? > c = cells.cursor(); c.hasNext(); ++n )
-//		{
-//			final Object cell = c.next();
-//			System.out.println( new Point( c ) );
-//		}
-//		System.out.println( n + " cells" );
-//		System.exit( 123 );
+		final double threshold = -1;// 1e-20;
 
 		final String addr = "ipc://data_server";
 		final ZContext zmqContext = new ZContext();
@@ -311,7 +300,12 @@ public class WatershedsSpark
 						( Converter< LongType, ARGBType > ) ( s, tt ) -> tt.set( colors.get( s.getInteger() ) ),
 						new ARGBType() );
 //				BdvFunctions.show( labels, "LABELS TOP LEFT " + threshold );
-				BdvFunctions.show( coloredLabels, "LABELS TOP LEFT " + threshold );
+				final BdvStackSource< ARGBType > bdv = BdvFunctions.show( coloredLabels, "LABELS TOP LEFT " + threshold );
+				final ViewerPanel vp = bdv.getBdvHandle().getViewerPanel();
+				final RealRandomAccess< LongType > access = Views.interpolate( Views.extendValue( labels, new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ).realRandomAccess();
+				final ValueDisplayListener< LongType > vdl = new ValueDisplayListener<>( access, vp );
+				vp.getDisplay().addMouseMotionListener( vdl );
+				vp.getDisplay().addOverlayRenderer( vdl );
 			}
 
 			if ( threshold < 1e-4 )
@@ -610,7 +604,7 @@ public class WatershedsSpark
 					edgeList,
 					offsetCounts,
 					( net.imglib2.algorithm.morphology.watershed.AffinityWatershed2.Predicate ) ( v1, v2 ) -> v1 < v2,
-					new double[] { -1.0e4, 10, 100, 1000, 10000 } )[ 4 ];
+					new double[] { -1.0, 100, 1000, 10000 } )[ 3 ];
 
 
 
