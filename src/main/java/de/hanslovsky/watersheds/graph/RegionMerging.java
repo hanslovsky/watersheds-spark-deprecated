@@ -3,18 +3,15 @@ package de.hanslovsky.watersheds.graph;
 import java.io.Serializable;
 import java.util.Arrays;
 
-import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.PairFunction;
 
 import gnu.trove.iterator.TIntIntIterator;
-import gnu.trove.iterator.TLongLongIterator;
+import gnu.trove.iterator.TIntIterator;
 import gnu.trove.list.array.TDoubleArrayList;
-import gnu.trove.list.array.TIntArrayList;
 import gnu.trove.map.hash.TIntIntHashMap;
+import gnu.trove.map.hash.TIntLongHashMap;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
-import gnu.trove.map.hash.TLongObjectHashMap;
 import gnu.trove.set.hash.TIntHashSet;
 import it.unimi.dsi.fastutil.ints.IntComparator;
 import it.unimi.dsi.fastutil.ints.IntHeapPriorityQueue;
@@ -29,229 +26,22 @@ public class RegionMerging
 
 		private static final long serialVersionUID = -5524785343491327810L;
 
-		public double[] edges;
+		public final double[] edges;
 
-		public long[] counts;
+		public final long[] counts;
 
-		public long[] outside;
+		public final long[] outside;
 
-		public EdgesAndCounts( final double[] edges, final long[] counts, final long[] outside )
+		public final long[] assignments;
+
+		public EdgesAndCounts( final double[] edges, final long[] counts, final long[] outside, final long[] assignments )
 		{
 			super();
 			this.edges = edges;
 			this.counts = counts;
 			this.outside = outside;
+			this.assignments = assignments;
 		}
-
-	}
-
-	final static int edgeSize = 3;
-
-	public static void run(
-			final JavaSparkContext sc,
-			final JavaPairRDD< Long, Tuple3< double[], long[], long[] > > input,
-			final double threshold )
-	{
-		input.mapToPair( t -> {
-			final long idx = t._1();
-			final double[] edgesWithAffinities = t._2()._1();
-
-			final TLongLongHashMap pointingOutside = new TLongLongHashMap();
-			final long[] outsidePointsList = t._2()._2();
-			final long[] countsArray = t._2()._3();
-
-			for ( int i = 0; i < outsidePointsList.length; i += 2 )
-				pointingOutside.put( outsidePointsList[i],  outsidePointsList[i+1] );
-
-			final TLongLongHashMap counts = new TLongLongHashMap();
-
-			final TLongLongHashMap parents = new TLongLongHashMap();
-			final TLongLongHashMap ranks = new TLongLongHashMap();
-
-			final TLongObjectHashMap< TIntArrayList > nodeEdgeMap = new TLongObjectHashMap<>();
-			for ( int i = 0; i < countsArray.length; ++i )
-			{
-				final long id = countsArray[ i ];
-				counts.put( id, countsArray[ i + 1 ] );
-				nodeEdgeMap.put( id, new TIntArrayList() );
-				parents.put( id, id );
-				ranks.put( id, 0 );
-			}
-
-			final HashSetsDisjointSets unionFind = new HashSetsDisjointSets( parents, ranks, parents.size() );
-
-			final TDoubleArrayList edges = new TDoubleArrayList();
-			for ( int i = 0; i < edgesWithAffinities.length; i += 3 )
-			{
-				final double aff = edgesWithAffinities[ i ];
-				final double id1 = edgesWithAffinities[ i + 1 ];
-				final double id2 = edgesWithAffinities[ i + 2 ];
-				final long c1 = counts.get( Double.doubleToLongBits( id1 ) );
-				final long c2 = counts.get( Double.doubleToLongBits( id2 ) );
-
-				final double weight = aff; // Math.min( c1, c2 ) / ( aff * aff
-				// );
-
-				edges.add( weight );
-				edges.add( id1 );
-				edges.add( id2 );
-			}
-
-			final IntComparator comparator = new IntComparator()
-			{
-
-				@Override
-				public int compare( final Integer o1, final Integer o2 )
-				{
-					return compare( o1.intValue(), o2.intValue() );
-				}
-
-				@Override
-				public int compare( final int k1, final int k2 )
-				{
-					final double aff1 = edges.get( k1 );
-					final double aff2 = edges.get( k2 );
-					final long c1 = Math.min( counts.get( ( long ) edges.get( k1 + 1 ) ), counts.get( ( long ) edges.get( k1 + 2 ) ) );
-					final long c2 = Math.min( counts.get( ( long ) edges.get( k2 + 1 ) ), counts.get( ( long ) edges.get( k2 + 2 ) ) );
-					return Double.compare( c1 / ( aff1 * aff1 ), c2 / ( aff2 * aff2 ) );
-				}
-			};
-			final IntHeapPriorityQueue queue = new IntHeapPriorityQueue( comparator );
-
-
-			for ( int i = 0; i < edges.size(); i += edgeSize )
-			{
-				queue.enqueue( i );
-
-				final long id1 = Double.doubleToLongBits( edges.get( i + 1 ) );
-				if ( !pointingOutside.contains( id1 ) )
-					nodeEdgeMap.get( id1 ).add( i );
-
-				final long id2 = Double.doubleToLongBits( edges.get( i + 1 ) );
-				if ( !pointingOutside.contains( id2 ) )
-					nodeEdgeMap.get( id2 ).add( i );
-			}
-
-
-
-			boolean pointsOutside = false;
-			double outsideValue = Double.NaN;
-			long outsideIndex = -1;
-
-			while( queue.isEmpty() ) {
-				final int next = queue.dequeueInt();
-
-				final double weight = edges.get( next );
-
-				if ( pointsOutside && weight > outsideValue || weight > threshold )
-					break;
-
-				final long from = Double.doubleToLongBits( edges.get( next + 1 ) );
-				final long to = Double.doubleToLongBits( edges.get( next + 2 ) );
-
-				final TIntArrayList edgeList1 = nodeEdgeMap.get( from );
-				final TIntArrayList edgeList2 = nodeEdgeMap.get( to );
-
-				if ( edgeList1 == null || edgeList2 == null )
-					continue;
-
-				if ( pointingOutside.contains( from ) )
-				{
-					pointsOutside = true;
-					outsideValue = weight;
-					outsideIndex = from;
-				}
-				else if ( pointingOutside.contains( to ) )
-				{
-					pointsOutside = true;
-					outsideValue = weight;
-					outsideIndex = to;
-				}
-				else
-				{
-					final long r1 = unionFind.findRoot( from );
-					final long r2 = unionFind.findRoot( to );
-
-					if ( r1 == r2 || r1 == 0 || r2 == 0 )
-						continue;
-
-					final long r = unionFind.join( r1, r2 );
-					final long c1 = counts.get( r1 );
-					final long c2 = counts.get( r2 );
-
-					updateCountsAndEdges( r, r == r1 ? r1 : r2, nodeEdgeMap, counts, queue, edges );
-				}
-
-			}
-
-			// compress all paths
-			for ( final long k : parents.keys() )
-				unionFind.findRoot( k );
-
-			final long[] countsOut = new long[ 2 * counts.size() ];
-			final TLongLongIterator countsIt = counts.iterator();
-			for ( int i = 0; countsIt.hasNext(); ++i ) {
-				countsIt.advance();
-				countsOut[i] = countsIt.key();
-				countsOut[i+1] = countsIt.value();
-			}
-
-			final TDoubleArrayList edgesOut = new TDoubleArrayList();
-
-
-			// TODO Auto-generated method stub
-			return null;
-		});
-	}
-
-	public static void updateCountsAndEdges(
-			final long newRoot,
-			final long oldRoot,
-			final TLongObjectHashMap< TIntArrayList > nodeEdgeMap,
-			final TLongLongHashMap counts,
-			final IntHeapPriorityQueue queue,
-			final TDoubleArrayList edges )
-	{
-		counts.put( newRoot, counts.get( newRoot ) + counts.get( oldRoot ) );
-		counts.remove( oldRoot );
-
-		final TIntArrayList outgoingEdgesFromOldRoot = nodeEdgeMap.remove( oldRoot );
-		final TIntArrayList outgoingEdgesFromNewRoot = nodeEdgeMap.remove( newRoot );
-		final TIntArrayList newEdges = new TIntArrayList();
-
-		for ( int i = 0; i < outgoingEdgesFromOldRoot.size(); ++i )
-		{
-			final int index = outgoingEdgesFromOldRoot.get( i );
-			final long id1 = Double.doubleToLongBits( edges.get( index+1 ) );
-			final long id2 = Double.doubleToLongBits( edges.get( index+2 ) );
-			if ( id1 == newRoot && id2 == oldRoot || id1 == oldRoot && id2 == newRoot )
-				continue;
-			final double w = edges.get( index );
-			final int edgeIndex = edges.size() / 3;
-			queue.enqueue( edgeIndex );
-			edges.add( w );
-			edges.add( Double.longBitsToDouble( id1 ) );
-			edges.add( Double.longBitsToDouble( id2 ) );
-			newEdges.add( edgeIndex );
-		}
-
-		for ( int i = 0; i < outgoingEdgesFromNewRoot.size(); ++i )
-		{
-			final int index = outgoingEdgesFromOldRoot.get( i );
-			final long id1 = Double.doubleToLongBits( edges.get( index+1 ) );
-			final long id2 = Double.doubleToLongBits( edges.get( index+2 ) );
-			if ( id1 == newRoot && id2 == oldRoot || id1 == oldRoot && id2 == newRoot )
-				continue;
-			final double w = edges.get( index );
-			final int edgeIndex = edges.size() / 3;
-			queue.enqueue( edgeIndex );
-			edges.add( w );
-			edges.add( Double.longBitsToDouble( id1 ) );
-			edges.add( Double.longBitsToDouble( id2 ) );
-			newEdges.add( edgeIndex );
-		}
-
-		nodeEdgeMap.put( newRoot, newEdges );
 
 	}
 
@@ -261,22 +51,24 @@ public class RegionMerging
 		double weight( double affinity, long count1, long count2 );
 	}
 
-	public static interface DoubleComparator
-	{
-		default public int compare( final double d1, final double d2 )
-		{
-			return Double.compare( d1, d2 );
-		}
-	}
-
 	public static class EdgeComparator implements IntComparator
 	{
 
-
+		public static interface DoubleComparator
+		{
+			default public int compare( final double d1, final double d2 )
+			{
+				return Double.compare( d1, d2 );
+			}
+		}
 
 		private final DoubleComparator dComp;
 
 		private final TDoubleArrayList weightedEdges;
+
+		private final Edge e1;
+
+		private final Edge e2;
 
 		public EdgeComparator( final TDoubleArrayList weightedEdges )
 		{
@@ -288,6 +80,8 @@ public class RegionMerging
 			super();
 			this.dComp = dComp;
 			this.weightedEdges = weightedEdges;
+			this.e1 = new Edge( this.weightedEdges );
+			this.e2 = new Edge( this.weightedEdges );
 		}
 
 		@Override
@@ -299,86 +93,97 @@ public class RegionMerging
 		@Override
 		public int compare( final int k1, final int k2 )
 		{
-			return dComp.compare( weightedEdges.get( k1 ), weightedEdges.get( k2 ) );
+			e1.setIndex( k1 );
+			e2.setIndex( k2 );
+			return dComp.compare( e1.weight(), e2.weight() );
 		}
 
 	}
 
-	public static class MergeBloc< K > implements PairFunction< Tuple2< K, EdgesAndCounts >, Tuple2< K, K >, EdgesAndCounts >
+	public static interface EdgeMerger
 	{
+		// writes into e2
+		Edge merge( final Edge e1, final Edge e2 );
+//		default Edge merge( final Edge e1, final Edge e2 )
+//		{
+//			final double w1 = e1.weight();
+//			final double w2 = e2.weight();
+//			if ( w1 < w2 )
+//			{
+//				e2.weight( w1 );
+//				e2.affinity( e1.affinity() );
+//			}
+//
+//			return e2;
+//		}
+	}
+
+	public static class MergeBloc implements PairFunction< Tuple2< Long, EdgesAndCounts >, Tuple2< Long, Long >, EdgesAndCounts >
+	{
+
+		private static final long serialVersionUID = -1537751845300461154L;
 
 		private final Function f;
 
+		private final EdgeMerger merger;
+
 		private final double threshold;
 
-		public MergeBloc( final Function f, final double threshold )
+		public MergeBloc( final Function f, final EdgeMerger merger, final double threshold )
 		{
 			super();
 			this.f = f;
+			this.merger = merger;
 			this.threshold = threshold;
 		}
 
 		@Override
-		public Tuple2< Tuple2< K, K >, EdgesAndCounts > call( final Tuple2< K, EdgesAndCounts > t ) throws Exception
+		public Tuple2< Tuple2< Long, Long >, EdgesAndCounts > call( final Tuple2< Long, EdgesAndCounts > t ) throws Exception
 		{
 			final EdgesAndCounts edgesAndWeights = t._2();
-			final double[] affinityEdges = new double[ edgesAndWeights.edges.length ];
-			final long[] counts = new long[ edgesAndWeights.counts.length / 2 ];
-			final Tuple2< TLongIntHashMap, long[] > mappings = mapToContiguousZeroBasedIndices( edgesAndWeights, affinityEdges, counts );
+			final int numberOfNodes = edgesAndWeights.counts.length / 2;
+			final int numberOfOutsideNodes = edgesAndWeights.outside.length / 3;
+			final long[] counts = new long[ numberOfNodes + numberOfOutsideNodes ];
+			final TDoubleArrayList edges = new TDoubleArrayList( new double[ edgesAndWeights.edges.length ] );
+			final IntHeapPriorityQueue queue = new IntHeapPriorityQueue( new EdgeComparator( edges ) );
+			final Tuple3< TLongIntHashMap, long[], TIntHashSet[] > mappings =
+					mapToContiguousZeroBasedIndices( edgesAndWeights, edges, counts, queue, f );
 
 			final TLongIntHashMap fw = mappings._1();
 			final long[] bw = mappings._2();
+			final TIntHashSet[] nodeEdgeMap = mappings._3();
 
-			final TDoubleArrayList edges = new TDoubleArrayList();
-			final IntHeapPriorityQueue queue = new IntHeapPriorityQueue( new EdgeComparator( edges ) );
-			final TIntArrayList[] nodeEdgeMap = new TIntArrayList[ counts.length ];
-			for ( int i = 0; i < counts.length; ++i )
-				nodeEdgeMap[i] = new TIntArrayList();
+			final Edge e = new Edge( edges );
+			final Edge e1 = new Edge( edges );
+			final Edge e2 = new Edge( edges );
 
-			for ( int k = 0, i = 0; k < affinityEdges.length; k += 3, i += 4 )
-			{
-				final int i1 = (int) Double.doubleToLongBits( affinityEdges[ k + 1 ] );
-				final int i2 = ( int ) Double.doubleToLongBits( affinityEdges[ k + 2 ] );
-				final double a = affinityEdges[ k ];
-				final double w = f.weight( a, counts[ i1 ], counts[ i2 ] );
-//				if ( w < threshold )
-//				{
-				edges.add( w );
-				edges.add( a );
-				edges.add( Double.longBitsToDouble( i1 ) );
-				edges.add( Double.longBitsToDouble( i2 ) );
-				System.out.println( i + " " + i1 + " " + i2 );
-				queue.enqueue( i );
-				nodeEdgeMap[ i1 ].add( i );
-				nodeEdgeMap[ i2 ].add( i );
-//				}
-			}
+//			for ( int k = 0; k < edges.size(); k += 4 )
+//				System.out.println( edges.get( k ) + " " + edges.get( k + 1 ) + " " +
+//						dtl( edges.get( k + 2 ) ) + " " + dtl( edges.get( k + 3 ) ) + " WAAAS ? " );
 
-			for ( int k = 0; k < edges.size(); k += 4 )
-				System.out.println( edges.get( k ) + " " + edges.get( k + 1 ) + " " +
-						Double.doubleToLongBits( edges.get( k + 2 ) ) + " " + Double.doubleToLongBits( edges.get( k + 3 ) ) + " WAAAS ? " );
-
-			final TIntHashSet outside = new TIntHashSet();
-			for ( final long o : edgesAndWeights.outside )
-				outside.add( fw.get( o ) );
+			final TIntLongHashMap outside = new TIntLongHashMap();
+			for ( int i = 0; i < edgesAndWeights.outside.length; i += 3 )
+				outside.put( fw.get( edgesAndWeights.outside[ i ] ), edgesAndWeights.outside[ i + 2 ] );
 
 			boolean pointsOutside = false;
-			int pointedToOutside = -1;
+			long pointedToOutside = -1;
 			double outsideEdgeWeight = Double.NaN;
 
-			final int[] parents = new int[ counts.length ];
-			for ( int i = 0; i < parents.length; ++i )
-				parents[ i ] = i;
+			final int[] parents = new int[ numberOfNodes ];
+			final TLongLongHashMap assignments = new TLongLongHashMap();
 
-			final TIntArrayList removedEdges = new TIntArrayList();
+			for ( int i = 0; i < edgesAndWeights.assignments.length; i += 2 )
+				assignments.put( edgesAndWeights.assignments[i], edgesAndWeights.assignments[i+1] );
+
+			for ( int i = 0; i < numberOfNodes; ++i )
+				parents[ i ] = fw.get( assignments.get( bw[ i ] ) );
 
 			while ( !queue.isEmpty() )
 			{
 				final int next = queue.dequeueInt();
-				final double w = edges.get( next );
-				System.out.println(
-						next + " .. " + w + " " + edges.get( next + 1 ) + " " + Double.doubleToLongBits( edges.get( next + 2 ) ) + " " +
-								Double.doubleToLongBits( edges.get( next + 3 ) ) );
+				e.setIndex( next );
+				final double w = e.weight();
+				System.out.println( next + " .. " + w + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() );
 
 				if ( w < 0 )
 					continue;
@@ -386,61 +191,92 @@ public class RegionMerging
 				else if ( w > threshold || pointsOutside && w > outsideEdgeWeight )
 					break;
 
-				final int id1 = ( int ) Double.doubleToLongBits( edges.get( next + 2 ) );
-				final int id2 = ( int ) Double.doubleToLongBits( edges.get( next + 3 ) );
+				final int from = ( int ) e.from();
+				final int to = ( int ) e.to();
 
-				if ( outside.contains( id1 ) )
+				if ( outside.contains( from ) )
 				{
 					if ( !pointsOutside )
 					{
 						pointsOutside = true;
-						pointedToOutside = id1;
+						pointedToOutside = outside.get( from );
 						outsideEdgeWeight = w;
 					}
 				}
-				else if ( outside.contains( id2 ) )
+				else if ( outside.contains( to ) )
 				{
 					if ( !pointsOutside ) {
 						pointsOutside = true;
-						pointedToOutside = id2;
+						pointedToOutside = outside.get( to );
 						outsideEdgeWeight = w;
 					}
 				}
 				else
 				{
-//					removedEdges.add( next );
-					final long c1 = counts[ id1 ];
-					final long c2 = counts[ id2 ];
-					counts[ id1 ] += c2;
-					counts[ id2 ] = 0;
-					parents[ id2 ] = id1;
+					mergeEdges( from, to, nodeEdgeMap, edges, queue, counts, f, e1, e2, merger );
 
-					mergeEdges( id1, id2, nodeEdgeMap, edges, queue, counts, f );
+					final long c1 = counts[ from ];
+					final long c2 = counts[ to ];
+					counts[ from ] += c2;
+					counts[ to ] = 0;
+					parents[ to ] = from;
 
 				}
 
 			}
 
-			System.out.println( Arrays.toString( parents ) );
+//			System.out.println( Arrays.toString( parents ) );
 			final DisjointSets dj = new DisjointSets( parents, new int[ parents.length ], 1 );
 			for ( int i = 0; i < parents.length; ++i )
 				dj.findRoot( i );
-			System.out.println( Arrays.toString( parents ) );
-			System.out.println( Arrays.toString( bw ) );
+//			System.out.println( Arrays.toString( parents ) );
+//			System.out.println( Arrays.toString( bw ) );
 
-			return null;
+//			double[] resultEdges = new double[0];
+			final TDoubleArrayList resultEdges = new TDoubleArrayList();
+			final Edge re = new Edge( resultEdges );
+			for ( int k = 0; k < e.size(); ++k )
+			{
+				e.setIndex( k );
+				final double w = e.weight();
+				if ( w == -1 )
+					continue;
+
+				re.add( w, e.affinity(), bw[ ( int ) e.from() ], bw[ ( int ) e.to() ], e.multiplicity() );
+
+			}
+
+
+			final long[] resultAssignments = new long[ numberOfNodes * 2 ];
+			final long[] resultCounts = new long[ numberOfNodes * 2 ];
+			for ( int i = 0, k = 0; i < numberOfNodes; ++i, k += 2 )
+			{
+				final long id = bw[ i ];
+				resultAssignments[ k ] = id;
+				resultAssignments[ k + 1 ] = bw[ parents[ i ] ];
+
+				resultCounts[ k ] = id;
+				resultCounts[ k + 1 ] = counts[ i ];
+
+			}
+
+			final EdgesAndCounts result = new EdgesAndCounts( resultEdges.toArray(), resultCounts, edgesAndWeights.outside, resultAssignments );
+			return new Tuple2<>( new Tuple2<>( t._1(), pointedToOutside ), result );
 		}
 
 	}
 
-	public static Tuple2< TLongIntHashMap, long[] > mapToContiguousZeroBasedIndices(
+	public static Tuple3< TLongIntHashMap, long[], TIntHashSet[] > mapToContiguousZeroBasedIndices(
 			final EdgesAndCounts edgesAndWeights,
-			final double[] edges,
-			final long[] counts
+			final TDoubleArrayList edges,
+			final long[] counts,
+			final IntHeapPriorityQueue queue,
+			final Function f
 			) {
 		final TLongIntHashMap mappingToZeroBasedIndexSet = new TLongIntHashMap();
 		final long[] mappingToOriginalIndexSet = new long[ counts.length ];
-		for ( int i = 0, k = 0; i < mappingToOriginalIndexSet.length; ++i, k += 2 )
+
+		for ( int i = 0, k = 0; k < edgesAndWeights.counts.length; ++i, k += 2 )
 		{
 			final long index = edgesAndWeights.counts[ k ];
 			mappingToOriginalIndexSet[ i ] = index;
@@ -448,99 +284,165 @@ public class RegionMerging
 			mappingToZeroBasedIndexSet.put( index, i );
 		}
 
-		for ( int i = 0; i < edges.length; i += 3 )
+		for ( int i = edgesAndWeights.counts.length / 2, k = 0; i < counts.length; ++i, k += 3 )
 		{
-			edges[i] = edgesAndWeights.edges[i];
-			edges[ i + 1 ] = Double.longBitsToDouble( mappingToZeroBasedIndexSet.get( Double.doubleToLongBits( edgesAndWeights.edges[ i + 1 ] ) ) );
-			edges[ i + 2 ] = Double.longBitsToDouble( mappingToZeroBasedIndexSet.get( Double.doubleToLongBits( edgesAndWeights.edges[ i + 2 ] ) ) );
+			final long index = edgesAndWeights.outside[ k ];
+			mappingToOriginalIndexSet[ i ] = index;
+			mappingToZeroBasedIndexSet.put( index, i );
+			counts[ i ] = edgesAndWeights.outside[ k + 1 ];
+		}
+		// TDoubleArrayList creates a copy. SUPER ANNOYING!
+		final Edge globalIndexingEdge = new Edge( new TDoubleArrayList( edgesAndWeights.edges ) );
+		final Edge localIndexingEdge = new Edge( edges );
+
+		final TIntHashSet[] nodeEdgeMap = new TIntHashSet[ counts.length ];
+		for ( int i = 0; i < nodeEdgeMap.length; ++i )
+			nodeEdgeMap[ i ] = new TIntHashSet();
+
+		for ( int k = 0; k < globalIndexingEdge.size(); ++k )
+		{
+			globalIndexingEdge.setIndex( k );
+			localIndexingEdge.setIndex( k );
+			final double w = globalIndexingEdge.weight();
+			final double a = globalIndexingEdge.affinity();
+			final int i1 = mappingToZeroBasedIndexSet.get( globalIndexingEdge.from() );
+			final int i2 = mappingToZeroBasedIndexSet.get( globalIndexingEdge.to() );
+			localIndexingEdge.weight( Double.isNaN( w ) ? f.weight( a, counts[ i1 ], counts[ i2 ] ) : w );
+			localIndexingEdge.affinity( a );
+			localIndexingEdge.from( i1 );
+			localIndexingEdge.to( i2 );
+
+			queue.enqueue( k );
+			nodeEdgeMap[ i1 ].add( k );
+			nodeEdgeMap[ i2 ].add( k );
 		}
 
-		return new Tuple2<>( mappingToZeroBasedIndexSet, mappingToOriginalIndexSet );
+		return new Tuple3<>( mappingToZeroBasedIndexSet, mappingToOriginalIndexSet, nodeEdgeMap );
 	}
 
 	public static void mergeEdges(
 			final int keepNode,
 			final int discardNode,
-			final TIntArrayList[] nodeEdgeMap,
+			final TIntHashSet[] nodeEdgeMap,
 			final TDoubleArrayList edges,
 			final IntHeapPriorityQueue queue,
 			final long[] counts,
-			final Function f )
+			final Function f,
+			final Edge e1,
+			final Edge e2,
+			final EdgeMerger merger )
 	{
-		final TIntArrayList keepNodeEdges = nodeEdgeMap[ keepNode ];
-		final TIntArrayList discardNodeEdges = nodeEdgeMap[ discardNode ];
+		final TIntHashSet keepNodeEdges = nodeEdgeMap[ keepNode ];
+		final TIntHashSet discardNodeEdges = nodeEdgeMap[ discardNode ];
 		final TIntIntHashMap neighborToEdgeIndexMap = new TIntIntHashMap();
 
-		addNeighborEdges( keepNodeEdges, keepNode, keepNode, discardNode, edges, counts, neighborToEdgeIndexMap, f );
-		addNeighborEdges( discardNodeEdges, keepNode, discardNode, keepNode, edges, counts, neighborToEdgeIndexMap, f );
+		addNeighborEdges( nodeEdgeMap, keepNodeEdges, keepNode, keepNode, discardNode, counts, neighborToEdgeIndexMap, f, e1, e2, merger );
+		addNeighborEdges( nodeEdgeMap, discardNodeEdges, keepNode, discardNode, keepNode, counts, neighborToEdgeIndexMap, f, e1, e2, merger );
+
+		keepNodeEdges.clear();
+		discardNodeEdges.clear();
 
 		for ( final TIntIntIterator it = neighborToEdgeIndexMap.iterator(); it.hasNext(); )
 		{
 			it.advance();
-			queue.enqueue( it.value() );
+			final int k = it.value();
+			keepNodeEdges.add( k );
+			nodeEdgeMap[ it.key() ].add( k );
+			queue.enqueue( k );
 		}
 
-		System.exit( 1 );
+//		System.out.println( edges );
 
 	}
 
 	public static void addNeighborEdges(
-			final TIntArrayList incidentEdges,
-			final int newIndex,
-			final int oldIndex,
-			final int otherNode,
-			final TDoubleArrayList edges,
+			final TIntHashSet[] nodeEdgeMap,
+			final TIntHashSet incidentEdges,
+			final int newNode,
+			final int mergedNode1,
+			final int mergedNode2,
 			final long[] counts,
 			final TIntIntHashMap neighborToEdgeIndexMap,
-			final Function f )
+			final Function f,
+			final Edge e1,
+			final Edge e2,
+			final EdgeMerger merger )
 	{
-		final int size = incidentEdges.size();
-		for ( int i = 0; i < size; ++i ) {
-			final int k = incidentEdges.get( i );
-			edges.set( k, -1 );
-			final int from = ( int ) Double.doubleToLongBits( edges.get( k + 2 ) );
-			final int to = ( int ) Double.doubleToLongBits( edges.get( k + 3 ) );
-			final int otherIndex = oldIndex == from ? to : from;
-			if ( otherIndex == otherNode )
+		// TODO something still seems to be broken here, fix it!
+		for ( final TIntIterator it = incidentEdges.iterator(); it.hasNext(); )
+		{
+			final int k = it.next();
+			e1.setIndex( k );
+
+			final int from = ( int ) e1.from();
+			final int to = ( int ) e1.to();
+			final int otherIndex = mergedNode1 == from ? to : from;
+
+			final long multiplicity = e1.multiplicity();
+
+			nodeEdgeMap[ otherIndex ].remove( k );
+
+			if ( e1.weight() == -1 )
 				continue;
-			final long c1 = counts[ ( int ) Double.doubleToLongBits( edges.get( k + 2 ) ) ];
-			final long c2 = counts[ ( int ) Double.doubleToLongBits( edges.get( k + 3 ) ) ];
+
+			if ( otherIndex == mergedNode2 )
+				continue;
+
+			final long c1 = counts[ newNode ];
+			final long c2 = counts[ otherIndex ];
 //			edges[ k ] = -1;
-			final double aff = edges.get( k + 1  );
+			final double aff = e1.affinity();
 			final double w = f.weight( aff, c1, c2 );
 
 
 			if ( neighborToEdgeIndexMap.contains( otherIndex ) ) {
 				final int edgeIndex = neighborToEdgeIndexMap.get( otherIndex );
-				final double currentW = edges.get( edgeIndex );
-				if ( w < currentW )
-				{
-					edges.set( edgeIndex, w );
-					edges.set( edgeIndex + 1, aff );
+				e2.setIndex( edgeIndex );
+				e2.multiplicity( e1.multiplicity() + multiplicity );
+				final double currentW = e2.weight();
+				// why is this check necessary?
+				if ( currentW != -1 ) {
+//					e1.weight( w );
+//					e1.affinity( aff );
+					final Edge e = merger.merge( e1, e2 );
+					System.out.println( "Modified edge " + edgeIndex + ": " + e.weight() + " " + e.affinity() + " " +
+							e.from() + " " + e.to() + " " + e.multiplicity() );
 				}
 			} else {
-				final int newEdgeIndex = edges.size();
+				final int newEdgeIndex = e1.size();
+				neighborToEdgeIndexMap.put( newNode, newEdgeIndex );
 				neighborToEdgeIndexMap.put( otherIndex, newEdgeIndex );
-				edges.add( w );
-				edges.add( aff );
-				edges.add( Double.longBitsToDouble( newIndex ) );
-				edges.add( Double.longBitsToDouble( otherIndex ) );
+				e1.add( w, aff, newNode, otherIndex, multiplicity );
+				e1.setIndex( newEdgeIndex );
+				System.out.println( "Added edge " + newEdgeIndex + ": " + e1.weight() + " " + e1.affinity() + " " +
+						e1.from() + " " + e1.to() + " " + e1.multiplicity() );
 			}
+
+			e1.weight( -1 );
 
 		}
 	}
 
+	public static double ltd( final long l )
+	{
+		return Double.longBitsToDouble( l );
+	}
+
+	public static long dtl( final double d )
+	{
+		return Double.doubleToLongBits( d );
+	}
+
 	public static void main( final String[] args ) throws Exception
 	{
-//		final SparkConf conf = new SparkConf().setAppName( "merge" ).setMaster( "local[*]" );
-//		final JavaSparkContext sc = new JavaSparkContext( conf );
-
 		final double[] affinities = new double[] {
-				0.9, Double.longBitsToDouble( 10 ), Double.longBitsToDouble( 11 ),
-				0.1, Double.longBitsToDouble( 11 ), Double.longBitsToDouble( 12 ),
-				0.1, Double.longBitsToDouble( 13 ), Double.longBitsToDouble( 12 ),
-				0.4, Double.longBitsToDouble( 13 ), Double.longBitsToDouble( 10 ),
-				0.8, Double.longBitsToDouble( 11 ), Double.longBitsToDouble( 13 )
+				Double.NaN, 0.9, ltd( 10 ), ltd( 11 ), 1,
+				Double.NaN, 0.1, ltd( 11 ), ltd( 12 ), 1,
+				Double.NaN, 0.1, ltd( 13 ), ltd( 12 ), 1,
+				Double.NaN, 0.4, ltd( 13 ), ltd( 10 ), 1,
+				Double.NaN, 0.8, ltd( 11 ), ltd( 13 ), 1,
+				Double.NaN, 0.9, ltd( 11 ), ltd( 14 ), 1,
+				Double.NaN, 0.2, ltd( 10 ), ltd( 15 ), 1
 		};
 
 		final long[] counts = new long[] {
@@ -550,11 +452,42 @@ public class RegionMerging
 				13, 2,
 		};
 
-		final EdgesAndCounts eac = new EdgesAndCounts( affinities, counts, new long[ 0 ] );
+		final long[] assignments = new long[] {
+				10, 10,
+				11, 11,
+				12, 12,
+				13, 13
+		};
+
+		final long[] outside = new long[] {
+				14, 15, 2,
+				15, 4000, 3
+		};
+
+		final EdgesAndCounts eac = new EdgesAndCounts( affinities, counts, outside, assignments );
 		final Tuple2< Long, EdgesAndCounts > input = new Tuple2<>( 1l, eac );
 
-		final MergeBloc< Long > mergeBloc = new MergeBloc<>( ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a ), 100 );
-		mergeBloc.call( input );
+//		final EdgeMerger merger = new EdgeMerger()
+//		{};
+		final EdgeMerger merger = ( e1, e2 ) -> {
+			final long m1 = e1.multiplicity();
+			final long m2 = e2.multiplicity();
+			final long m = m1 + m2;
+			final double w = ( e1.weight() * m1 + e2.weight() * m2 ) / m;
+			final double a = ( e1.affinity() * m1 + e2.affinity() * m2 ) / m;
+			e2.weight( w );
+			e2.affinity( a );
+			return e2;
+		};
+
+		final MergeBloc mergeBloc = new MergeBloc( ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a ), merger, 180 );
+		final Tuple2< Tuple2< Long, Long >, EdgesAndCounts > test = mergeBloc.call( input );
+
+		System.out.println( test._1() );
+		System.out.println( Arrays.toString( test._2().edges ) );
+		System.out.println( Arrays.toString( test._2().counts ) );
+		System.out.println( Arrays.toString( test._2().assignments ) );
+		System.out.println( Arrays.toString( test._2().outside ) );
 	}
 
 }
