@@ -387,7 +387,7 @@ public class MergeBloc
 					in.outside,
 					assignments );
 			System.out.println( "Returning result " + t._1() );
-			return new Tuple2<>( new Tuple2<>( t._1(), pointedToOutside ), result );
+			return new Tuple2<>( new Tuple2<>( t._1(), pointedToOutside == -1 ? t._1() : pointedToOutside ), result );
 
 
 		}
