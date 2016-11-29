@@ -3,10 +3,11 @@ package de.hanslovsky.watersheds.graph;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -19,11 +20,7 @@ import org.zeromq.ZMQ;
 import org.zeromq.ZMQ.Context;
 import org.zeromq.ZMQ.Socket;
 
-import de.hanslovsky.watersheds.graph.MergeBloc.EdgeMerger;
-import de.hanslovsky.watersheds.graph.MergeBloc.Function;
-import de.hanslovsky.watersheds.graph.MergeBloc.IdService;
 import de.hanslovsky.watersheds.graph.MergeBloc.In;
-import de.hanslovsky.watersheds.graph.MergeBloc.MergerService;
 import de.hanslovsky.watersheds.graph.MergeBloc.Out;
 import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.list.array.TDoubleArrayList;
@@ -36,9 +33,9 @@ import scala.Tuple2;
 public class RegionMerging
 {
 
-	private final MergeBloc.Function f;
+	private final Function f;
 
-	private final MergeBloc.EdgeMerger merger;
+	private final EdgeMerger merger;
 
 	private final IdService idService;
 
@@ -69,19 +66,18 @@ public class RegionMerging
 		{
 
 			final JavaPairRDD< Tuple2< Long, Long >, MergeBloc.Out > mergedEdges =
-					rdd.mapToPair( new MergeBloc.MergeBlocPairFunction2( f, merger, threshold, idService, mergerService ) ).cache();
+					rdd
+					.mapToPair( new MergeBloc.MergeBlocPairFunction2( f, merger, threshold, idService, mergerService ) )
+//					.mapToPair( new RemoveOutOfScopeAssignmentsAndCounts<>() )
+					.cache();
 
-			System.out.println( "Merging edges!" );
 			final List< Tuple2< Long, Long > > mergers = mergedEdges.keys().collect();
-			System.out.println( "Done merging edges!" );
 			boolean pointsOutside = false;
-			System.out.println( "MERGERS! " + mergers );
 			for ( final Tuple2< Long, Long > m : mergers )
 			{
-				System.out.println( m );
 				if ( m._2() == -1 )
 					continue;
-				if ( m._1() != m._2() )
+				if ( m._1().longValue() != m._2().longValue() )
 					pointsOutside = true;
 				final int r1 = dj.findRoot( m._1().intValue() );
 				final int r2 = dj.findRoot( m._2().intValue() );
@@ -92,17 +88,18 @@ public class RegionMerging
 
 			final Broadcast< int[] > parentsBC = sc.broadcast( parents );
 
-			System.out.println( Arrays.toString( parents ) );
-
-			final JavaPairRDD< Long, Out > rdd1 = mergedEdges.mapToPair( new SetKeyToRoot<>( parentsBC ) );
+			final JavaPairRDD< Long, Tuple2< Long, Out > > rdd1 = mergedEdges.mapToPair( new SetKeyToRoot<>( parentsBC ) ).cache();
 			rdd1.count();
-			final JavaPairRDD< Long, Tuple2< Long, Out > > rdd2 = rdd1.mapToPair( new AddKeyToValue<>() );
+			final JavaPairRDD< Long, Tuple2< Long, Out > > rdd2 = rdd1; // rdd1.mapToPair(
+			// new
+			// AddKeyToValue<>()
+			// ).cache();
 			rdd2.count();
-			final JavaPairRDD< Long, Tuple2< Long, Out > > rdd3 = rdd2.reduceByKey( new MergeByKey( parentsBC ) );
+			final JavaPairRDD< Long, Tuple2< Long, Out > > rdd3 = rdd2.reduceByKey( new MergeByKey( parentsBC ) ).cache();
 			rdd3.count();
-			final JavaPairRDD< Long, Out > rdd4 = rdd3.mapToPair( new RemoveFromValue<>() );
+			final JavaPairRDD< Long, Out > rdd4 = rdd3.mapToPair( new RemoveFromValue<>() ).cache();
 			rdd4.count();
-			final JavaPairRDD< Long, In > rdd5 = rdd4.mapToPair( new UpdateEdgesAndCounts() );
+			final JavaPairRDD< Long, In > rdd5 = rdd4.mapToPair( new UpdateEdgesAndCounts( f ) ).cache();
 			rdd5.count();
 			rdd = rdd5.cache();
 			rdd.count();
@@ -115,7 +112,6 @@ public class RegionMerging
 //					.mapToPair( new UpdateEdgesAndCounts() )
 //					.cache();
 //			rdd.count();
-			System.out.print( "Updated rdd " + hasChanged + " " + pointsOutside );
 //			System.exit( 1 );
 
 			// assume zero based, contiguuous indices?
@@ -142,24 +138,37 @@ public class RegionMerging
 
 	public static void main( final String[] args ) throws InterruptedException
 	{
-		final SparkConf conf = new SparkConf().setAppName( "mergin" ).setMaster( "local[*]" );
+		final SparkConf conf = new SparkConf()
+				.setAppName( "merging" )
+				.setMaster( "local[*]" )
+				.set( "log4j.logger.org", "OFF" );
 		final JavaSparkContext sc = new JavaSparkContext( conf );
+		Logger.getRootLogger().setLevel( Level.ERROR );
+
+		final CountOverSquaredSize func = new CountOverSquaredSize();
 
 		final ArrayList< Tuple2< Long, MergeBloc.In > > al = new ArrayList<>();
 		{
 			final TDoubleArrayList affinities = new TDoubleArrayList( new double[] {
-					Double.NaN, 0.9, Edge.ltd( 10 ), Edge.ltd( 11 ), 1,
-					Double.NaN, 0.1, Edge.ltd( 11 ), Edge.ltd( 12 ), 1,
-					Double.NaN, 0.1, Edge.ltd( 13 ), Edge.ltd( 12 ), 1,
-					Double.NaN, 0.4, Edge.ltd( 13 ), Edge.ltd( 10 ), 1,
-					Double.NaN, 0.8, Edge.ltd( 11 ), Edge.ltd( 13 ), 1,
-					Double.NaN, 0.9, Edge.ltd( 11 ), Edge.ltd( 14 ), 1,
-					Double.NaN, 0.2, Edge.ltd( 10 ), Edge.ltd( 15 ), 1
+					Double.NaN, 0.9, Edge.ltd( 10 ), Edge.ltd( 11 ), Edge.ltd( 1 ),
+					Double.NaN, 0.1, Edge.ltd( 11 ), Edge.ltd( 12 ), Edge.ltd( 1 ),
+					Double.NaN, 0.1, Edge.ltd( 13 ), Edge.ltd( 12 ), Edge.ltd( 1 ),
+					Double.NaN, 0.4, Edge.ltd( 13 ), Edge.ltd( 10 ), Edge.ltd( 1 ),
+					Double.NaN, 0.8, Edge.ltd( 11 ), Edge.ltd( 13 ), Edge.ltd( 1 ),
+					Double.NaN, 0.9, Edge.ltd( 11 ), Edge.ltd( 14 ), Edge.ltd( 1 ),
+					Double.NaN, 0.2, Edge.ltd( 10 ), Edge.ltd( 15 ), Edge.ltd( 1 )
 			} );
 
 			final TLongLongHashMap counts = new TLongLongHashMap(
 					new long[] { 10, 11, 12, 13, 14, 15 },
-					new long[] { 15, 20, 1, 2, 15, 4000 } );
+					new long[] { 15, 20, 1, 2, 16, 4000 } );
+
+			final Edge e = new Edge( affinities );
+			for ( int i = 0; i < e.size(); ++i )
+			{
+				e.setIndex( i );
+				e.weight( func.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
+			}
 
 //			final long[] counts = new long[] {
 //					10, 15,
@@ -192,17 +201,24 @@ public class RegionMerging
 
 		{
 			final TDoubleArrayList affinities = new TDoubleArrayList( new double[] {
-					Double.NaN, 0.9, Edge.ltd( 11 ), Edge.ltd( 14 ), 1,
-					Double.NaN, 1.0, Edge.ltd( 14 ), Edge.ltd( 16 ), 1,
+					Double.NaN, 0.9, Edge.ltd( 11 ), Edge.ltd( 14 ), Edge.ltd( 1 ),
+					Double.NaN, 1.0, Edge.ltd( 14 ), Edge.ltd( 16 ), Edge.ltd( 1 ),
 			} );
 
 			final TLongLongHashMap counts = new TLongLongHashMap(
 					new long[] { 14, 16, 11 },
-					new long[] { 15, 30, 20 } );
+					new long[] { 16, 30, 20 } );
 //			final long[] counts = new long[] {
 //					14, 15,
 //					16, 30
 //			};
+
+			final Edge e = new Edge( affinities );
+			for ( int i = 0; i < e.size(); ++i )
+			{
+				e.setIndex( i );
+				e.weight( func.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
+			}
 
 			final TLongLongHashMap assignments = new TLongLongHashMap(
 					new long[] { 14, 16 },
@@ -221,7 +237,7 @@ public class RegionMerging
 
 		{
 			final TDoubleArrayList affinities = new TDoubleArrayList( new double[] {
-					Double.NaN, 0.2, Edge.ltd( 10 ), Edge.ltd( 15 ), 1
+					Double.NaN, 0.2, Edge.ltd( 10 ), Edge.ltd( 15 ), Edge.ltd( 1 )
 			} );
 
 			final TLongLongHashMap counts = new TLongLongHashMap(
@@ -230,6 +246,13 @@ public class RegionMerging
 //			final long[] counts = new long[] {
 //					15, 4000
 //			};
+
+			final Edge e = new Edge( affinities );
+			for ( int i = 0; i < e.size(); ++i )
+			{
+				e.setIndex( i );
+				e.weight( func.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
+			}
 
 			final TLongLongHashMap assignments = new TLongLongHashMap( new long[] { 15 }, new long[] { 15 } );
 //			final long[] assignments = new long[] {
@@ -255,16 +278,13 @@ public class RegionMerging
 			while ( !Thread.currentThread().isInterrupted() )
 			{
 				final byte[] msg = idSocket.recv();
-				System.out.println( "Received msg " + Arrays.toString( msg ) );
 				final ByteBuffer bb = ByteBuffer.wrap( msg );
 				if ( msg.length == 0 )
 					continue;
 				final long id = currentId.getAndAdd( bb.getLong() );
 				bb.rewind();
 				bb.putLong( id );
-				System.out.println( "Sending msg " + Arrays.toString( msg ) );
 				idSocket.send( msg, 0 );
-				System.out.println( "Sent msg " + Arrays.toString( msg ) );
 			}
 		} );
 		t.start();
@@ -281,12 +301,12 @@ public class RegionMerging
 			final long id = ByteBuffer.wrap( msg ).getLong();
 			socket.close();
 			ctx2.close();
-			System.out.println( "Closed ctx2" );
 			return id;
 		};
 
 		final TLongArrayList merges = new TLongArrayList();
 		final MergerService mergerService = ( MergerService & Serializable ) ( n1, n2, n, w ) -> {
+			System.out.println( "Merged " + n1 + " and " + n2 + " into " + n );
 //			merges.add( n1 );
 //			merges.add( n2 );
 //			merges.add( n );
@@ -294,7 +314,7 @@ public class RegionMerging
 		};
 
 		final RegionMerging rm = new RegionMerging(
-				new CountOverSquaredSize(), // ( Function & Serializable ) ( a,
+				func, // ( Function & Serializable ) ( a,
 				// c1, c2 ) -> Math.min( c1, c2 ) /
 				// ( a * a ),
 				em,
@@ -303,7 +323,6 @@ public class RegionMerging
 
 		final List< Tuple2< Long, MergeBloc.In > > result = rm.run( sc, rdd, 99 ).collect();
 
-		System.out.println( "Closing sc" );
 		sc.close();
 //		sc.wait();
 
@@ -311,13 +330,14 @@ public class RegionMerging
 		final Socket sk = ctx.socket( ZMQ.REQ );
 		sk.connect( idServiceAddr );
 		sk.send( new byte[ 0 ], 0 );
-		System.out.println( "SEND END MSG" );
 		t.join();
-		System.out.println( "Waiting for thread to join" );
-		sk.close();
-		ctx.close();
+//		sk.close();
+//		ctx.close();
 
 		System.out.println( result );
+		for ( final Tuple2< Long, In > rr : result )
+			System.out.println( rr._1() + " " + rr._2().counts );
+		System.exit( 234 );
 
 		final MultiGraph g = new MultiGraph( "graph" );
 
@@ -342,7 +362,7 @@ public class RegionMerging
 		for ( final TLongLongIterator it = parents.iterator(); it.hasNext(); )
 		{
 			it.advance();
-			System.out.println( "Adding edge " + it.key() + " " + it.value() );
+//			System.out.println( "Adding edge " + it.key() + " " + it.value() );
 //			g.addEdge( id, from, to, directed )
 			g.addEdge( it.key() + "-" + it.value(), "" + it.key(), "" + it.value(), true );
 		}
@@ -353,7 +373,7 @@ public class RegionMerging
 
 	}
 
-	public static class SetKeyToRoot< V > implements PairFunction< Tuple2< Tuple2< Long, Long >, V >, Long, V >
+	public static class SetKeyToRoot< V > implements PairFunction< Tuple2< Tuple2< Long, Long >, V >, Long, Tuple2< Long, V > >
 	{
 
 		private static final long serialVersionUID = -6206815670426308405L;
@@ -367,10 +387,10 @@ public class RegionMerging
 		}
 
 		@Override
-		public Tuple2< Long, V > call( final Tuple2< Tuple2< Long, Long >, V > t ) throws Exception
+		public Tuple2< Long, Tuple2< Long, V > > call( final Tuple2< Tuple2< Long, Long >, V > t ) throws Exception
 		{
 			final long k = parents.getValue()[ t._1()._1().intValue() ];
-			return new Tuple2<>( k, t._2() );
+			return new Tuple2<>( k, new Tuple2<>( t._1()._1(), t._2() ) );
 		}
 
 	}
@@ -429,83 +449,56 @@ public class RegionMerging
 				final Tuple2< Long, MergeBloc.Out > eacWithKey1,
 				final Tuple2< Long, MergeBloc.Out > eacWithKey2 ) throws Exception
 		{
-			int ABC = 0;
-			System.out.println( "MergeByKey " + ++ABC );
-			if ( eacWithKey1._1().longValue() == eacWithKey2._1().longValue() )
-			{
-				System.out.println( "RETURNING FOR SAME KEY " + eacWithKey1._1() + " " + eacWithKey1._2().assignments );
-				return eacWithKey1;
-			}
-
-			System.out.println( "MergeByKey " + ++ABC );
-
 			final int[] parents = this.parents.getValue();
 			final int r = parents[ eacWithKey1._1().intValue() ];
 			final MergeBloc.Out eac1 = eacWithKey1._2();
 			final MergeBloc.Out eac2 = eacWithKey2._2();
 			final TLongLongHashMap assignments = new TLongLongHashMap();
 			assignments.putAll( eac1.assignments );
-			assignments.putAll( eac2.assignments );
-			System.out.println( "MergeByKey " + ++ABC );
-//			final long[] assignments = new long[ eac1.assignments.length + eac2.assignments.length ];
-//			System.arraycopy( eac1.assignments, 0, assignments, 0, eac1.assignments.length );
-//			System.arraycopy( eac2.assignments, 0, assignments, eac1.assignments.length, eac2.assignments.length );
+//			assignments.putAll( eac2.assignments );
 
-//			final double[] edges = new double[ eac1.edges.size() + eac2.edges.size() ];
-//			System.arraycopy( eac1.edges, 0, edges, 0, eac1.edges.size() );
-//			System.arraycopy( eac2.edges, 0, edges, eac1.edges.size(), eac2.edges.size() );
+			for ( final TLongLongIterator it = eac2.assignments.iterator(); it.hasNext(); )
+			{
+				it.advance();
+				final long k = it.key();
+				final long v = it.value();
+				if ( assignments.contains( k ) )
+				{
+					if ( k != v )
+						assignments.put( k, v );
+				}
+				else
+					assignments.put( k, v );
+			}
+
 			final TDoubleArrayList edges = eac1.edges;
 			edges.addAll( eac2.edges );
 
 			final TLongLongHashMap counts = new TLongLongHashMap();
-			addCounts( eac1.counts, counts, eac1.outside );
-			addCounts( eac2.counts, counts, eac2.outside );
-			System.out.println( "MergeByKey " + ++ABC );
-
-//			final long[] counts = new long[ eac1.counts.length + eac2.counts.length ];
-//			System.arraycopy( eac1.counts, 0, counts, 0, eac1.counts.length );
-//			System.arraycopy( eac2.counts, 0, counts, eac1.counts.length, eac2.counts.length );
+			addCounts( eac1.counts, counts, assignments );// eac1.outside );
+			addCounts( eac2.counts, counts, assignments );// eac2.outside );
 
 			final TLongLongHashMap outside = new TLongLongHashMap();
-			System.out.println( eacWithKey1._1() + " " + eacWithKey2._1() );
-			System.out.println( eac1.outside );
-			System.out.println( eac2.outside );
-			System.out.println( "WAS IST HIER LOS??" );
-			System.out.flush();
 			addOutside( eac1.outside, outside, r, parents );
 			addOutside( eac2.outside, outside, r, parents );
-			System.out.println( "MergeByKey " + ++ABC );
-//			for ( int i = 0; i < eac1.outside.length; i += EdgesAndCounts.OUTSIDE_STEP )
-//			{
-//				if ( parents[ ( int ) eac1.outside[ i + 2 ] ] == r )
-//					continue;
-//				outside.add( eac1.outside[ i ] );
-//				outside.add( eac1.outside[ i + 1 ] );
-//				outside.add( eac1.outside[ i + 2 ] );
-//			}
-//			for ( int i = 0; i < eac2.outside.length; i += EdgesAndCounts.OUTSIDE_STEP )
-//			{
-//				if ( parents[ ( int ) eac2.outside[ i + 2 ] ] == r )
-//					continue;
-//				outside.add( eac2.outside[ i ] );
-//				outside.add( eac2.outside[ i + 1 ] );
-//				outside.add( eac2.outside[ i + 2 ] );
-//			}
 
-			if ( assignments.size() == 0 )
-			{
-				System.out.println( eacWithKey1._1() + " " + eacWithKey2._1() );
-				System.out.println( eacWithKey1._2().assignments + " " + eacWithKey2._2().assignments );
-				System.exit( 123 );
-			}
+			eac1.fragmentPointedToOutside.addAll( eac2.fragmentPointedToOutside );
 
-			return new Tuple2<>( eacWithKey1._1(), new MergeBloc.Out( edges, counts, outside, assignments ) );
+			return new Tuple2<>( eacWithKey1._1(), new MergeBloc.Out( edges, counts, outside, assignments, eac1.fragmentPointedToOutside ) );
 		}
 
 	}
 
 	public static class UpdateEdgesAndCounts implements PairFunction< Tuple2< Long, MergeBloc.Out >, Long, MergeBloc.In >
 	{
+
+		private final Function f;
+
+		public UpdateEdgesAndCounts( final Function f )
+		{
+			super();
+			this.f = f;
+		}
 
 		/**
 		 *
@@ -516,49 +509,75 @@ public class RegionMerging
 		public Tuple2< Long, MergeBloc.In > call( final Tuple2< Long, MergeBloc.Out > t ) throws Exception
 		{
 			final TDoubleArrayList edges = t._2().edges;
+			final TLongLongHashMap counts = t._2().counts;
 			final TLongLongHashMap assignments = t._2().assignments;
-			for ( int i = 0; i < edges.size(); i += Edge.SIZE )
+//			System.out.println( counts );
+//			System.out.println( assignments );
+			final TLongHashSet candidates = t._2().fragmentPointedToOutside;
+			final Edge e = new Edge( edges );
+			for ( int i = 0; i < e.size(); ++i )
 			{
-				final int fromIndex = i + 2;
-				final int toIndex = i + 3;
-				edges.set( fromIndex, Edge.ltd( assignments.get( Edge.dtl( edges.get( fromIndex ) ) ) ) );
-				edges.set( toIndex, Edge.ltd( assignments.get( Edge.dtl( edges.get( toIndex ) ) ) ) );
-//				edges[ fromIndex ] = Edge.ltd( assignments.get( Edge.dtl( edges[ fromIndex ] ) ) );
-//				edges[ toIndex ] = Edge.ltd( assignments.get( Edge.dtl( edges[ toIndex ] ) ) );
+				e.setIndex( i );
+				final long from = assignments.get( e.from() );
+				final long to = assignments.get( e.to() );
+				e.from( from );
+				e.to( to );
+
+				if ( candidates.contains( from ) || candidates.contains( to ) )
+					e.weight( f.weight( e.affinity(), counts.get( from ), counts.get( to ) ) );
 			}
 
-			final TLongLongHashMap cleanAssignments = new TLongLongHashMap();
-			for ( final TLongLongIterator it = assignments.iterator(); it.hasNext(); )
-			{
-				it.advance();
-				final long k = it.key();
-				final long v = it.value();
-				if ( k == v )
-					cleanAssignments.put( k, v );
-			}
 
 			final MergeBloc.In result = new MergeBloc.In( edges, t._2().counts, t._2().outside );
-//			System.out.println( result.edges );
-			System.out.println( "Updating..." );
-			System.out.println( result.counts );
-			System.out.println( result.outside );
-//			System.out.println( result.assignments );
-			System.out.println( assignments );
-			System.out.flush();
 
 			return new Tuple2<>( t._1(), result );
 		}
 
 	}
 
-	public static void addCounts( final TLongLongHashMap source, final TLongLongHashMap target, final TLongLongHashMap outside )
+//	public static class RemoveOutOfScopeAssignmentsAndCounts< K > implements PairFunction< Tuple2< K, MergeBloc.Out >, K, MergeBloc.Out >
+//	{
+//
+//		/**
+//		 *
+//		 */
+//		private static final long serialVersionUID = -7394523116174827558L;
+//
+//		@Override
+//		public Tuple2< K, Out > call( final Tuple2< K, Out > t ) throws Exception
+//		{
+//			final TLongLongHashMap outside = t._2().outside;
+//			final TLongLongHashMap assignments = t._2().assignments;
+//			final TLongLongHashMap resultAssignments = new TLongLongHashMap();
+//			final TLongLongHashMap counts = t._2().counts;
+//			final TLongLongHashMap resultCounts = new TLongLongHashMap();
+//			for ( final TLongLongIterator it = assignments.iterator(); it.hasNext(); )
+//			{
+//				it.advance();
+//				final long k = it.key();
+//				if ( !outside.contains( k ) )
+//				{
+//					resultAssignments.put( k, it.value() );
+//					final long c = counts.get( k );
+//					if ( c > 0 )
+//						resultCounts.put( k, c );
+//				}
+//			}
+//			return new Tuple2<>(
+//					t._1(),
+//					new MergeBloc.Out( t._2().edges, resultCounts, outside, resultAssignments, t._2().fragmentPointedToOutside ) );
+//		}
+//
+//	}
+
+	public static void addCounts( final TLongLongHashMap source, final TLongLongHashMap target, final TLongLongHashMap assignments )
 	{
 		for ( final TLongLongIterator it = source.iterator(); it.hasNext(); )
 		{
 			it.advance();
 			final long k = it.key();
-			if ( !outside.contains( k ) )
-				target.put( k, it.value() );
+			final long v = it.value();
+			target.put( k, target.contains( k ) ? Math.max( v, target.get( k ) ) : v );
 		}
 	}
 
@@ -566,6 +585,7 @@ public class RegionMerging
 	{
 		for ( final TLongLongIterator it = source.iterator(); it.hasNext(); )
 		{
+			it.advance();
 			final long v = it.value();
 			if ( parents[ ( int ) v ] == root )
 				continue;

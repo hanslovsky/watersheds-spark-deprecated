@@ -79,12 +79,13 @@ public class Edge
 
 	public int add( final double weight, final double affinity, final long from, final long to, final long multiplicity )
 	{
+		final int index = size();
 		data.add( weight );
 		data.add( affinity );
 		data.add( ltd( from ) );
 		data.add( ltd( to ) );
 		data.add( ltd( multiplicity ) );
-		return size();
+		return index;
 	}
 
 	public static double ltd( final long l )
