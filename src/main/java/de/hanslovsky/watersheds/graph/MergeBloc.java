@@ -16,6 +16,7 @@ import gnu.trove.map.hash.TIntIntHashMap;
 import gnu.trove.map.hash.TIntLongHashMap;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
+import gnu.trove.map.hash.TLongObjectHashMap;
 import gnu.trove.set.hash.TIntHashSet;
 import gnu.trove.set.hash.TLongHashSet;
 import it.unimi.dsi.fastutil.ints.IntComparator;
@@ -38,14 +39,14 @@ public class MergeBloc
 
 		public final TLongLongHashMap counts;
 
-		public final TLongLongHashMap outside;
+		public final TLongObjectHashMap< TLongHashSet > borderNodes;
 
-		public In( final TDoubleArrayList edges, final TLongLongHashMap counts, final TLongLongHashMap outside )
+		public In( final TDoubleArrayList edges, final TLongLongHashMap counts, final TLongObjectHashMap< TLongHashSet > borderNodes )
 		{
 			super();
 			this.edges = edges;
 			this.counts = counts;
-			this.outside = outside;
+			this.borderNodes = borderNodes;
 		}
 
 	}
@@ -61,7 +62,7 @@ public class MergeBloc
 
 		public final TLongLongHashMap counts;
 
-		public final TLongLongHashMap outside;
+		public final TLongObjectHashMap< TLongHashSet > borderNodes;
 
 		public final TLongLongHashMap assignments;
 
@@ -70,24 +71,24 @@ public class MergeBloc
 		public Out(
 				final TDoubleArrayList edges,
 				final TLongLongHashMap counts,
-				final TLongLongHashMap outside,
+				final TLongObjectHashMap< TLongHashSet > borderNodes,
 				final TLongLongHashMap assignments,
 				final long... fragmentPointedToOutside )
 		{
-			this( edges, counts, outside, assignments, new TLongHashSet( fragmentPointedToOutside ) );
+			this( edges, counts, borderNodes, assignments, new TLongHashSet( fragmentPointedToOutside ) );
 		}
 
 		public Out(
 				final TDoubleArrayList edges,
 				final TLongLongHashMap counts,
-				final TLongLongHashMap outside,
+				final TLongObjectHashMap< TLongHashSet > borderNodes,
 				final TLongLongHashMap assignments,
 				final TLongHashSet fragmentPointedToOutside )
 		{
 			super();
 			this.edges = edges;
 			this.counts = counts;
-			this.outside = outside;
+			this.borderNodes = borderNodes;
 			this.assignments = assignments;
 			this.fragmentPointedToOutside = fragmentPointedToOutside;
 		}
@@ -187,7 +188,7 @@ public class MergeBloc
 		return e2;
 	};
 
-	public static class MergeBlocPairFunction2 implements PairFunction< Tuple2< Long, In >, Tuple2< Long, Long >, Out >
+	public static class MergeBlocPairFunction2 implements PairFunction< Tuple2< Long, In >, Tuple2< Long, TLongHashSet >, Out >
 	{
 
 		private static final long serialVersionUID = -1537751845300461154L;
@@ -220,7 +221,7 @@ public class MergeBloc
 
 
 		@Override
-		public Tuple2< Tuple2< Long, Long >, Out > call( final Tuple2< Long, In > t ) throws Exception
+		public Tuple2< Tuple2< Long, TLongHashSet >, Out > call( final Tuple2< Long, In > t ) throws Exception
 		{
 			final In in = t._2();
 
@@ -229,10 +230,10 @@ public class MergeBloc
 			for ( int i = 0; i < e.size(); ++i )
 				queue.enqueue( i );
 
-			boolean pointsOutside = false;
-			long pointedToOutside = -1;
-			double outsideEdgeWeight = Double.NaN;
-			long fragmentPointedToOutside = -1;
+			boolean borderNodeIsInvolved = false;
+			TLongHashSet involvedNeighboringBlocks = null;
+			double maxWeightBeforeMerge = Double.NaN;
+			long borderNodeLabel = -1;
 
 			final UndirectedGraph g = new UndirectedGraph( in.edges, merger );
 			final TLongLongHashMap assignments = new TLongLongHashMap();
@@ -246,34 +247,35 @@ public class MergeBloc
 				final int next = queue.dequeueInt();
 				e.setIndex( next );
 				final double w = e.weight();
-				System.out.println( t._1() + ": " + next + " .. " + w + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() );
-
+				System.out.println( t._1() + ": " + next + " .. " + w + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() + " " + threshold + " " + borderNodeIsInvolved );
 				if ( w < 0 )
 					continue;
 
-				else if ( w > threshold || pointsOutside && w > outsideEdgeWeight )
+				else if ( w > threshold || borderNodeIsInvolved && w > maxWeightBeforeMerge )
 					break;
 
 				final int from = ( int ) e.from();
 				final int to = ( int ) e.to();
 
-				if ( in.outside.contains( from ) )
+				if ( in.borderNodes.contains( from ) )
 				{
-					if ( !pointsOutside )
+					System.out.println( "bn from " + from );
+					if ( !borderNodeIsInvolved )
 					{
-						pointsOutside = true;
-						pointedToOutside = in.outside.get( from );
-						outsideEdgeWeight = w;
-						fragmentPointedToOutside = from;
+						borderNodeIsInvolved = true;
+						involvedNeighboringBlocks = in.borderNodes.get( from );
+						maxWeightBeforeMerge = w;
+						borderNodeLabel = from;
 					}
 				}
-				else if ( in.outside.contains( to ) )
+				else if ( in.borderNodes.contains( to ) )
 				{
-					if ( !pointsOutside ) {
-						pointsOutside = true;
-						pointedToOutside = in.outside.get( to );
-						outsideEdgeWeight = w;
-						fragmentPointedToOutside = to;
+					System.out.println( "bn to " + from );
+					if ( !borderNodeIsInvolved ) {
+						borderNodeIsInvolved = true;
+						involvedNeighboringBlocks = in.borderNodes.get( to );
+						maxWeightBeforeMerge = w;
+						borderNodeLabel = to;
 					}
 				}
 				else
@@ -281,6 +283,7 @@ public class MergeBloc
 
 //					System.out.println( "Requesting next id " + t._1() );
 					final long n = idService.requestIds( 1 );
+					System.out.println( "Merging " + from + " and " + to + " into " + n );
 //					System.out.println( "Got new id: " + n + " " + t._1() );
 //					System.out.println( "Merging " + from + " and " + to + " into " + n );
 
@@ -344,11 +347,11 @@ public class MergeBloc
 			final Out result = new Out(
 					resultEdges,
 					in.counts,
-					in.outside,
+					in.borderNodes,
 					assignments,
-					fragmentPointedToOutside );
+					borderNodeLabel );
 //			System.out.println( "Returning result " + t._1() );
-			return new Tuple2<>( new Tuple2<>( t._1(), pointedToOutside == -1 ? t._1() : pointedToOutside ), result );
+			return new Tuple2<>( new Tuple2<>( t._1(), involvedNeighboringBlocks == null ? new TLongHashSet() : involvedNeighboringBlocks ), result );
 
 
 		}
@@ -846,16 +849,18 @@ public class MergeBloc
 		}
 //		System.exit( 234 );
 
-		final TLongLongHashMap outside = new TLongLongHashMap(
-				new long[] { 14, 15 },
-				new long[] { 2, 3 } );
+		final TLongObjectHashMap< TLongHashSet > borderNodes = new TLongObjectHashMap< TLongHashSet >();
+		borderNodes.put( 14, new TLongHashSet( new long[] { 2 } ) );
+		borderNodes.put( 15, new TLongHashSet( new long[] { 3 } ) );
+//				new long[] { 14, 15 },
+//				new long[] { 2, 3 } );
 
 //		final long[] outside = new long[] {
 //				14, 15, 2,
 //				15, 4000, 3
 //		};
 
-		final In in = new In( new TDoubleArrayList( affinities ), counts, outside );
+		final In in = new In( new TDoubleArrayList( affinities ), counts, borderNodes );
 		final Tuple2< Long, In > input = new Tuple2<>( 0l, in );
 
 		final EdgeMerger merger = DEFAULT_EDGE_MERGER;
@@ -873,13 +878,13 @@ public class MergeBloc
 		};
 
 		final MergeBlocPairFunction2 mergeBloc = new MergeBlocPairFunction2( ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a ), merger, 180, idService, mergerService );
-		final Tuple2< Tuple2< Long, Long >, Out > test = mergeBloc.call( input );
+		final Tuple2< Tuple2< Long, TLongHashSet >, Out > test = mergeBloc.call( input );
 
 		System.out.println( "INDEX " + test._1() );
 		System.out.println( "EDGES " + test._2().edges );
-		System.out.println( "COUNTS " + test._2().counts );
+		System.out.println( "COUNT " + test._2().counts );
 		System.out.println( "ASSGN " + test._2().assignments );
-		System.out.println( "OUTSD " + test._2().outside );
+		System.out.println( "BORDR " + test._2().borderNodes );
 
 		for ( int i = 0; i < merges.size(); i += 4 )
 			System.out.println( merges.get( i ) + " " + merges.get( i + 1 ) + " " + merges.get( i + 2 ) + " " + Double.longBitsToDouble( merges.get( i + 3 ) ) );

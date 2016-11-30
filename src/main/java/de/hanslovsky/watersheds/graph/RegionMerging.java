@@ -22,10 +22,13 @@ import org.zeromq.ZMQ.Socket;
 
 import de.hanslovsky.watersheds.graph.MergeBloc.In;
 import de.hanslovsky.watersheds.graph.MergeBloc.Out;
+import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;
+import gnu.trove.iterator.TLongObjectIterator;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TLongLongHashMap;
+import gnu.trove.map.hash.TLongObjectHashMap;
 import gnu.trove.set.hash.TLongHashSet;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import scala.Tuple2;
@@ -65,23 +68,28 @@ public class RegionMerging
 		for ( boolean hasChanged = true; hasChanged; )
 		{
 
-			final JavaPairRDD< Tuple2< Long, Long >, MergeBloc.Out > mergedEdges =
+			final JavaPairRDD< Tuple2< Long, TLongHashSet >, Out > mergedEdges =
 					rdd
 					.mapToPair( new MergeBloc.MergeBlocPairFunction2( f, merger, threshold, idService, mergerService ) )
 //					.mapToPair( new RemoveOutOfScopeAssignmentsAndCounts<>() )
 					.cache();
 
-			final List< Tuple2< Long, Long > > mergers = mergedEdges.keys().collect();
+			final List< Tuple2< Long, TLongHashSet > > mergers = mergedEdges.keys().collect();
 			boolean pointsOutside = false;
-			for ( final Tuple2< Long, Long > m : mergers )
+			for ( final Tuple2< Long, TLongHashSet > m : mergers )
 			{
-				if ( m._2() == -1 )
-					continue;
-				if ( m._1().longValue() != m._2().longValue() )
-					pointsOutside = true;
-				final int r1 = dj.findRoot( m._1().intValue() );
-				final int r2 = dj.findRoot( m._2().intValue() );
-				dj.join( r1, r2 );
+//				if ( m._2().size() == 0 )
+//					continue;
+				final long index1 = m._1();
+				for ( final TLongIterator it = m._2().iterator(); it.hasNext(); )
+				{
+					final long index2 = it.next();
+					if ( index2 != index1 )
+						pointsOutside = true;
+					final int r1 = dj.findRoot( ( int ) index1 );
+					final int r2 = dj.findRoot( ( int ) index2 );
+					dj.join( r1, r2 );
+				}
 			}
 
 			hasChanged = pointsOutside;
@@ -103,6 +111,7 @@ public class RegionMerging
 			rdd5.count();
 			rdd = rdd5.cache();
 			rdd.count();
+			System.out.println( "Merged blocks, now " + rdd.count() + " blocks" );
 
 //			rdd = mergedEdges
 //					.mapToPair( new SetKeyToRoot<>( parentsBC ) )
@@ -140,7 +149,7 @@ public class RegionMerging
 	{
 		final SparkConf conf = new SparkConf()
 				.setAppName( "merging" )
-				.setMaster( "local[*]" )
+				.setMaster( "local[1]" )
 				.set( "log4j.logger.org", "OFF" );
 		final JavaSparkContext sc = new JavaSparkContext( conf );
 		Logger.getRootLogger().setLevel( Level.ERROR );
@@ -170,33 +179,11 @@ public class RegionMerging
 				e.weight( func.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
 			}
 
-//			final long[] counts = new long[] {
-//					10, 15,
-//					11, 20,
-//					12, 1,
-//					13, 2,
-//			};
+			final TLongObjectHashMap< TLongHashSet > borderNodes = new TLongObjectHashMap< TLongHashSet >();
+			borderNodes.put( 11, new TLongHashSet( new long[] { 1l } ) );
+			borderNodes.put( 10, new TLongHashSet( new long[] { 2l } ) );
 
-			final TLongLongHashMap assignments = new TLongLongHashMap(
-					new long[] { 10, 11, 12, 13 },
-					new long[] { 10, 11, 12, 13 } );
-
-//			final long[] assignments = new long[] {
-//					10, 10,
-//					11, 11,
-//					12, 12,
-//					13, 13
-//			};
-
-			final TLongLongHashMap outside = new TLongLongHashMap(
-					new long[] { 14, 15 },
-					new long[] { 1, 2 } );
-
-//			final long[] outside = new long[] {
-//					14, 15, 1,
-//					15, 4000, 2
-//			};
-			al.add( new Tuple2<>( 0l, new MergeBloc.In( affinities, counts, outside ) ) );
+			al.add( new Tuple2<>( 0l, new MergeBloc.In( affinities, counts, borderNodes ) ) );
 		}
 
 		{
@@ -228,7 +215,9 @@ public class RegionMerging
 //					16, 16
 //			};
 
-			final TLongLongHashMap outside = new TLongLongHashMap( new long[] { 11 }, new long[] { 0 } );
+			final TLongObjectHashMap<TLongHashSet> outside = new TLongObjectHashMap< TLongHashSet >();
+			outside.put( 14, new TLongHashSet( new long[] { 0 } ) );
+//					new long[] { 11 }, new long[] { 0 } );
 //			final long[] outside = new long[] {
 //					11, 20, 0
 //			};
@@ -259,7 +248,9 @@ public class RegionMerging
 //					15, 15
 //			};
 
-			final TLongLongHashMap outside = new TLongLongHashMap( new long[] { 10 }, new long[] { 0 } );
+			final TLongObjectHashMap< TLongHashSet > outside = new TLongObjectHashMap< TLongHashSet >();
+			outside.put( 15, new TLongHashSet( new long[] { 0 } ) );
+//					new long[] { 10 }, new long[] { 0 } );
 //			final long[] outside = new long[] {
 //					10, 15, 0
 //			};
@@ -373,7 +364,7 @@ public class RegionMerging
 
 	}
 
-	public static class SetKeyToRoot< V > implements PairFunction< Tuple2< Tuple2< Long, Long >, V >, Long, Tuple2< Long, V > >
+	public static class SetKeyToRoot< V > implements PairFunction< Tuple2< Tuple2< Long, TLongHashSet >, V >, Long, Tuple2< Long, V > >
 	{
 
 		private static final long serialVersionUID = -6206815670426308405L;
@@ -387,7 +378,7 @@ public class RegionMerging
 		}
 
 		@Override
-		public Tuple2< Long, Tuple2< Long, V > > call( final Tuple2< Tuple2< Long, Long >, V > t ) throws Exception
+		public Tuple2< Long, Tuple2< Long, V > > call( final Tuple2< Tuple2< Long, TLongHashSet >, V > t ) throws Exception
 		{
 			final long k = parents.getValue()[ t._1()._1().intValue() ];
 			return new Tuple2<>( k, new Tuple2<>( t._1()._1(), t._2() ) );
@@ -478,13 +469,13 @@ public class RegionMerging
 			addCounts( eac1.counts, counts, assignments );// eac1.outside );
 			addCounts( eac2.counts, counts, assignments );// eac2.outside );
 
-			final TLongLongHashMap outside = new TLongLongHashMap();
-			addOutside( eac1.outside, outside, r, parents );
-			addOutside( eac2.outside, outside, r, parents );
+			final TLongObjectHashMap< TLongHashSet > borderNodes = new TLongObjectHashMap< TLongHashSet >();
+			addOutside( eac1.borderNodes, borderNodes, r, parents );
+			addOutside( eac2.borderNodes, borderNodes, r, parents );
 
 			eac1.fragmentPointedToOutside.addAll( eac2.fragmentPointedToOutside );
 
-			return new Tuple2<>( eacWithKey1._1(), new MergeBloc.Out( edges, counts, outside, assignments, eac1.fragmentPointedToOutside ) );
+			return new Tuple2<>( eacWithKey1._1(), new MergeBloc.Out( edges, counts, borderNodes, assignments, eac1.fragmentPointedToOutside ) );
 		}
 
 	}
@@ -511,8 +502,6 @@ public class RegionMerging
 			final TDoubleArrayList edges = t._2().edges;
 			final TLongLongHashMap counts = t._2().counts;
 			final TLongLongHashMap assignments = t._2().assignments;
-//			System.out.println( counts );
-//			System.out.println( assignments );
 			final TLongHashSet candidates = t._2().fragmentPointedToOutside;
 			final Edge e = new Edge( edges );
 			for ( int i = 0; i < e.size(); ++i )
@@ -528,7 +517,7 @@ public class RegionMerging
 			}
 
 
-			final MergeBloc.In result = new MergeBloc.In( edges, t._2().counts, t._2().outside );
+			final MergeBloc.In result = new MergeBloc.In( edges, t._2().counts, t._2().borderNodes );
 
 			return new Tuple2<>( t._1(), result );
 		}
@@ -581,15 +570,23 @@ public class RegionMerging
 		}
 	}
 
-	public static void addOutside( final TLongLongHashMap source, final TLongLongHashMap target, final int root, final int[] parents )
+	public static void addOutside( final TLongObjectHashMap< TLongHashSet > source, final TLongObjectHashMap< TLongHashSet > target, final int root, final int[] parents )
 	{
-		for ( final TLongLongIterator it = source.iterator(); it.hasNext(); )
+		for ( final TLongObjectIterator< TLongHashSet > it = source.iterator(); it.hasNext(); )
 		{
 			it.advance();
-			final long v = it.value();
-			if ( parents[ ( int ) v ] == root )
-				continue;
-			target.put( it.key(), v );
+			final TLongHashSet hs = new TLongHashSet();
+			final TLongHashSet v = it.value();
+			for ( final TLongIterator vIt = v.iterator(); vIt.hasNext(); )
+			{
+				final long vV = vIt.next();
+				if ( parents[ ( int ) vV ] == root )
+					continue;
+				else
+					hs.add( vV );
+			}
+			if ( hs.size() > 0 )
+				target.put( it.key(), hs );
 		}
 	}
 }
