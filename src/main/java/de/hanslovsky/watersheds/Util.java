@@ -27,7 +27,7 @@ public class Util
 	}
 
 	public static class KeyAndCountsComparator< V > implements
-			Comparator< Tuple2< Tuple3< Long, Long, Long >, V > >
+	Comparator< Tuple2< Tuple3< Long, Long, Long >, V > >
 	{
 		private final long[] dims;
 
@@ -44,7 +44,8 @@ public class Util
 		}
 	}
 
-	public static class DropCounts<K> implements PairFunction< Tuple2< K, Tuple2< long[], long[] > >, K, long[] > {
+	public static class DropSecondValue< K, V1, V2 > implements PairFunction< Tuple2< K, Tuple2< V1, V2 > >, K, V1 >
+	{
 
 		/**
 		 *
@@ -52,7 +53,7 @@ public class Util
 		private static final long serialVersionUID = 3499313015214140909L;
 
 		@Override
-		public Tuple2< K, long[] > call( final Tuple2< K, Tuple2< long[], long[] > > t ) throws Exception
+		public Tuple2< K, V1 > call( final Tuple2< K, Tuple2< V1, V2 > > t ) throws Exception
 		{
 			return new Tuple2<>( t._1(), t._2()._1() );
 		}

@@ -3,6 +3,7 @@ package de.hanslovsky.watersheds.graph;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -96,31 +97,32 @@ public class RegionMerging
 
 			final Broadcast< int[] > parentsBC = sc.broadcast( parents );
 
-			final JavaPairRDD< Long, Tuple2< Long, Out > > rdd1 = mergedEdges.mapToPair( new SetKeyToRoot<>( parentsBC ) ).cache();
-			rdd1.count();
-			final JavaPairRDD< Long, Tuple2< Long, Out > > rdd2 = rdd1; // rdd1.mapToPair(
-			// new
-			// AddKeyToValue<>()
-			// ).cache();
-			rdd2.count();
-			final JavaPairRDD< Long, Tuple2< Long, Out > > rdd3 = rdd2.reduceByKey( new MergeByKey( parentsBC ) ).cache();
-			rdd3.count();
-			final JavaPairRDD< Long, Out > rdd4 = rdd3.mapToPair( new RemoveFromValue<>() ).cache();
-			rdd4.count();
-			final JavaPairRDD< Long, In > rdd5 = rdd4.mapToPair( new UpdateEdgesAndCounts( f ) ).cache();
-			rdd5.count();
-			rdd = rdd5.cache();
+//			final JavaPairRDD< Long, Tuple2< Long, Out > > rdd1 = mergedEdges.mapToPair( new SetKeyToRoot<>( parentsBC ) ).cache();
+//			rdd1.count();
+//			final JavaPairRDD< Long, Tuple2< Long, Out > > rdd2 = rdd1; // rdd1.mapToPair(
+//			// new
+//			// AddKeyToValue<>()
+//			// ).cache();
+//			rdd2.count();
+//			final JavaPairRDD< Long, Tuple2< Long, Out > > rdd3 = rdd2.reduceByKey( new MergeByKey( parentsBC ) ).cache();
+//			rdd3.count();
+//			final JavaPairRDD< Long, Out > rdd4 = rdd3.mapToPair( new RemoveFromValue<>() ).cache();
+//			rdd4.count();
+//			final JavaPairRDD< Long, In > rdd5 = rdd4.mapToPair( new UpdateEdgesAndCounts( f ) ).cache();
+//			rdd5.count();
+//			rdd = rdd5.cache();
+//			rdd.count();
+//			System.out.println( "Merged blocks, now " + rdd.count() + " blocks" );
+
+			rdd = mergedEdges
+					.mapToPair( new SetKeyToRoot<>( parentsBC ) )
+//					.mapToPair( new AddKeyToValue<>() )
+					.reduceByKey( new MergeByKey( parentsBC ) )
+					.mapToPair( new RemoveFromValue<>() )
+					.mapToPair( new UpdateEdgesAndCounts( f ) )
+					.cache();
 			rdd.count();
 			System.out.println( "Merged blocks, now " + rdd.count() + " blocks" );
-
-//			rdd = mergedEdges
-//					.mapToPair( new SetKeyToRoot<>( parentsBC ) )
-//					.mapToPair( new AddKeyToValue<>() )
-//					.reduceByKey( new MergeByKey( parentsBC ) )
-//					.mapToPair( new RemoveFromValue<>() )
-//					.mapToPair( new UpdateEdgesAndCounts() )
-//					.cache();
-//			rdd.count();
 //			System.exit( 1 );
 
 			// assume zero based, contiguuous indices?
@@ -296,12 +298,39 @@ public class RegionMerging
 		};
 
 		final TLongArrayList merges = new TLongArrayList();
+		final String mergesAddr = "ipc://merges";
+		final Socket mergesSocket = ctx.socket( ZMQ.PULL );
+		mergesSocket.bind( mergesAddr );
+		final Thread mergesThread = new Thread( () -> {
+			while ( !Thread.currentThread().isInterrupted() )
+			{
+				final byte[] msg = mergesSocket.recv();
+				System.out.println( "REceived message " + Arrays.toString( msg ) );
+				System.out.println( merges );
+				if ( msg.length == 0 )
+					continue;
+				final ByteBuffer bb = ByteBuffer.wrap( msg );
+				merges.add( bb.getLong() );
+				merges.add( bb.getLong() );
+				merges.add( bb.getLong() );
+				merges.add( Edge.dtl( bb.getDouble() ) );
+			}
+		} );
+		mergesThread.start();
 		final MergerService mergerService = ( MergerService & Serializable ) ( n1, n2, n, w ) -> {
 			System.out.println( "Merged " + n1 + " and " + n2 + " into " + n );
-//			merges.add( n1 );
-//			merges.add( n2 );
-//			merges.add( n );
-//			merges.add( Double.doubleToLongBits( w ) );
+			final Context localCtx = ZMQ.context( 1 );
+			final Socket localSoc = localCtx.socket( ZMQ.PUSH );
+			localSoc.connect( mergesAddr );
+			final byte[] bytes = new byte[ 32 ];
+			final ByteBuffer bb = ByteBuffer.wrap( bytes );
+			bb.putLong( n1 );
+			bb.putLong( n2 );
+			bb.putLong( n );
+			bb.putDouble( w );
+			localSoc.send( bytes, 0 );
+			localSoc.close();
+			localCtx.close();
 		};
 
 		final RegionMerging rm = new RegionMerging(
@@ -315,7 +344,9 @@ public class RegionMerging
 		final List< Tuple2< Long, MergeBloc.In > > result = rm.run( sc, rdd, 99 ).collect();
 
 		sc.close();
-//		sc.wait();
+		System.out.println( "SZ " + merges.size() );
+		for ( int i = 0; i < merges.size(); i += 4 )
+			System.out.println( merges.get( i ) + " " + merges.get( i + 1 ) + " " + merges.get( i + 2 ) + " " + Double.longBitsToDouble( merges.get( i + 3 ) ) );
 
 		t.interrupt();
 		final Socket sk = ctx.socket( ZMQ.REQ );

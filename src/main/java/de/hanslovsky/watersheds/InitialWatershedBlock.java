@@ -1,23 +1,13 @@
 package de.hanslovsky.watersheds;
 
-import java.io.Serializable;
 import java.util.Collections;
-import java.util.Random;
 import java.util.concurrent.Executors;
 
 import org.apache.spark.api.java.function.PairFunction;
 import org.mastodon.collection.ref.RefArrayList;
 
-import bdv.util.BdvFunctions;
-import bdv.util.BdvOptions;
-import bdv.util.BdvStackSource;
-import bdv.viewer.ViewerPanel;
-import de.hanslovsky.watersheds.WatershedsSpark.ValueDisplayListener;
 import gnu.trove.map.hash.TLongDoubleHashMap;
-import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
-import net.imglib2.RandomAccessibleInterval;
-import net.imglib2.RealRandomAccess;
 import net.imglib2.algorithm.morphology.watershed.AffinityWatershedBlocked;
 import net.imglib2.algorithm.morphology.watershed.AffinityWatershedBlocked.Predicate;
 import net.imglib2.algorithm.morphology.watershed.AffinityWatershedBlocked.WeightedEdge;
@@ -25,14 +15,10 @@ import net.imglib2.algorithm.morphology.watershed.CompareBetter;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import net.imglib2.algorithm.morphology.watershed.affinity.AffinityView;
 import net.imglib2.algorithm.morphology.watershed.affinity.CompositeFactory;
-import net.imglib2.converter.Converter;
-import net.imglib2.converter.Converters;
 import net.imglib2.img.array.ArrayImg;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.basictypeaccess.array.FloatArray;
 import net.imglib2.img.basictypeaccess.array.LongArray;
-import net.imglib2.interpolation.randomaccess.NearestNeighborInterpolatorFactory;
-import net.imglib2.type.numeric.ARGBType;
 import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.Intervals;
@@ -46,11 +32,6 @@ import scala.Tuple3;
 public class InitialWatershedBlock implements PairFunction< Tuple2< Tuple3< Long, Long, Long >, float[] >, Tuple3< Long, Long, Long >, Tuple2< long[], long[] > >
 {
 
-	public static interface Visitor
-	{
-		public void act( Tuple3< Long, Long, Long > t, RandomAccessibleInterval< LongType > labels );
-	}
-
 	private final int[] intervalDimensions;
 
 	public InitialWatershedBlock( final int[] intervalDimensions, final long[] volumeDimensions, final double threshold )
@@ -58,7 +39,7 @@ public class InitialWatershedBlock implements PairFunction< Tuple2< Tuple3< Long
 		this( intervalDimensions, volumeDimensions, threshold, ( t, labels ) -> {} );
 	}
 
-	public InitialWatershedBlock( final int[] intervalDimensions, final long[] volumeDimensions, final double threshold, final Visitor visitor )
+	public InitialWatershedBlock( final int[] intervalDimensions, final long[] volumeDimensions, final double threshold, final LabelsVisitor visitor )
 	{
 		super();
 		this.intervalDimensions = intervalDimensions;
@@ -71,7 +52,7 @@ public class InitialWatershedBlock implements PairFunction< Tuple2< Tuple3< Long
 
 	private final double threshold;
 
-	private final Visitor visitor;
+	private final LabelsVisitor visitor;
 
 	private static final float[] extArr = new float[] { Float.NaN, Float.NaN, Float.NaN };
 
@@ -163,56 +144,6 @@ public class InitialWatershedBlock implements PairFunction< Tuple2< Tuple3< Long
 
 			return new Tuple2<>( t._1(), new Tuple2<>( labelsArr, newCounts ) );
 		}
-	}
-
-	public static class ShowTopLeftVisitor implements Visitor, Serializable
-	{
-
-		/**
-		 *
-		 */
-		private static final long serialVersionUID = -3919117239750420905L;
-
-		@Override
-		public void act( final Tuple3< Long, Long, Long > t, final RandomAccessibleInterval< LongType > labels )
-		{
-			if ( t._1() == 0 && t._1() == 0 && t._1() == 0 )
-			{
-				final TLongIntHashMap colors = new TLongIntHashMap();
-				final Random rng = new Random( 100 );
-				colors.put( 0, 0 );
-				for ( final LongType l : Views.flatIterable( labels ) )
-				{
-					final long lb = l.get();
-					if ( !colors.contains( lb ) )
-						colors.put( lb, rng.nextInt() );
-				}
-
-				final RandomAccessibleInterval< ARGBType > coloredLabels = Converters.convert(
-						labels,
-						( Converter< LongType, ARGBType > ) ( s, tt ) -> tt.set( colors.get( s.getInteger() ) ),
-						new ARGBType() );
-//				BdvFunctions.show( labels, "LABELS TOP LEFT " + threshold );
-				final BdvStackSource< ARGBType > bdv = BdvFunctions.show( coloredLabels, "LABELS TOP LEFT " );
-				final ViewerPanel vp = bdv.getBdvHandle().getViewerPanel();
-				final RealRandomAccess< LongType > access = Views.interpolate( Views.extendValue( labels, new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ).realRandomAccess();
-				final ValueDisplayListener< LongType > vdl = new ValueDisplayListener<>( access, vp );
-				vp.getDisplay().addMouseMotionListener( vdl );
-				vp.getDisplay().addOverlayRenderer( vdl );
-
-				final RandomAccessibleInterval< Pair< LongType, ARGBType > > paired = Views.interval( Views.pair( labels, coloredLabels ), labels );
-				final RandomAccessibleInterval< ARGBType > only2812 = Converters.convert(
-						paired,
-						( s, tar ) -> {
-							tar.set( s.getA().get() == 2812 ? s.getB().get() : 0 );
-						},
-						new ARGBType() );
-
-				BdvFunctions.show( only2812, "2812", BdvOptions.options().addTo( bdv ) );
-
-			}
-		}
-
 	}
 
 }
