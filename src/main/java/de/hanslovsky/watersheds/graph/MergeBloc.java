@@ -247,7 +247,7 @@ public class MergeBloc
 				final int next = queue.dequeueInt();
 				e.setIndex( next );
 				final double w = e.weight();
-				System.out.println( t._1() + ": " + next + " .. " + w + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() + " " + threshold + " " + borderNodeIsInvolved );
+//				System.out.println( t._1() + ": " + next + " .. " + w + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() + " " + threshold + " " + borderNodeIsInvolved );
 				if ( w < 0 )
 					continue;
 
@@ -283,7 +283,7 @@ public class MergeBloc
 
 //					System.out.println( "Requesting next id " + t._1() );
 					final long n = idService.requestIds( 1 );
-					System.out.println( "Merging " + from + " and " + to + " into " + n );
+//					System.out.println( "Merging " + from + " and " + to + " into " + n );
 //					System.out.println( "Got new id: " + n + " " + t._1() );
 //					System.out.println( "Merging " + from + " and " + to + " into " + n );
 

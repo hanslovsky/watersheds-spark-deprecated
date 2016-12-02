@@ -32,6 +32,7 @@ PairFunction< Tuple2< Tuple3< Long, Long, Long >, Tuple2< long[], long[] > >, Tu
 		final long offset = offsets.getValue().get( id );
 		final TLongLongHashMap counts = new TLongLongHashMap();
 		final long[] data = t._2()._1().clone();
+		System.out.println( offsets.getValue() + " " + id + " " + offset );
 		if ( offset != offsets.getValue().getNoEntryValue() )
 		{
 			System.out.println( "Offseting for " + t._1() + " " + offsets.getValue() );

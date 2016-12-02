@@ -12,6 +12,7 @@ import de.hanslovsky.watersheds.graph.Function;
 import de.hanslovsky.watersheds.graph.MergeBloc;
 import de.hanslovsky.watersheds.graph.MergeBloc.In;
 import de.hanslovsky.watersheds.graph.UndirectedGraph;
+import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
@@ -40,7 +41,7 @@ public class PrepareRegionMerging
 {
 
 	public static class BuildBlockedGraph implements
-	PairFunction< Tuple2< Tuple3< Long, Long, Long >, Tuple3< long[], float[], TLongLongHashMap > >, Long, MergeBloc.In >
+	PairFunction< Tuple2< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > >, Long, MergeBloc.In >
 	{
 
 		/**
@@ -66,8 +67,10 @@ public class PrepareRegionMerging
 		}
 
 		@Override
-		public Tuple2< Long, In > call( final Tuple2< Tuple3< Long, Long, Long >, Tuple3< long[], float[], TLongLongHashMap > > t ) throws Exception
+		public Tuple2< Long, In > call( final Tuple2< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > t ) throws Exception
 		{
+			final long[] pos = t._1().getData();
+
 			final long[] dim = this.dim;
 			final long[] blockDim = this.blockDim;
 			final long[] numBlocksByDimension = new long[ blockDim.length ];
@@ -85,7 +88,10 @@ public class PrepareRegionMerging
 			}
 			final long[] offset = new long[ blockDim.length ];
 			Arrays.fill( offset, 1 );
-			final long[] blockIndices = new long[] { t._1()._1() / blockDim[ 1 ], t._1()._2() / blockDim[ 1 ], t._1()._3() / blockDim[ 2 ] };
+			final long[] blockIndices = new long[ pos.length ];
+			for ( int d = 0; d < pos.length; ++d )
+				blockIndices[ d ] = pos[ d ] / blockDim[ d ];
+//					new long[] { t._1()._1() / blockDim[ 1 ], t._1()._2() / blockDim[ 1 ], t._1()._3() / blockDim[ 2 ] };
 			final long id = IntervalIndexer.positionToIndex( blockIndices, numBlocksByDimension );
 
 			final CompositeFactory< FloatType, RealComposite< FloatType > > compositeFactory = ( size ) -> Views.collapseReal( ArrayImgs.floats( 1, size ) ).randomAccess().get();
@@ -106,10 +112,11 @@ public class PrepareRegionMerging
 			final Edge e = new Edge( edges );
 			final Edge dummy = new Edge( edgesDummy );
 			dummy.add( Double.NaN, 0.0, 0, 0, 1 );
-			final TLongLongHashMap counts = t._2()._3();
+			final TLongLongHashMap counts = new TLongLongHashMap();// t._2()._3();
 			final TLongObjectHashMap< TLongHashSet > borderNodes = new TLongObjectHashMap< TLongHashSet >();
 			final UndirectedGraph g = new UndirectedGraph( edges, edgeMerger );
 			final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap = g.nodeEdgeMap();
+
 
 			addEdges( innerLabels, innerAffinities, blockDim, g, nodeEdgeMap, e, dummy, edgeMerger );
 
@@ -119,28 +126,37 @@ public class PrepareRegionMerging
 //				System.out.println( Arrays.toString( dim ) );
 //				System.out.println( Arrays.toString( blockDim ) );
 //				System.out.println( Arrays.toString( blockIndices ) );
+				System.out.println( Arrays.toString( numBlocksByDimension ) );
 				blockIndices[ d ] -= 1;
-//				System.out.println( Arrays.toString( blockIndices ) );
+				System.out.println( Arrays.toString( blockIndices ) );
 				if ( blockIndices[ d ] >= 0 )
 				{
-					final long lower = 0;
-					final long upper = lower + 1;
+					final long outer = 0;
+					final long inner = outer + 1;
 					final long neighborId = IntervalIndexer.positionToIndex( blockIndices, numBlocksByDimension );
-					addEdgesFromNeighborBlocks( labels, affinities, d, upper, lower, g, nodeEdgeMap, e, dummy, edgeMerger, neighborId, borderNodes, blockDim );
+					addEdgesFromNeighborBlocks( labels, affinities, d, inner, outer, g, nodeEdgeMap, e, dummy, edgeMerger, neighborId, borderNodes, blockDim );
 
 				}
 				blockIndices[ d ] += 2;
-//				System.out.println( Arrays.toString( blockIndices ) );
+				System.out.println( Arrays.toString( blockIndices ) );
 				if ( blockIndices[ d ] < numBlocksByDimension[ d ] )
 				{
-					final long lower = labels.max( d ) - 1;
-					final long upper = lower + 1;
+					final long inner = labels.max( d ) - 1;
+					final long outer = inner + 1;
 					final long neighborId = IntervalIndexer.positionToIndex( blockIndices, numBlocksByDimension );
-					addEdgesFromNeighborBlocks( labels, affinities, d, lower, upper, g, nodeEdgeMap, e, dummy, edgeMerger, neighborId, borderNodes, blockDim );
+					addEdgesFromNeighborBlocks( labels, affinities, d, inner, outer, g, nodeEdgeMap, e, dummy, edgeMerger, neighborId, borderNodes, blockDim );
 				}
 				blockIndices[ d ] -= 1;
-//				System.out.println( Arrays.toString( blockIndices ) );
-//				System.out.println();
+				System.out.println( Arrays.toString( blockIndices ) );
+				System.out.println();
+			}
+
+			for ( final TLongLongIterator it = t._2()._3().iterator(); it.hasNext(); )
+			{
+				it.advance();
+				final long k = it.key();
+				if ( nodeEdgeMap.contains( k ) )
+					counts.put( k, it.value() );
 			}
 
 			for ( int i = 0; i < e.size(); ++i )
@@ -148,7 +164,6 @@ public class PrepareRegionMerging
 				e.setIndex( i );
 				e.weight( func.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
 			}
-
 
 			return new Tuple2<>( id, new MergeBloc.In( edges, counts, borderNodes ) );
 		}
@@ -285,19 +300,19 @@ public class PrepareRegionMerging
 
 		final Random rng = new Random( 100 );
 
-		final long[] dim = new long[] { 13, 14, 16 };
-		final long[] blockDim = new long[] { 3, 4, 5 };
-		final long[] paddedBlockDim = new long[] { 5, 6, 7 };
+		final long[] dim = new long[] { 9, 12 };
+		final long[] blockDim = new long[] { 3, 4 };
+		final long[] paddedBlockDim = new long[] { 5, 6 };
 
 		final long[] labelsArr = new long[ ( int ) Intervals.numElements( paddedBlockDim ) ];
-		final ArrayImg< LongType, LongArray > labels = ArrayImgs.longs( labelsArr, 5, 6, 7 );
+		final ArrayImg< LongType, LongArray > labels = ArrayImgs.longs( labelsArr, paddedBlockDim );
 		for ( long y = 0; y < labels.dimension( 1 ); ++y )
 			for ( final LongType l : Views.hyperSlice( labels, 1, y ) )
-				l.set( y + 1);
+				l.set( y + 1 );
 
-		final float[] affsArr = new float[ ( int ) Intervals.numElements( paddedBlockDim ) * 3 ];
+		final float[] affsArr = new float[ ( int ) Intervals.numElements( paddedBlockDim ) * 2 ];
 		final CompositeIntervalView< FloatType, RealComposite< FloatType > > affinities =
-				Views.collapseReal( ArrayImgs.floats( affsArr, 5, 6, 7, 3 ) );
+				Views.collapseReal( ArrayImgs.floats( affsArr, paddedBlockDim[ 0 ], paddedBlockDim[ 1 ], paddedBlockDim.length ) );
 		for ( final RealComposite< FloatType > a : Views.flatIterable( affinities ) )
 			for ( int i = 0; i < affinities.numDimensions(); ++i )
 				a.get( i ).setReal( rng.nextDouble() );
@@ -330,7 +345,7 @@ public class PrepareRegionMerging
 		final BuildBlockedGraph builder = new BuildBlockedGraph( dim, blockDim, MergeBloc.DEFAULT_EDGE_MERGER, new CountOverSquaredSize() );
 
 		final Tuple2< Long, In > result = builder.call( new Tuple2<>(
-				new Tuple3<>( 2 * blockDim[ 0 ], 2 * blockDim[ 1 ], 2 * blockDim[ 2 ] ),
+				new HashableLongArray( new long[] { 1 * blockDim[ 0 ], 1 * blockDim[ 1 ] } ),
 				new Tuple3<>( labelsArr, affsArr, counts ) ) );
 		System.out.println( result._1() );
 		System.out.println( result._2().counts );
@@ -343,6 +358,70 @@ public class PrepareRegionMerging
 		}
 
 	}
+
+//	public static void main( final String[] args ) throws Exception
+//	{
+//
+//		final Random rng = new Random( 100 );
+//
+//		final long[] dim = new long[] { 13, 14, 16 };
+//		final long[] blockDim = new long[] { 3, 4, 5 };
+//		final long[] paddedBlockDim = new long[] { 5, 6, 7 };
+//
+//		final long[] labelsArr = new long[ ( int ) Intervals.numElements( paddedBlockDim ) ];
+//		final ArrayImg< LongType, LongArray > labels = ArrayImgs.longs( labelsArr, 5, 6, 7 );
+//		for ( long y = 0; y < labels.dimension( 1 ); ++y )
+//			for ( final LongType l : Views.hyperSlice( labels, 1, y ) )
+//				l.set( y + 1);
+//
+//		final float[] affsArr = new float[ ( int ) Intervals.numElements( paddedBlockDim ) * 3 ];
+//		final CompositeIntervalView< FloatType, RealComposite< FloatType > > affinities =
+//				Views.collapseReal( ArrayImgs.floats( affsArr, 5, 6, 7, 3 ) );
+//		for ( final RealComposite< FloatType > a : Views.flatIterable( affinities ) )
+//			for ( int i = 0; i < affinities.numDimensions(); ++i )
+//				a.get( i ).setReal( rng.nextDouble() );
+//
+//		long otherLabel = 10;
+//		for ( int d = 0; d < labels.numDimensions(); ++d )
+//		{
+//			for ( final LongType l : Views.hyperSlice( labels, d, 0 ) )
+//				l.set( otherLabel );
+//			++otherLabel;
+//			for ( final LongType l : Views.hyperSlice( labels, d, labels.max( d ) ) )
+//				l.set( otherLabel );
+//			++otherLabel;
+//			for ( final RealComposite< FloatType > a : Views.hyperSlice( affinities, d, labels.max( d ) ) )
+//				a.get( d ).set( Float.NaN );
+//		}
+//
+//		final TLongLongHashMap counts = new TLongLongHashMap();
+//		for ( final LongType l : labels )
+//		{
+//			final long ll = l.get();
+//			if ( !counts.contains( ll ) )
+//				counts.put( ll, 1 );
+//			else
+//				counts.put( ll, counts.get( ll ) + 1 );
+//		}
+//
+//		System.out.println( otherLabel + " " + counts );
+//
+//		final BuildBlockedGraph builder = new BuildBlockedGraph( dim, blockDim, MergeBloc.DEFAULT_EDGE_MERGER, new CountOverSquaredSize() );
+//
+//		final Tuple2< Long, In > result = builder.call( new Tuple2<>(
+//				new HashableLongArray( new long[] { 2 * blockDim[ 0 ], 2 * blockDim[ 1 ], 2 * blockDim[ 2 ] } ),
+//				new Tuple3<>( labelsArr, affsArr, counts ) ) );
+//		System.out.println( result._1() );
+//		System.out.println( result._2().counts );
+//		System.out.println( result._2().borderNodes );
+//		final Edge e = new Edge( result._2().edges );
+//		for ( int i = 0; i < e.size(); ++i )
+//		{
+//			e.setIndex( i );
+//			System.out.println( i + " " + e.weight() + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() );
+//		}
+//
+//	}
 
 
 }
