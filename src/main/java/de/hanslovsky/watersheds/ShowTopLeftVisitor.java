@@ -16,7 +16,6 @@ import net.imglib2.type.numeric.ARGBType;
 import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.util.Pair;
 import net.imglib2.view.Views;
-import scala.Tuple3;
 
 public class ShowTopLeftVisitor implements LabelsVisitor
 {
@@ -27,9 +26,9 @@ public class ShowTopLeftVisitor implements LabelsVisitor
 	private static final long serialVersionUID = -3919117239750420905L;
 
 	@Override
-	public void act( final Tuple3< Long, Long, Long > t, final RandomAccessibleInterval< LongType > labels )
+	public void act( final HashableLongArray t, final RandomAccessibleInterval< LongType > labels )
 	{
-		if ( t._1() == 0 && t._1() == 0 && t._1() == 0 )
+		if ( t.getData()[ 0 ] == 0 && t.getData()[ 1 ] == 0 && t.getData()[ 2 ] == 0 )
 		{
 			final TLongIntHashMap colors = new TLongIntHashMap();
 			final Random rng = new Random( 100 );

@@ -12,7 +12,7 @@ public class HashableLongArray implements Serializable
 
 	private final int hash;
 
-	public HashableLongArray( final long[] data )
+	public HashableLongArray( final long... data )
 	{
 		super();
 		this.data = data;

@@ -1,5 +1,6 @@
 package de.hanslovsky.watersheds;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.Executors;
 
@@ -27,9 +28,8 @@ import net.imglib2.view.Views;
 import net.imglib2.view.composite.CompositeIntervalView;
 import net.imglib2.view.composite.RealComposite;
 import scala.Tuple2;
-import scala.Tuple3;
 
-public class InitialWatershedBlock implements PairFunction< Tuple2< Tuple3< Long, Long, Long >, float[] >, Tuple3< Long, Long, Long >, Tuple2< long[], long[] > >
+public class InitialWatershedBlock implements PairFunction< Tuple2< HashableLongArray, float[] >, HashableLongArray, Tuple2< long[], long[] > >
 {
 
 	private final int[] intervalDimensions;
@@ -54,7 +54,7 @@ public class InitialWatershedBlock implements PairFunction< Tuple2< Tuple3< Long
 
 	private final LabelsVisitor visitor;
 
-	private static final float[] extArr = new float[] { Float.NaN, Float.NaN, Float.NaN };
+//	private static final float[] extArr = new float[] { Float.NaN, Float.NaN, Float.NaN };
 
 	/**
 	 *
@@ -62,14 +62,17 @@ public class InitialWatershedBlock implements PairFunction< Tuple2< Tuple3< Long
 	private static final long serialVersionUID = -4252306792553120080L;
 
 	@Override
-	public Tuple2< Tuple3< Long, Long, Long >, Tuple2< long[], long[] > > call(
-			final Tuple2< Tuple3< Long, Long, Long >, float[] > t ) throws Exception
+	public Tuple2< HashableLongArray, Tuple2< long[], long[] > > call(
+			final Tuple2< HashableLongArray, float[] > t ) throws Exception
 	{
-		final long[] o = new long[] { t._1()._1(), t._1()._2(), t._1()._3(), 3 };
+		final int dimensionality = t._1().getData().length;
+		final long[] o = new long[ dimensionality + 1 ];
+		System.arraycopy( t._1().getData(), 0, o, 0, dimensionality );
+		o[ dimensionality ] = dimensionality;
 
 		final long[] intervalDimensionsTruncated =
 				Util.getCurrentChunkDimensions( o, volumeDimensions, intervalDimensions );
-		intervalDimensionsTruncated[ o.length - 1 ] = o[ o.length - 1 ];
+		intervalDimensionsTruncated[ dimensionality ] = o[ dimensionality ];
 
 		final long[] labelsDimensions = new long[ intervalDimensionsTruncated.length - 1 ];
 		System.arraycopy( intervalDimensionsTruncated, 0, labelsDimensions, 0, labelsDimensions.length );
@@ -78,7 +81,9 @@ public class InitialWatershedBlock implements PairFunction< Tuple2< Tuple3< Long
 		final long[] labelsArr = new long[ ( int ) Intervals.numElements( labelsDimensions ) ];
 		final ArrayImg< LongType, LongArray > labels = ArrayImgs.longs( labelsArr, labelsDimensions );
 
-		final RealComposite< FloatType > extension = Views.collapseReal( ArrayImgs.floats( extArr, 1, 3 ) ).randomAccess().get();
+		final float[] extArr = new float[ dimensionality ];
+		Arrays.fill( extArr, Float.NaN );
+		final RealComposite< FloatType > extension = Views.collapseReal( ArrayImgs.floats( extArr, 1, dimensionality ) ).randomAccess().get();
 
 		final CompositeIntervalView< FloatType, RealComposite< FloatType > > affsCollapsed = Views.collapseReal( affs );
 
@@ -91,6 +96,14 @@ public class InitialWatershedBlock implements PairFunction< Tuple2< Tuple3< Long
 		bidirectionalEdgesDimensions[ bidirectionalEdgesDimensions.length - 1 ] *= 2;
 		final ArrayImg< FloatType, FloatArray > affsCopy = ArrayImgs.floats( bidirectionalEdgesDimensions );
 
+		System.out.println( dimensionality );
+		System.out.println( extArr.length + " " + t._2().length );
+		System.out.println( Arrays.toString( intervalDimensionsTruncated ) );
+		System.out.println( Arrays.toString( bidirectionalEdgesDimensions ) );
+		System.out.println( Arrays.toString( Intervals.dimensionsAsLongArray( affsCollapsed ) ) );
+		System.out.println( Arrays.toString( Intervals.dimensionsAsLongArray( affs ) ) );
+		System.out.println( Arrays.toString( Intervals.dimensionsAsLongArray( affsCopy ) ) );
+		System.out.println( Arrays.toString( Intervals.dimensionsAsLongArray( labels ) ) );
 		for ( final Pair< RealComposite< FloatType >, RealComposite< FloatType > > p : Views.interval( Views.pair( affsView, Views.collapseReal( affsCopy ) ), labels ) )
 			p.getB().set( p.getA() );
 

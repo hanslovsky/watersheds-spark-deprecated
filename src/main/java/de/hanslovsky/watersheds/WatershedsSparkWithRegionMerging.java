@@ -151,19 +151,19 @@ public class WatershedsSparkWithRegionMerging
 
 		System.out.println( "Generating map" );
 
-		final ArrayList< Tuple3< Long, Long, Long > > lowerBounds = new ArrayList<>();
+		final ArrayList< HashableLongArray > lowerBounds = new ArrayList<>();
 		for ( long z = 0; z < dims[ 2 ]; z += dimsIntervalInt[ 2 ] )
 			for ( long y = 0; y < dims[ 1 ]; y += dimsIntervalInt[ 1 ] )
 				for ( long x = 0; x < dims[ 0 ]; x += dimsIntervalInt[ 0 ] )
 				{
-					final Tuple3< Long, Long, Long > t = new Tuple3<>( x, y, z );
+					final HashableLongArray t = new HashableLongArray( x, y, z );
 					lowerBounds.add( t );
 
 
 					final long[] lower = new long[] { x, y, z, 0 };
 					final long[] upper = new long[ lower.length ];
 					final long[] dm = new long[ upper.length ];
-					upper[ 3 ] = 2;
+					upper[ 3 ] = 3;
 					for ( int d = 0; d < upper.length; ++d )
 					{
 						upper[ d ] = Math.min( dims[ d ] - 1, lower[ d ] + dimsInterval[ d ] - 1 );
@@ -175,7 +175,7 @@ public class WatershedsSparkWithRegionMerging
 		System.out.println( "Generated map" );
 
 
-		final PairFunction< Tuple2< Tuple3< Long, Long, Long >, float[] >, Tuple3< Long, Long, Long >, Tuple2< long[], long[] > > func =
+		final PairFunction< Tuple2< HashableLongArray, float[] >, HashableLongArray, Tuple2< long[], long[] > > func =
 				new InitialWatershedBlock( dimsIntervalInt, dims, 0.0, ( a, b ) -> {} );
 //						new ShowTopLeftVisitor() );
 
@@ -185,30 +185,31 @@ public class WatershedsSparkWithRegionMerging
 
 
 		final ZMQFileOpenerFloatType opener = new ZMQFileOpenerFloatType( addr );
-		final JavaPairRDD< Tuple3< Long, Long, Long >, float[] > imgs =
+		final JavaPairRDD< HashableLongArray, float[] > imgs =
 				sc.parallelize( lowerBounds ).mapToPair( new AffinitiesChunkLoader( opener, dims, dimsIntervalInt ) ).cache();
 
-		final JavaPairRDD< Tuple3< Long, Long, Long >, Tuple2< long[], long[] > > ws = imgs.mapToPair(
+		final JavaPairRDD< HashableLongArray, Tuple2< long[], long[] > > ws = imgs.mapToPair(
 				func
 				).cache();
 
-		final List< Tuple2< Tuple3< Long, Long, Long >, Long > > labelingsAndCounts = ws
+		final List< Tuple2< HashableLongArray, Long > > labelingsAndCounts = ws
 				.mapToPair( t -> new Tuple2<>( t._1(), t._2()._2() ) )
 				.mapToPair( new NumElements<>() )
 				.collect();
 
-		final ArrayList< Tuple2< Tuple3< Long, Long, Long >, Long > > al = new ArrayList<>();
-		for ( final Tuple2< Tuple3< Long, Long, Long >, Long > lac : labelingsAndCounts )
+		final ArrayList< Tuple2< HashableLongArray, Long > > al = new ArrayList<>();
+		for ( final Tuple2< HashableLongArray, Long > lac : labelingsAndCounts )
 			al.add( lac );
 
 		Collections.sort( al, new Util.KeyAndCountsComparator<>( dimsNoChannels ) );
 
 		final TLongLongHashMap startIndices = new TLongLongHashMap( al.size(), 1.5f, -1, -1 );
 		long startIndex = 0;
-		for ( final Tuple2< Tuple3< Long, Long, Long >, Long > t : al )
+		for ( final Tuple2< HashableLongArray, Long > t : al )
 		{
-			final Tuple3< Long, Long, Long > t1 = t._1();
-			final long[] arr1 = new long[] { t1._1(), t1._2(), t1._3() };
+			final HashableLongArray t1 = t._1();
+			final long[] arr1 = t1.getData();// new long[] { t1._1(), t1._2(),
+			// t1._3() };
 			startIndices.put( IntervalIndexer.positionToIndex( arr1, dimsNoChannels ), startIndex );
 			// "real" labels start at 1, so no id conflicts
 			final long c = t._2() - 1l;
@@ -266,7 +267,7 @@ public class WatershedsSparkWithRegionMerging
 		} );
 		labelsThread.start();
 
-		final JavaPairRDD< Tuple3< Long, Long, Long >, Tuple2< long[], TLongLongHashMap > > offsetLabelsWithCounts = ws
+		final JavaPairRDD< HashableLongArray, Tuple2< long[], TLongLongHashMap > > offsetLabelsWithCounts = ws
 				.mapToPair( new OffsetLabels( startIndicesBC, dimsNoChannels ) )
 				.cache();
 
@@ -284,7 +285,7 @@ public class WatershedsSparkWithRegionMerging
 		for ( final TLongLongHashMap m : offsetLabelsWithCounts.values().mapToPair( t -> t ).values().collect() )
 			counts.putAll( m );
 
-		final JavaPairRDD< Tuple3< Long, Long, Long >, long[] > offsetLabels = offsetLabelsWithCounts.mapToPair( new Util.DropSecondValue<>() );
+		final JavaPairRDD< HashableLongArray, long[] > offsetLabels = offsetLabelsWithCounts.mapToPair( new Util.DropSecondValue<>() );
 
 		offsetLabels.mapToPair( new LabelsChunkWriter(
 				new ZMQFileWriterLongType( listenerAddr ),

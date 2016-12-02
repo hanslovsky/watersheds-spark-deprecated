@@ -2,14 +2,14 @@ package de.hanslovsky.watersheds.io;
 
 import org.apache.spark.api.java.function.PairFunction;
 
+import de.hanslovsky.watersheds.HashableLongArray;
 import de.hanslovsky.watersheds.Util;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.type.numeric.integer.LongType;
 import scala.Tuple2;
-import scala.Tuple3;
 
 public class LabelsChunkWriter implements
-PairFunction< Tuple2< Tuple3< Long, Long, Long >, long[] >, Tuple3< Long, Long, Long >, long[] >
+		PairFunction< Tuple2< HashableLongArray, long[] >, HashableLongArray, long[] >
 {
 
 	private static final long serialVersionUID = 7110087147446657591L;
@@ -29,10 +29,10 @@ PairFunction< Tuple2< Tuple3< Long, Long, Long >, long[] >, Tuple3< Long, Long, 
 	}
 
 	@Override
-	public Tuple2< Tuple3< Long, Long, Long >, long[] >
-	call( final Tuple2< Tuple3< Long, Long, Long >, long[] > t ) throws Exception
+	public Tuple2< HashableLongArray, long[] >
+			call( final Tuple2< HashableLongArray, long[] > t ) throws Exception
 	{
-		final long[] offset = new long[] { t._1()._1(), t._1()._2(), t._1()._3() };
+		final long[] offset = t._1().getData();
 		final long[] chunkDims = Util.getCurrentChunkDimensions( offset, dims, intervalDims );
 		writer.write( offset, chunkDims, ArrayImgs.longs( t._2(), chunkDims ) );
 		return t;

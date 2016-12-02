@@ -2,15 +2,15 @@ package de.hanslovsky.watersheds.io;
 
 import org.apache.spark.api.java.function.PairFunction;
 
+import de.hanslovsky.watersheds.HashableLongArray;
 import de.hanslovsky.watersheds.Util;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.Intervals;
 import scala.Tuple2;
-import scala.Tuple3;
 
 public class AffinitiesChunkLoader implements
-PairFunction< Tuple3< Long, Long, Long >, Tuple3< Long, Long, Long >, float[] >
+PairFunction< HashableLongArray, HashableLongArray, float[] >
 {
 
 	private static final long serialVersionUID = 1L;
@@ -30,10 +30,13 @@ PairFunction< Tuple3< Long, Long, Long >, Tuple3< Long, Long, Long >, float[] >
 	}
 
 	@Override
-	public Tuple2< Tuple3< Long, Long, Long >, float[] > call( final Tuple3< Long, Long, Long > t ) throws Exception
+	public Tuple2< HashableLongArray, float[] > call( final HashableLongArray t ) throws Exception
 	{
 
-		final long[] o = new long[] { t._1(), t._2(), t._3(), 0 };
+		final int dimensionality = t.getData().length;
+		final long[] o = new long[ dimensionality + 1 ];
+		System.arraycopy( t.getData(), 0, o, 0, dimensionality );
+		o[ dimensionality ] = 0;
 		final long[] currentDims = Util.getCurrentChunkDimensions( o, dims, intervalDims );
 		final long nElements = Intervals.numElements( currentDims );
 		final float[] store = new float[ ( int ) nElements ];

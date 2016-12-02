@@ -75,7 +75,6 @@ import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
 import net.imglib2.view.composite.RealComposite;
 import scala.Tuple2;
-import scala.Tuple3;
 
 public class WatershedsSpark
 {
@@ -164,12 +163,12 @@ public class WatershedsSpark
 
 		System.out.println( "Generating map" );
 
-		final ArrayList< Tuple3< Long, Long, Long > > lowerBounds = new ArrayList<>();
+		final ArrayList< HashableLongArray > lowerBounds = new ArrayList<>();
 		for ( long z = 0; z < dims[ 2 ]; z += dimsIntervalInt[ 2 ] )
 			for ( long y = 0; y < dims[ 1 ]; y += dimsIntervalInt[ 1 ] )
 				for ( long x = 0; x < dims[ 0 ]; x += dimsIntervalInt[ 0 ] )
 				{
-					final Tuple3< Long, Long, Long > t = new Tuple3<>( x, y, z );
+					final HashableLongArray t = new HashableLongArray( x, y, z );
 					lowerBounds.add( t );
 
 					final long[] lower = new long[] { x, y, z, 0 };
@@ -186,7 +185,7 @@ public class WatershedsSpark
 
 		System.out.println( "Generated map" );
 
-		final PairFunction< Tuple2< Tuple3< Long, Long, Long >, float[] >, Tuple3< Long, Long, Long >, Tuple2< long[], long[] > > func =
+		final PairFunction< Tuple2< HashableLongArray, float[] >, HashableLongArray, Tuple2< long[], long[] > > func =
 				new InitialWatershedBlock( dimsIntervalInt, dims, 0.0, ( a, b ) -> {} );// new
 		// ShowTopLeftVisitor()
 		// );
@@ -200,29 +199,30 @@ public class WatershedsSpark
 		Logger.getRootLogger().setLevel( Level.ERROR );
 
 		final ZMQFileOpenerFloatType opener = new ZMQFileOpenerFloatType( addr );
-		final JavaPairRDD< Tuple3< Long, Long, Long >, float[] > imgs =
+		final JavaPairRDD< HashableLongArray, float[] > imgs =
 				sc.parallelize( lowerBounds ).mapToPair( new AffinitiesChunkLoader( opener, dims, dimsIntervalInt ) ).cache();
 
-		final JavaPairRDD< Tuple3< Long, Long, Long >, Tuple2< long[], long[] > > ws = imgs.mapToPair(
+		final JavaPairRDD< HashableLongArray, Tuple2< long[], long[] > > ws = imgs.mapToPair(
 				func ).cache();
 
-		final List< Tuple2< Tuple3< Long, Long, Long >, Long > > labelingsAndCounts = ws
+		final List< Tuple2< HashableLongArray, Long > > labelingsAndCounts = ws
 				.mapToPair( t -> new Tuple2<>( t._1(), t._2()._2() ) )
 				.mapToPair( new NumElements<>() )
 				.collect();
 
-		final ArrayList< Tuple2< Tuple3< Long, Long, Long >, Long > > al = new ArrayList<>();
-		for ( final Tuple2< Tuple3< Long, Long, Long >, Long > lac : labelingsAndCounts )
+		final ArrayList< Tuple2< HashableLongArray, Long > > al = new ArrayList<>();
+		for ( final Tuple2< HashableLongArray, Long > lac : labelingsAndCounts )
 			al.add( lac );
 
 		Collections.sort( al, new Util.KeyAndCountsComparator<>( dimsNoChannels ) );
 
 		final TLongLongHashMap startIndices = new TLongLongHashMap( 0, 1.0f, -1, -1 );
 		long startIndex = 0;
-		for ( final Tuple2< Tuple3< Long, Long, Long >, Long > t : al )
+		for ( final Tuple2< HashableLongArray, Long > t : al )
 		{
-			final Tuple3< Long, Long, Long > t1 = t._1();
-			final long[] arr1 = new long[] { t1._1(), t1._2(), t1._3() };
+			final HashableLongArray t1 = t._1();
+			final long[] arr1 = t1.getData();// new long[] { t1._1(), t1._2(),
+			// t1._3() };
 			startIndices.put( IntervalIndexer.positionToIndex( arr1, dimsNoChannels ), startIndex );
 			// "real" labels start at 1, so no id conflicts
 			final long c = t._2() - 1l;
@@ -280,12 +280,12 @@ public class WatershedsSpark
 		} );
 		labelsThread.start();
 
-		final JavaPairRDD< Tuple3< Long, Long, Long >, long[] > offsetLabels = ws
+		final JavaPairRDD< HashableLongArray, long[] > offsetLabels = ws
 				.mapToPair( new OffsetLabels( startIndicesBC, dimsNoChannels ) )
 				.mapToPair( new Util.DropSecondValue<>() )
 				.cache();
 
-		final List< Tuple2< Tuple3< Long, Long, Long >, long[] > > labelings = offsetLabels.collect();
+		final List< Tuple2< HashableLongArray, long[] > > labelings = offsetLabels.collect();
 		final TLongHashSet alreadyThere = new TLongHashSet();
 		alreadyThere.addAll( labelings.get( 0 )._2() );
 		System.out.println( alreadyThere.size() );
@@ -304,7 +304,7 @@ public class WatershedsSpark
 			System.out.println( alreadyThere.size() );
 		}
 
-		final JavaPairRDD< Tuple3< Long, Long, Long >, Boolean > abc = offsetLabels.mapToPair( ( t ) -> {
+		final JavaPairRDD< HashableLongArray, Boolean > abc = offsetLabels.mapToPair( ( t ) -> {
 			boolean doesNotContain4234 = true;
 			final long[] arr = t._2();
 			for ( int i = 0; i < arr.length && doesNotContain4234; ++i )
@@ -313,7 +313,7 @@ public class WatershedsSpark
 			return new Tuple2<>( t._1(), doesNotContain4234 );
 		} );
 
-		for ( final Tuple2< Tuple3< Long, Long, Long >, Boolean > ab : abc.collect() )
+		for ( final Tuple2< HashableLongArray, Boolean > ab : abc.collect() )
 			System.out.println( "DOES IT CONTAIN IT? " + ab );
 
 		offsetLabels.mapToPair( new LabelsChunkWriter(

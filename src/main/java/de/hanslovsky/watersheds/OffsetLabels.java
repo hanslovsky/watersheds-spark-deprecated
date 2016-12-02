@@ -5,10 +5,9 @@ import org.apache.spark.broadcast.Broadcast;
 
 import gnu.trove.map.hash.TLongLongHashMap;
 import scala.Tuple2;
-import scala.Tuple3;
 
 public class OffsetLabels implements
-PairFunction< Tuple2< Tuple3< Long, Long, Long >, Tuple2< long[], long[] > >, Tuple3< Long, Long, Long >, Tuple2< long[], TLongLongHashMap > >
+		PairFunction< Tuple2< HashableLongArray, Tuple2< long[], long[] > >, HashableLongArray, Tuple2< long[], TLongLongHashMap > >
 {
 
 	private static final long serialVersionUID = -104948149699827832L;
@@ -25,8 +24,8 @@ PairFunction< Tuple2< Tuple3< Long, Long, Long >, Tuple2< long[], long[] > >, Tu
 	}
 
 	@Override
-	public Tuple2< Tuple3< Long, Long, Long >, Tuple2< long[], TLongLongHashMap > >
-	call( final Tuple2< Tuple3< Long, Long, Long >, Tuple2< long[], long[] > > t ) throws Exception
+	public Tuple2< HashableLongArray, Tuple2< long[], TLongLongHashMap > >
+			call( final Tuple2< HashableLongArray, Tuple2< long[], long[] > > t ) throws Exception
 	{
 		final long id = Util.positionToIndex( t._1(), dim );
 		final long offset = offsets.getValue().get( id );

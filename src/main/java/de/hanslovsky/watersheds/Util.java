@@ -6,7 +6,6 @@ import org.apache.spark.api.java.function.PairFunction;
 
 import net.imglib2.util.IntervalIndexer;
 import scala.Tuple2;
-import scala.Tuple3;
 
 public class Util
 {
@@ -20,14 +19,13 @@ public class Util
 		return intervalDimensionsTruncated;
 	}
 
-	public static long positionToIndex( final Tuple3< Long, Long, Long > pos, final long[] dim )
+	public static long positionToIndex( final HashableLongArray pos, final long[] dim )
 	{
-		final long[] arr = new long[] { pos._1(), pos._2(), pos._3() };
-		return IntervalIndexer.positionToIndex( arr, dim );
+		return IntervalIndexer.positionToIndex( pos.getData(), dim );
 	}
 
 	public static class KeyAndCountsComparator< V > implements
-	Comparator< Tuple2< Tuple3< Long, Long, Long >, V > >
+			Comparator< Tuple2< HashableLongArray, V > >
 	{
 		private final long[] dims;
 
@@ -38,7 +36,7 @@ public class Util
 		}
 
 		@Override
-		public int compare( final Tuple2< Tuple3< Long, Long, Long >, V > o1, final Tuple2< Tuple3< Long, Long, Long >, V > o2 )
+		public int compare( final Tuple2< HashableLongArray, V > o1, final Tuple2< HashableLongArray, V > o2 )
 		{
 			return Long.compare( positionToIndex( o1._1(), dims ), positionToIndex( o2._1(), dims ) );
 		}
