@@ -1,5 +1,7 @@
 package de.hanslovsky.watersheds.graph;
 
+import java.io.Serializable;
+
 import gnu.trove.iterator.TIntIterator;
 import gnu.trove.iterator.TLongIntIterator;
 import gnu.trove.list.array.TDoubleArrayList;
@@ -7,7 +9,7 @@ import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 
-public class UndirectedGraph
+public class UndirectedGraph implements Serializable
 {
 
 	private final TDoubleArrayList edges;
@@ -37,6 +39,11 @@ public class UndirectedGraph
 	public TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap()
 	{
 		return this.nodeEdgeMap;
+	}
+
+	public TDoubleArrayList edges()
+	{
+		return this.edges;
 	}
 
 	public boolean addNode( final long id )

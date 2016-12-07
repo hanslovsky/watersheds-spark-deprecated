@@ -242,7 +242,8 @@ public class MergeBloc
 				assignments.put( k, k );
 			}
 
-			while ( !queue.isEmpty() )
+			final int count = 0;
+			while ( !queue.isEmpty() && count < 1000 )
 			{
 				final int next = queue.dequeueInt();
 				e.setIndex( next );
@@ -251,15 +252,15 @@ public class MergeBloc
 				if ( w < 0 )
 					continue;
 
-				else if ( w > threshold || borderNodeIsInvolved && w > maxWeightBeforeMerge )
+				else if ( w > threshold || borderNodeIsInvolved && w > 20 * maxWeightBeforeMerge )
 					break;
 
 				final int from = ( int ) e.from();
 				final int to = ( int ) e.to();
 
-				if ( in.borderNodes.contains( from ) )
+				if ( in.borderNodes.contains( from ) && in.borderNodes.get( from ) != null )
 				{
-					System.out.println( "bn from " + from );
+					System.out.println( "bn from " + from + " (" + to + ")" );
 					if ( !borderNodeIsInvolved )
 					{
 						borderNodeIsInvolved = true;
@@ -268,9 +269,9 @@ public class MergeBloc
 						borderNodeLabel = from;
 					}
 				}
-				else if ( in.borderNodes.contains( to ) )
+				else if ( in.borderNodes.contains( to ) && in.borderNodes.get( to ) != null )
 				{
-					System.out.println( "bn to " + from );
+					System.out.println( "bn to " + from + " (" + to + ") " + involvedNeighboringBlocks );
 					if ( !borderNodeIsInvolved ) {
 						borderNodeIsInvolved = true;
 						involvedNeighboringBlocks = in.borderNodes.get( to );

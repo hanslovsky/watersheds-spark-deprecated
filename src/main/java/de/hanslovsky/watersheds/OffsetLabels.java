@@ -7,7 +7,7 @@ import gnu.trove.map.hash.TLongLongHashMap;
 import scala.Tuple2;
 
 public class OffsetLabels implements
-		PairFunction< Tuple2< HashableLongArray, Tuple2< long[], long[] > >, HashableLongArray, Tuple2< long[], TLongLongHashMap > >
+PairFunction< Tuple2< HashableLongArray, Tuple2< long[], long[] > >, HashableLongArray, Tuple2< long[], TLongLongHashMap > >
 {
 
 	private static final long serialVersionUID = -104948149699827832L;
@@ -25,16 +25,16 @@ public class OffsetLabels implements
 
 	@Override
 	public Tuple2< HashableLongArray, Tuple2< long[], TLongLongHashMap > >
-			call( final Tuple2< HashableLongArray, Tuple2< long[], long[] > > t ) throws Exception
+	call( final Tuple2< HashableLongArray, Tuple2< long[], long[] > > t ) throws Exception
 	{
 		final long id = Util.positionToIndex( t._1(), dim );
 		final long offset = offsets.getValue().get( id );
 		final TLongLongHashMap counts = new TLongLongHashMap();
 		final long[] data = t._2()._1().clone();
-		System.out.println( offsets.getValue() + " " + id + " " + offset );
+//		System.out.println( offsets.getValue() + " " + id + " " + offset );
 		if ( offset != offsets.getValue().getNoEntryValue() )
 		{
-			System.out.println( "Offseting for " + t._1() + " " + offsets.getValue() );
+//			System.out.println( "Offseting for " + t._1() + " " + offsets.getValue() );
 			for ( int i = 0; i < data.length; ++i )
 				if ( data[ i ] != 0 )
 					data[ i ] += offset;

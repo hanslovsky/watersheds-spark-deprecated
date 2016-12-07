@@ -2,6 +2,7 @@ package de.hanslovsky.watersheds.graph;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -82,13 +83,17 @@ public class RegionMerging
 						pointsOutside = true;
 					final int r1 = dj.findRoot( ( int ) index1 );
 					final int r2 = dj.findRoot( ( int ) index2 );
+					System.out.println( index1 + " " + index2 + " " + r1 + " " + r2 );
 					dj.join( r1, r2 );
 				}
 			}
 
 			hasChanged = pointsOutside;
 
+			for ( int i = 0; i < parents.length; ++i )
+				dj.findRoot( i );
 			final Broadcast< int[] > parentsBC = sc.broadcast( parents );
+			System.out.println( Arrays.toString( parents ) );
 
 			rdd = mergedEdges
 					.mapToPair( new SetKeyToRoot<>( parentsBC ) )
@@ -97,7 +102,10 @@ public class RegionMerging
 					.mapToPair( new UpdateEdgesAndCounts( f ) )
 					.cache();
 			rdd.count();
+			System.out.println( rdd.keys().collect() );
 			System.out.println( "Merged blocks, now " + rdd.count() + " blocks" );
+			if ( rdd.count() == 0 )
+				hasChanged = false;
 		}
 
 		return rdd;

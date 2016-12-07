@@ -122,13 +122,7 @@ public class PrepareRegionMerging
 
 			for ( int d = 0; d < blockDim.length; ++d )
 			{
-//				System.out.println( t._1() );
-//				System.out.println( Arrays.toString( dim ) );
-//				System.out.println( Arrays.toString( blockDim ) );
-//				System.out.println( Arrays.toString( blockIndices ) );
-				System.out.println( Arrays.toString( numBlocksByDimension ) );
 				blockIndices[ d ] -= 1;
-				System.out.println( Arrays.toString( blockIndices ) );
 				if ( blockIndices[ d ] >= 0 )
 				{
 					final long outer = 0;
@@ -138,7 +132,6 @@ public class PrepareRegionMerging
 
 				}
 				blockIndices[ d ] += 2;
-				System.out.println( Arrays.toString( blockIndices ) );
 				if ( blockIndices[ d ] < numBlocksByDimension[ d ] )
 				{
 					final long inner = labels.max( d ) - 1;
@@ -147,8 +140,6 @@ public class PrepareRegionMerging
 					addEdgesFromNeighborBlocks( labels, affinities, d, inner, outer, g, nodeEdgeMap, e, dummy, edgeMerger, neighborId, borderNodes, blockDim );
 				}
 				blockIndices[ d ] -= 1;
-				System.out.println( Arrays.toString( blockIndices ) );
-				System.out.println();
 			}
 
 			for ( final TLongLongIterator it = t._2()._3().iterator(); it.hasNext(); )
@@ -340,22 +331,17 @@ public class PrepareRegionMerging
 				counts.put( ll, counts.get( ll ) + 1 );
 		}
 
-		System.out.println( otherLabel + " " + counts );
-
 		final BuildBlockedGraph builder = new BuildBlockedGraph( dim, blockDim, MergeBloc.DEFAULT_EDGE_MERGER, new CountOverSquaredSize() );
 
 		final Tuple2< Long, In > result = builder.call( new Tuple2<>(
 				new HashableLongArray( new long[] { 1 * blockDim[ 0 ], 1 * blockDim[ 1 ] } ),
 				new Tuple3<>( labelsArr, affsArr, counts ) ) );
-		System.out.println( result._1() );
-		System.out.println( result._2().counts );
-		System.out.println( result._2().borderNodes );
 		final Edge e = new Edge( result._2().edges );
-		for ( int i = 0; i < e.size(); ++i )
-		{
-			e.setIndex( i );
-			System.out.println( i + " " + e.weight() + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() );
-		}
+//		for ( int i = 0; i < e.size(); ++i )
+//		{
+//			e.setIndex( i );
+//			System.out.println( i + " " + e.weight() + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() );
+//		}
 
 	}
 

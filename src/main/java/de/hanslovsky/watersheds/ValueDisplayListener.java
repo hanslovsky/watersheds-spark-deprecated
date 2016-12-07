@@ -17,6 +17,11 @@ import net.imglib2.ui.OverlayRenderer;
 public class ValueDisplayListener< T extends Type< T > > implements MouseMotionListener, OverlayRenderer
 {
 
+	public static interface ToString< T >
+	{
+		String toString( T t );
+	}
+
 	private final RealRandomAccess< T > access;
 
 	private final ViewerPanel viewer;
@@ -27,11 +32,19 @@ public class ValueDisplayListener< T extends Type< T > > implements MouseMotionL
 
 	private T val = null;
 
-	public ValueDisplayListener( final RealRandomAccess< T > access, final ViewerPanel viewer )
+	private final ToString< T > toString;
+
+	public ValueDisplayListener( final RealRandomAccess< T > access, final ViewerPanel viewer, final ToString< T > toString )
 	{
 		super();
 		this.access = access;
 		this.viewer = viewer;
+		this.toString = toString;
+	}
+
+	public ValueDisplayListener( final RealRandomAccess< T > access, final ViewerPanel viewer )
+	{
+		this( access, viewer, ( t ) -> t.toString() );
 	}
 
 	@Override
@@ -67,7 +80,7 @@ public class ValueDisplayListener< T extends Type< T > > implements MouseMotionL
 			g2d.setColor( Color.white );
 			g2d.fillRect( left, top, w, h );
 			g2d.setColor( Color.BLACK );
-			final String string = val.toString();
+			final String string = toString.toString( val );
 			g2d.drawString( string, left + 1, top + h - 1 );
 //				drawBox( "selection", g2d, top, left, fid );
 		}
@@ -80,11 +93,16 @@ public class ValueDisplayListener< T extends Type< T > > implements MouseMotionL
 		this.height = height;
 	}
 
-	public static < T extends Type< T > > void addValueOverlay( final RealRandomAccessible< T > accessible, final ViewerPanel panel )
+	public static < T extends Type< T > > void addValueOverlay( final RealRandomAccessible< T > accessible, final ViewerPanel panel, final ToString< T > toString )
 	{
-		final ValueDisplayListener< T > vdl = new ValueDisplayListener<>( accessible.realRandomAccess(), panel );
+		final ValueDisplayListener< T > vdl = new ValueDisplayListener<>( accessible.realRandomAccess(), panel, toString );
 		panel.getDisplay().addOverlayRenderer( vdl );
 		panel.getDisplay().addMouseMotionListener( vdl );
+	}
+
+	public static < T extends Type< T > > void addValueOverlay( final RealRandomAccessible< T > accessible, final ViewerPanel panel )
+	{
+		addValueOverlay( accessible, panel, ( t ) -> t.toString() );
 	}
 
 	public static < T extends Type< T > > T getVal( final int x, final int y, final RealRandomAccess< T > access, final ViewerPanel viewer )

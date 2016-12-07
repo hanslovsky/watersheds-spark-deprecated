@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.xml.bind.DatatypeConverter;
@@ -28,6 +29,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import bdv.img.h5.H5Utils;
+import bdv.util.BdvFunctions;
+import bdv.util.BdvOptions;
+import bdv.util.BdvStackSource;
 import de.hanslovsky.watersheds.graph.EdgeMerger;
 import de.hanslovsky.watersheds.graph.Function;
 import de.hanslovsky.watersheds.graph.IdServiceZMQ;
@@ -41,15 +45,24 @@ import de.hanslovsky.watersheds.io.AffinitiesChunkLoader;
 import de.hanslovsky.watersheds.io.LabelsChunkWriter;
 import de.hanslovsky.watersheds.io.ZMQFileOpenerFloatType;
 import de.hanslovsky.watersheds.io.ZMQFileWriterLongType;
+import de.hanslovsky.watersheds.regionmerging.EdgeCheck;
+import de.hanslovsky.watersheds.regionmerging.PrepareRegionMergingCutBlocks;
+import gnu.trove.iterator.TLongIterator;
+import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.list.array.TLongArrayList;
+import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
 import net.imglib2.Cursor;
+import net.imglib2.RandomAccessibleInterval;
+import net.imglib2.converter.Converters;
 import net.imglib2.img.Img;
 import net.imglib2.img.array.ArrayImg;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.basictypeaccess.array.FloatArray;
 import net.imglib2.img.cell.CellImg;
 import net.imglib2.img.cell.CellImgFactory;
+import net.imglib2.interpolation.randomaccess.NearestNeighborInterpolatorFactory;
+import net.imglib2.type.numeric.ARGBType;
 import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.IntervalIndexer;
@@ -72,7 +85,7 @@ public class WatershedsSparkWithRegionMerging2D
 //		final int[] dimsInt = new int[] { 1554, 1670, 153, 3 }; // A
 		final long[] dims = new long[] { dimsInt[ 0 ], dimsInt[ 1 ], dimsInt[ 2 ] };
 		final long[] dimsNoChannels = new long[] { dimsInt[ 0 ], dimsInt[ 1 ] };
-		final int[] dimsIntervalInt = new int[] { 300, 300, 2 };
+		final int[] dimsIntervalInt = new int[] { 50, 50, 2 };
 		final long[] dimsInterval = new long[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ], dimsIntervalInt[ 2 ] };
 		final int[] dimsIntervalIntNoChannels = new int[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ] };
 		final long[] dimsIntervalNoChannels = new long[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ] };
@@ -355,22 +368,31 @@ public class WatershedsSparkWithRegionMerging2D
 
 			}
 
+		final Context ctx = ZMQ.context( 1 );
+
+		final String blockIdAddr = "ipc://blockIdService";
+		final Socket blockIdSocket = IdServiceZMQ.createServerSocket( ctx, blockIdAddr );
+		final Thread blockIdThread = IdServiceZMQ.createServerThread( blockIdSocket, new AtomicLong( 1 ) );
+		blockIdThread.start();
+		final IdServiceZMQ blockIdService = new IdServiceZMQ( blockIdAddr );
+
 		final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksRdd =
 				sc.parallelizePairs( blocks ).cache();
 		final EdgeMerger merger = MergeBloc.DEFAULT_EDGE_MERGER;
 		final Function weightFunc = ( Function & Serializable ) ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a );
-		final JavaPairRDD< Long, In > graphs =
-				blocksRdd.mapToPair( new PrepareRegionMerging.BuildBlockedGraph( dimsNoChannels, dimsIntervalNoChannels, merger, weightFunc ) ).cache();
+//		final JavaPairRDD< Long, In > graphs =
+//				blocksRdd.mapToPair( new PrepareRegionMerging.BuildBlockedGraph( dimsNoChannels, dimsIntervalNoChannels, merger, weightFunc ) ).cache();
+		final JavaPairRDD< Long, In > graphs = PrepareRegionMergingCutBlocks.run( sc, blocksRdd, sc.broadcast( dimsNoChannels ),
+				sc.broadcast( dimsIntervalNoChannels ), merger, weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() > 0.1, blockIdService );
 		System.out.println( graphs.collect() );
 
 //		System.out.println( "GRAPHS " + graphs.collect().get( 0 )._2().counts );
 
 		final String idAddr = "ipc://idService";
 		final String mergerAddr = "ipc://mergerService";
-		final Context ctx = ZMQ.context( 1 );
 		final Socket idSocket = IdServiceZMQ.createServerSocket( ctx, idAddr );
 		final Socket mergerSocket = MergerServiceZMQ.createServerSocket( ctx, mergerAddr );
-		final Thread idThread = IdServiceZMQ.createServerThread( idSocket, new AtomicLong( 123 ) );
+		final Thread idThread = IdServiceZMQ.createServerThread( idSocket, new AtomicLong( 300 * 300 * 10 ) );
 		idThread.start();
 		final TLongArrayList merges = new TLongArrayList();
 		final TLongLongHashMap mergedParents = new TLongLongHashMap();
@@ -386,9 +408,61 @@ public class WatershedsSparkWithRegionMerging2D
 
 		final RegionMerging rm = new RegionMerging( weightFunc, merger, idService, mergerService );
 
-		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, 10.0 );
+		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, 50000.0 );
 
-		graphsAfterMerging.collect();
+		final List< Tuple2< Long, In > > gs = graphsAfterMerging.collect();
+
+		for ( final TLongIterator kIt = mergedParents.keySet().iterator(); kIt.hasNext(); )
+			MergeBloc.findRoot( mergedParents, kIt.next() );
+
+		final TLongIntHashMap colors = new TLongIntHashMap();
+		final Random rng = new Random( 100 );
+		for ( final TLongLongIterator it = mergedParents.iterator(); it.hasNext(); )
+		{
+			it.advance();
+			final long r = it.value();
+			if ( colors.contains( r ) )
+			{
+
+			}
+			else
+				colors.put( r, rng.nextInt() );
+		}
+
+		final TLongIntHashMap colorsMap = new TLongIntHashMap();
+		for ( final TLongLongIterator it = mergedParents.iterator(); it.hasNext(); )
+		{
+			it.advance();
+			colorsMap.put( it.key(), colors.get( it.value() ) );
+		}
+
+		final RandomAccessibleInterval< LongType > rooted = Converters.convert( ( RandomAccessibleInterval< LongType > ) labelsTarget, ( s, t ) -> {
+			t.set( mergedParents.contains( s.get() ) ? mergedParents.get( s.get() ) : s.get() );
+		}, new LongType() );
+
+		final RandomAccessibleInterval< ARGBType > colored = Converters.convert( ( RandomAccessibleInterval< LongType > ) labelsTarget, ( s, t ) -> {
+			t.set( colorsMap.get( s.get() ) );
+		}, new ARGBType() );
+
+		final BdvStackSource< ARGBType > bdv = BdvFunctions.show( colored, "colored" );
+		BdvFunctions.show( Converters.convert(
+				( RandomAccessibleInterval< RealComposite< FloatType > > ) Views.collapseReal( input ),
+				( s, t ) -> {
+					t.set( ( int ) ( 255 * s.get( 0 ).get() ) << 8 | ( int ) ( 255 * s.get( 1 ).get() ) );
+//					t.setReal( Math.max( s.get( 0 ).get(), s.get( 1 ).get() ) );
+				}, new ARGBType() ),
+				"aff max projection", BdvOptions.options().addTo( bdv ) );
+
+
+		ValueDisplayListener.addValueOverlay(
+				Views.interpolate( Views.extendValue( Views.addDimension( rooted, 0, 0 ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ),
+				bdv.getBdvHandle().getViewerPanel() );
+
+//		final RealComposite< FloatType > extension = Views.collapseReal( ArrayImgs.floats( new float[] { Float.NaN, Float.NaN }, 1, 2 ) ).randomAccess().get();
+//		ValueDisplayListener.addValueOverlay(
+//				Views.interpolate( Views.extendValue( Views.addDimension( Views.collapseReal( input ), 0, 0 ), extension ), new NearestNeighborInterpolatorFactory<>() ),
+//				bdv.getBdvHandle().getViewerPanel(),
+//				t -> "(" + t.get( 0 ) + "," + t.get( 1 ) + ")" );
 
 		System.out.println( mergedParents );
 

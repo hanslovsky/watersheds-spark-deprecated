@@ -88,6 +88,11 @@ public class Edge
 		return index;
 	}
 
+	public TDoubleArrayList data()
+	{
+		return this.data;
+	}
+
 	public static double ltd( final long l )
 	{
 		return Double.longBitsToDouble( l );
