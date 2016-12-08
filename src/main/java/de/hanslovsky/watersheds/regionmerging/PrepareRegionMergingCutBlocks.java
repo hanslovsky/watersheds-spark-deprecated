@@ -46,7 +46,7 @@ import scala.Tuple3;
 public class PrepareRegionMergingCutBlocks
 {
 
-	public static JavaPairRDD< Long, In > run(
+	public static Tuple2< JavaPairRDD< Long, In >, TLongLongHashMap > run(
 			final JavaSparkContext sc,
 			final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksWithLabelsAffinitiesAndCounts,
 			final Broadcast< long[] > dim,
@@ -62,8 +62,6 @@ public class PrepareRegionMergingCutBlocks
 		final JavaPairRDD< HashableLongArray, GetExternalEdges.BlockOutput > interBlockEdges =
 				allEdges.mapToPair( new GetExternalEdges( blockDim, blockDim, edgeMerger ) ).cache();
 		interBlockEdges.count();
-//		System.out.println( "123" );
-//		System.exit( 123 );
 
 		final TLongLongHashMap filteredNodeBlockAssignments = interBlockEdges
 				.map( t -> t._2().filteredNodeBlockAssignment )
@@ -77,7 +75,7 @@ public class PrepareRegionMergingCutBlocks
 				.map( new MapNodesAndSplitBlocks( sc.broadcast( filteredNodeBlockAssignments ) ) )
 				.flatMapToPair( new FlattenInputs() );
 
-		return mergeBlocs;
+		return new Tuple2<>( mergeBlocs, filteredNodeBlockAssignments );
 	}
 
 	public static class GetExternalEdges implements PairFunction< Tuple2< HashableLongArray, GetInternalEdgesAndSplits.IntraBlockOutput >, HashableLongArray, GetExternalEdges.BlockOutput >
@@ -169,12 +167,10 @@ public class PrepareRegionMergingCutBlocks
 			for ( int d = 0; d < blockDim.length; ++d )
 			{
 				blockIndices[ d ] -= 1;
-				System.out.println( Arrays.toString( blockIndices ) );
 				if ( blockIndices[ d ] >= 0 )
 				{
 					final long outer = 0;
 					final long inner = outer + 1;
-//					final long neighborId = IntervalIndexer.positionToIndex( blockIndices, numBlocksByDimension );
 					addEdgesFromNeighborBlocks(
 							labels, affinities, d, inner, outer, o.g, o.g.nodeEdgeMap(), e, dummy,
 							edgeMerger, borderNodesToOutsideNodes, blockDim );
@@ -185,7 +181,6 @@ public class PrepareRegionMergingCutBlocks
 				{
 					final long inner = labels.max( d ) - 1;
 					final long outer = inner + 1;
-//					final long neighborId = IntervalIndexer.positionToIndex( blockIndices, numBlocksByDimension );
 					addEdgesFromNeighborBlocks(
 							labels, affinities, d, inner, outer, o.g, o.g.nodeEdgeMap(), e, dummy,
 							edgeMerger, borderNodesToOutsideNodes, blockDim );
@@ -193,9 +188,6 @@ public class PrepareRegionMergingCutBlocks
 				blockIndices[ d ] -= 1;
 			}
 			final TLongLongHashMap nodesToBlockFiltered = filterBlockAssignments( o.nodeBlockAssignment, borderNodesToOutsideNodes.keySet() );
-
-			System.out.println( "SIZE DIFF? " + e.size() + " " + numberOfInternalEdges );
-
 
 			return new Tuple2<>( t._1(), new BlockOutput( o.counts, o.g, o.nodeBlockAssignment, nodesToBlockFiltered, o.splitEdges, borderNodesToOutsideNodes, o.blockIds, numberOfInternalEdges ) );
 		}
@@ -287,11 +279,6 @@ public class PrepareRegionMergingCutBlocks
 				final long r2 = nodeBlockMapping.get( to );
 				final In in = regionMergingInput.get( r1 );
 
-				if ( in == null )
-				{
-					System.out.println( i + " " + from + " " + to + " " + r1 + " " + r2 + " " + o.nodeBlockAssignment.contains( from ) + " " + o.nodeBlockAssignment.contains( to ) );
-					System.out.println( Arrays.toString( o.blockIds ) );
-				}
 				if ( !in.counts.contains( from ) )
 					in.counts.put( from, o.counts.get( from ) );
 
@@ -305,17 +292,6 @@ public class PrepareRegionMergingCutBlocks
 			}
 
 
-			System.out.println( regionMergingInput );
-			for ( final TLongObjectIterator< In > it = regionMergingInput.iterator(); it.hasNext(); )
-			{
-				it.advance();
-				if ( it.key() < 0 )
-				{
-					System.out.println( "KEY SMALLER THAN ZERO! WAT?" );
-					System.out.println( it.key() + " " + it.value().counts );
-					System.exit( -1 );
-				}
-			}
 			return regionMergingInput;
 		}
 

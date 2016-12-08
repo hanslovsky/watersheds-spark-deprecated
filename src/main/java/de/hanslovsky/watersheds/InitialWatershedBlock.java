@@ -96,14 +96,6 @@ public class InitialWatershedBlock implements PairFunction< Tuple2< HashableLong
 		bidirectionalEdgesDimensions[ bidirectionalEdgesDimensions.length - 1 ] *= 2;
 		final ArrayImg< FloatType, FloatArray > affsCopy = ArrayImgs.floats( bidirectionalEdgesDimensions );
 
-		System.out.println( dimensionality );
-		System.out.println( extArr.length + " " + t._2().length );
-		System.out.println( Arrays.toString( intervalDimensionsTruncated ) );
-		System.out.println( Arrays.toString( bidirectionalEdgesDimensions ) );
-		System.out.println( Arrays.toString( Intervals.dimensionsAsLongArray( affsCollapsed ) ) );
-		System.out.println( Arrays.toString( Intervals.dimensionsAsLongArray( affs ) ) );
-		System.out.println( Arrays.toString( Intervals.dimensionsAsLongArray( affsCopy ) ) );
-		System.out.println( Arrays.toString( Intervals.dimensionsAsLongArray( labels ) ) );
 		for ( final Pair< RealComposite< FloatType >, RealComposite< FloatType > > p : Views.interval( Views.pair( affsView, Views.collapseReal( affsCopy ) ), labels ) )
 			p.getB().set( p.getA() );
 

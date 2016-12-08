@@ -2,7 +2,6 @@ package de.hanslovsky.watersheds.graph;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -20,7 +19,7 @@ import org.zeromq.ZMQ;
 import org.zeromq.ZMQ.Context;
 import org.zeromq.ZMQ.Socket;
 
-import de.hanslovsky.watersheds.graph.MergeBloc.In;
+import de.hanslovsky.watersheds.DisjointSetsHashMap;
 import de.hanslovsky.watersheds.graph.MergeBloc.Out;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;
@@ -30,11 +29,17 @@ import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TLongLongHashMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import gnu.trove.set.hash.TLongHashSet;
-import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import scala.Tuple2;
 
 public class RegionMerging
 {
+
+	public static interface Visitor
+	{
+
+		void visit( TLongLongHashMap parents );
+
+	}
 
 	private final Function f;
 
@@ -55,14 +60,19 @@ public class RegionMerging
 
 	public JavaPairRDD< Long, MergeBloc.In > run( final JavaSparkContext sc, final JavaPairRDD< Long, MergeBloc.In > rddIn, final double threshold )
 	{
+		return run( sc, rddIn, threshold, ( parents ) -> {} );
+	}
+
+	public JavaPairRDD< Long, MergeBloc.In > run( final JavaSparkContext sc, final JavaPairRDD< Long, MergeBloc.In > rddIn, final double threshold, final Visitor visitor )
+	{
 		final List< Long > indices = rddIn.keys().collect();
-		final int[] parents = new int[ indices.size() ];
-		System.out.println();
-		for ( final Long m : indices ) {
-			System.out.println( m );
-			parents[ m.intValue() ] = m.intValue();
-		}
-		final DisjointSets dj = new DisjointSets( parents, new int[ parents.length ], parents.length );
+		final TLongLongHashMap parents = new TLongLongHashMap();
+		final DisjointSetsHashMap dj = new DisjointSetsHashMap( parents, new TLongLongHashMap(), 0 );
+		for ( final Long m : indices )
+			dj.findRoot( m.longValue() );
+//			parents[ m.intValue() ] = m.intValue();
+
+//		final DisjointSets dj = new DisjointSets( parents, new int[ parents.length ], parents.length );
 
 		JavaPairRDD< Long, MergeBloc.In > rdd = rddIn;
 
@@ -84,8 +94,8 @@ public class RegionMerging
 					final long index2 = it.next();
 					if ( index2 != index1 )
 						pointsOutside = true;
-					final int r1 = dj.findRoot( ( int ) index1 );
-					final int r2 = dj.findRoot( ( int ) index2 );
+					final long r1 = dj.findRoot( index1 );
+					final long r2 = dj.findRoot( index2 );
 					System.out.println( index1 + " " + index2 + " " + r1 + " " + r2 );
 					dj.join( r1, r2 );
 				}
@@ -93,10 +103,9 @@ public class RegionMerging
 
 			hasChanged = pointsOutside;
 
-			for ( int i = 0; i < parents.length; ++i )
-				dj.findRoot( i );
-			final Broadcast< int[] > parentsBC = sc.broadcast( parents );
-			System.out.println( Arrays.toString( parents ) );
+			for ( final TLongIterator it = parents.keySet().iterator(); it.hasNext(); )
+				dj.findRoot( it.next() );
+			final Broadcast< TLongLongHashMap > parentsBC = sc.broadcast( parents );
 
 			rdd = mergedEdges
 					.mapToPair( new SetKeyToRoot<>( parentsBC ) )
@@ -109,6 +118,9 @@ public class RegionMerging
 			System.out.println( "Merged blocks, now " + rdd.count() + " blocks" );
 			if ( rdd.count() == 0 )
 				hasChanged = false;
+
+			visitor.visit( parents );
+
 		}
 
 		return rdd;
@@ -134,9 +146,9 @@ public class RegionMerging
 
 		private static final long serialVersionUID = -6206815670426308405L;
 
-		private final Broadcast< int[] > parents;
+		private final Broadcast< TLongLongHashMap > parents;
 
-		public SetKeyToRoot( final Broadcast< int[] > parents )
+		public SetKeyToRoot( final Broadcast< TLongLongHashMap > parents )
 		{
 			super();
 			this.parents = parents;
@@ -145,7 +157,7 @@ public class RegionMerging
 		@Override
 		public Tuple2< Long, Tuple2< Long, V > > call( final Tuple2< Tuple2< Long, TLongHashSet >, V > t ) throws Exception
 		{
-			final long k = parents.getValue()[ t._1()._1().intValue() ];
+			final long k = parents.getValue().get( t._1()._1().longValue() );
 			return new Tuple2<>( k, new Tuple2<>( t._1()._1(), t._2() ) );
 		}
 
@@ -192,9 +204,10 @@ public class RegionMerging
 		 *
 		 */
 		private static final long serialVersionUID = 1428628232921208948L;
-		private final Broadcast< int[] > parents;
 
-		public MergeByKey( final Broadcast< int[] > parents )
+		private final Broadcast< TLongLongHashMap > parents;
+
+		public MergeByKey( final Broadcast< TLongLongHashMap > parents )
 		{
 			super();
 			this.parents = parents;
@@ -205,8 +218,8 @@ public class RegionMerging
 				final Tuple2< Long, MergeBloc.Out > eacWithKey1,
 				final Tuple2< Long, MergeBloc.Out > eacWithKey2 ) throws Exception
 		{
-			final int[] parents = this.parents.getValue();
-			final int r = parents[ eacWithKey1._1().intValue() ];
+			final TLongLongHashMap parents = this.parents.getValue();
+			final long r = parents.get( eacWithKey1._1().longValue() );
 			final MergeBloc.Out eac1 = eacWithKey1._2();
 			final MergeBloc.Out eac2 = eacWithKey2._2();
 			final TLongLongHashMap assignments = new TLongLongHashMap();
@@ -300,7 +313,7 @@ public class RegionMerging
 		}
 	}
 
-	public static void addOutside( final TLongObjectHashMap< TLongHashSet > source, final TLongObjectHashMap< TLongHashSet > target, final int root, final int[] parents )
+	public static void addOutside( final TLongObjectHashMap< TLongHashSet > source, final TLongObjectHashMap< TLongHashSet > target, final long root, final TLongLongHashMap parents )
 	{
 		for ( final TLongObjectIterator< TLongHashSet > it = source.iterator(); it.hasNext(); )
 		{
@@ -310,7 +323,7 @@ public class RegionMerging
 			for ( final TLongIterator vIt = v.iterator(); vIt.hasNext(); )
 			{
 				final long vV = vIt.next();
-				if ( parents[ ( int ) vV ] == root )
+				if ( parents.get( vV ) == root )
 					continue;
 				else
 					hs.add( vV );
@@ -442,10 +455,6 @@ public class RegionMerging
 		t.join();
 //		sk.close();
 //		ctx.close();
-
-		System.out.println( result );
-		for ( final Tuple2< Long, In > rr : result )
-			System.out.println( rr._1() + " " + rr._2().counts );
 
 		final MultiGraph g = new MultiGraph( "graph" );
 

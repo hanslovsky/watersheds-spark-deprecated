@@ -1,7 +1,6 @@
 package de.hanslovsky.watersheds.graph;
 
 import java.io.Serializable;
-import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.spark.api.java.function.PairFunction;
@@ -252,7 +251,9 @@ public class MergeBloc
 				if ( w < 0 )
 					continue;
 
-				else if ( w > threshold || borderNodeIsInvolved && w > 20 * maxWeightBeforeMerge )
+				else if ( w > threshold || borderNodeIsInvolved && w > /*
+				 * 20 *
+				 */ maxWeightBeforeMerge )
 					break;
 
 				final int from = ( int ) e.from();
@@ -260,7 +261,6 @@ public class MergeBloc
 
 				if ( in.borderNodes.contains( from ) && in.borderNodes.get( from ) != null )
 				{
-					System.out.println( "bn from " + from + " (" + to + ")" );
 					if ( !borderNodeIsInvolved )
 					{
 						borderNodeIsInvolved = true;
@@ -271,7 +271,6 @@ public class MergeBloc
 				}
 				else if ( in.borderNodes.contains( to ) && in.borderNodes.get( to ) != null )
 				{
-					System.out.println( "bn to " + from + " (" + to + ") " + involvedNeighboringBlocks );
 					if ( !borderNodeIsInvolved ) {
 						borderNodeIsInvolved = true;
 						involvedNeighboringBlocks = in.borderNodes.get( to );
@@ -282,11 +281,7 @@ public class MergeBloc
 				else
 				{
 
-//					System.out.println( "Requesting next id " + t._1() );
 					final long n = idService.requestIds( 1 );
-//					System.out.println( "Merging " + from + " and " + to + " into " + n );
-//					System.out.println( "Got new id: " + n + " " + t._1() );
-//					System.out.println( "Merging " + from + " and " + to + " into " + n );
 
 					final long c1 = in.counts.remove( from );
 					final long c2 = in.counts.remove( to );
@@ -306,22 +301,16 @@ public class MergeBloc
 						final int id = it.next();
 						e.setIndex( id );
 						if ( e.weight() < threshold )
-							//							System.out.println( "Adding new edge " + id + " " + e.weight() + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() );
 							queue.enqueue( id );
 					}
-//					if ( from == 11 || to == 11 )
-//						System.out.println( "ASSGN BEFORE " + assignments );
 					assignments.put( from, n );
 					assignments.put( to, n );
 					assignments.put( n, n );
-//					if ( from == 11 || to == 11 )
-//						System.out.println( "ASSGN AFTER " + assignments );
 					mergerService.addMerge( from, to, n, w );
 
 				}
 
 			}
-//			System.out.println( "Done merging locally... " + t._1() + " " + t._2().counts );
 
 
 //			double[] resultEdges = new double[0];
@@ -351,7 +340,6 @@ public class MergeBloc
 					in.borderNodes,
 					assignments,
 					borderNodeLabel );
-//			System.out.println( "Returning result " + t._1() );
 			return new Tuple2<>( new Tuple2<>( t._1(), involvedNeighboringBlocks == null ? new TLongHashSet() : involvedNeighboringBlocks ), result );
 
 
@@ -427,19 +415,12 @@ public class MergeBloc
 			final Edge e1 = new Edge( edges );
 			final Edge e2 = new Edge( edges );
 
-//			for ( int k = 0; k < edges.size(); k += 4 )
-//				System.out.println( edges.get( k ) + " " + edges.get( k + 1 ) + " " +
-//						dtl( edges.get( k + 2 ) ) + " " + dtl( edges.get( k + 3 ) ) + " WAAAS ? " );
-
 			final TIntLongHashMap outside = new TIntLongHashMap();
-			System.out.println( "FW " + fw + " " + t._1() );
-			System.out.println( "BW " + Arrays.toString( bw ) + " " + t._1() );
 			for ( final TLongLongIterator it = edgesAndWeights.outside.iterator(); it.hasNext(); )
 			{
 				it.advance();
 				outside.put( fw.get( it.key() ), it.value() );
 			}
-			System.out.println( "OUTSIDE " + t._1() + " " + edgesAndWeights.outside + " " + outside );
 
 			boolean pointsOutside = false;
 			long pointedToOutside = -1;
@@ -459,7 +440,6 @@ public class MergeBloc
 				final int next = queue.dequeueInt();
 				e.setIndex( next );
 				final double w = e.weight();
-//				System.out.println( next + " .. " + w + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() );
 
 				if ( w < 0 )
 					continue;
@@ -495,12 +475,9 @@ public class MergeBloc
 					final long c2 = counts[ to ];
 					counts[ from ] += c2;
 					counts[ to ] = 0;
-					System.out.println( Arrays.toString( parents ) );
 					parents[ to ] = from;
 
-//					System.out.println( "Requesting next id " + t._1() );
 					final long n = idService.requestIds( 1 );
-//					System.out.println( "Got new id: " + n + " " + t._1() );
 
 					final long n2 = newIds[ to ];
 					newIds[ to ] = n;
@@ -514,16 +491,10 @@ public class MergeBloc
 
 			}
 
-			System.out.println( "Done merging locally... " + t._1() + " " + parents.length + " " + Arrays.toString( parents ) );
-
-//			System.out.println( Arrays.toString( parents ) );
 			// circular graph here!
 			final DisjointSets dj = new DisjointSets( parents, new int[ parents.length ], parents.length );
 			for ( int i = 0; i < parents.length; ++i )
 				dj.findRoot( i );
-			System.out.println( "Found roots... " + t._1() );
-//			System.out.println( Arrays.toString( parents ) );
-//			System.out.println( Arrays.toString( bw ) );
 
 //			double[] resultEdges = new double[0];
 			final TDoubleArrayList resultEdges = new TDoubleArrayList();
@@ -539,10 +510,6 @@ public class MergeBloc
 
 			}
 
-			System.out.println( "Added edges... " + t._1() );
-
-
-
 //			final long[] resultAssignments = new long[ numberOfNodes * EdgesAndCounts.ASSIGNMENTS_STEP ];
 			final TLongLongHashMap resultAssignments = new TLongLongHashMap();
 			for ( int i = 0, k = 0; i < numberOfNodes; ++i, k += EdgesAndCounts.ASSIGNMENTS_STEP )
@@ -557,8 +524,6 @@ public class MergeBloc
 //			final long[] resultCounts = new long[ setCount * EdgesAndCounts.COUNTS_STEP ];
 
 			final TLongLongHashMap resultCounts = new TLongLongHashMap();
-			System.out.println( "CNTS " + Arrays.toString( counts ) + " " + setCount + " " + t._1() );
-			System.out.println( counts.length + " " + parents.length );
 
 			for ( int i = 0; i < parents.length; ++i )
 			{
@@ -574,14 +539,12 @@ public class MergeBloc
 //					++i;
 				}
 			}
-			System.out.println( "Added parents" );
 
 			final EdgesAndCounts result = new EdgesAndCounts(
 					resultEdges.toArray(),
 					resultCounts,
 					edgesAndWeights.outside,
 					resultAssignments );
-			System.out.println( "Returning result " + t._1() );
 			return new Tuple2<>( new Tuple2<>( t._1(), pointedToOutside ), result );
 		}
 
@@ -744,8 +707,6 @@ public class MergeBloc
 			queue.enqueue( k );
 		}
 
-//		System.out.println( edges );
-
 	}
 
 	public static void addNeighborEdges(
@@ -794,21 +755,14 @@ public class MergeBloc
 				e2.multiplicity( e1.multiplicity() + multiplicity );
 				final double currentW = e2.weight();
 				// why is this check necessary?
-				if ( currentW != -1 ) {
-//					e1.weight( w );
-//					e1.affinity( aff );
-					final Edge e = merger.merge( e1, e2 );
-					System.out.println( "Modified edge " + edgeIndex + ": " + e.weight() + " " + e.affinity() + " " +
-							e.from() + " " + e.to() + " " + e.multiplicity() );
-				}
+				if ( currentW != -1 )
+					merger.merge( e1, e2 );
 			} else {
 				final int newEdgeIndex = e1.size();
 				neighborToEdgeIndexMap.put( newNode, newEdgeIndex );
 				neighborToEdgeIndexMap.put( otherIndex, newEdgeIndex );
 				e1.add( w, aff, newNode, otherIndex, multiplicity );
 				e1.setIndex( newEdgeIndex );
-				System.out.println( "Added edge " + newEdgeIndex + ": " + e1.weight() + " " + e1.affinity() + " " +
-						e1.from() + " " + e1.to() + " MULT " + e1.multiplicity() + " " + multiplicity );
 			}
 
 			e1.weight( -1 );
@@ -841,13 +795,6 @@ public class MergeBloc
 				Math.min( counts.get( 11 ), counts.get( 14 ) ) / ( 0.9 * 0.9 ), 0.9, ltd( 11 ), ltd( 14 ), ltd( 1 ),
 				Math.min( counts.get( 10 ), counts.get( 15 ) ) / ( 0.2 * 0.2 ), 0.2, ltd( 10 ), ltd( 15 ), ltd( 1 )
 		};
-
-		final Edge e = new Edge( new TDoubleArrayList( affinities ) );
-		for ( int i = 0; i < e.size(); ++i )
-		{
-			e.setIndex( i );
-			System.out.println( e.from() + " " + e.to() + " " + e.weight() + " " + e.affinity() + " " + e.multiplicity() );
-		}
 
 		final TLongObjectHashMap< TLongHashSet > borderNodes = new TLongObjectHashMap< TLongHashSet >();
 		borderNodes.put( 14, new TLongHashSet( new long[] { 2 } ) );

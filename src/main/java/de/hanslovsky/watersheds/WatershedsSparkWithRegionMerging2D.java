@@ -31,6 +31,7 @@ import bdv.img.h5.H5Utils;
 import bdv.util.BdvFunctions;
 import bdv.util.BdvOptions;
 import bdv.util.BdvStackSource;
+import de.hanslovsky.watersheds.graph.Edge;
 import de.hanslovsky.watersheds.graph.EdgeMerger;
 import de.hanslovsky.watersheds.graph.Function;
 import de.hanslovsky.watersheds.graph.IdServiceZMQ;
@@ -51,6 +52,8 @@ import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
+import gnu.trove.map.hash.TLongObjectHashMap;
+import gnu.trove.set.hash.TLongHashSet;
 import net.imglib2.Cursor;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.converter.Converters;
@@ -84,7 +87,7 @@ public class WatershedsSparkWithRegionMerging2D
 //		final int[] dimsInt = new int[] { 1554, 1670, 153, 3 }; // A
 		final long[] dims = new long[] { dimsInt[ 0 ], dimsInt[ 1 ], dimsInt[ 2 ] };
 		final long[] dimsNoChannels = new long[] { dimsInt[ 0 ], dimsInt[ 1 ] };
-		final int[] dimsIntervalInt = new int[] { 10, 10, 2 };
+		final int[] dimsIntervalInt = new int[] { 30, 30, 2 };
 		final long[] dimsInterval = new long[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ], dimsIntervalInt[ 2 ] };
 		final int[] dimsIntervalIntNoChannels = new int[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ] };
 		final long[] dimsIntervalNoChannels = new long[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ] };
@@ -381,8 +384,9 @@ public class WatershedsSparkWithRegionMerging2D
 		final Function weightFunc = ( Function & Serializable ) ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a );
 //		final JavaPairRDD< Long, In > graphs =
 //				blocksRdd.mapToPair( new PrepareRegionMerging.BuildBlockedGraph( dimsNoChannels, dimsIntervalNoChannels, merger, weightFunc ) ).cache();
-		final JavaPairRDD< Long, In > graphs = PrepareRegionMergingCutBlocks.run( sc, blocksRdd, sc.broadcast( dimsNoChannels ),
+		final Tuple2< JavaPairRDD< Long, In >, TLongLongHashMap > graphsAndBorderNodes = PrepareRegionMergingCutBlocks.run( sc, blocksRdd, sc.broadcast( dimsNoChannels ),
 				sc.broadcast( dimsIntervalNoChannels ), merger, weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() > 0.1, blockIdService );
+		final JavaPairRDD< Long, In > graphs = graphsAndBorderNodes._1();
 		System.out.println( graphs.collect() );
 
 //		System.out.println( "GRAPHS " + graphs.collect().get( 0 )._2().counts );
@@ -397,9 +401,17 @@ public class WatershedsSparkWithRegionMerging2D
 		final TLongLongHashMap mergedParents = new TLongLongHashMap();
 		final MergeActionAddToList action1 = new MergerServiceZMQ.MergeActionAddToList( merges );
 		final MergeActionParentMap action2 = new MergerServiceZMQ.MergeActionParentMap( mergedParents );
+
+		final TLongIntHashMap colorMap = new TLongIntHashMap();
+		final Random rngCm = new Random( 100 );
+		for ( final LongType l : labelsTarget )
+			if ( !colorMap.contains( l.get() ) )
+				colorMap.put( l.get(), rngCm.nextInt() );
+
 		final Thread mergerThread = MergerServiceZMQ.createServerThread( mergerSocket, ( n1, n2, n, w ) -> {
 			action1.add( n1, n2, n, w );
 			action2.add( n1, n2, n, w );
+			colorMap.put( n, colorMap.get( n1 ) );
 		} );
 		mergerThread.start();
 		final IdServiceZMQ idService = new IdServiceZMQ( idAddr );
@@ -407,9 +419,67 @@ public class WatershedsSparkWithRegionMerging2D
 
 		final RegionMerging rm = new RegionMerging( weightFunc, merger, idService, mergerService );
 
-		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, 50000.0 );
+		final ArrayList< RandomAccessibleInterval< LongType > > blockImages = new ArrayList<>();
+		final Img< LongType > blockZero = labelsTarget.factory().create( labelsTarget, new LongType() );
+		final TLongLongHashMap labelBlockmap = new TLongLongHashMap();
+		final List< Long > blockIds = graphs.keys().collect();
+		for ( final Tuple2< Long, In > g : graphs.collect() )
+		{
+			final long id = g._1();
+			final TLongObjectHashMap< TLongHashSet > cbns = g._2().borderNodes;
+			final Edge e = new Edge( g._2().edges );
+			for ( int i = 0; i < e.size(); ++i )
+			{
+				e.setIndex( i );
+				final long f = e.from();
+				final long t = e.to();
+				if ( cbns.contains( f ) )
+					labelBlockmap.put( f, id );
+				else if ( cbns.contains( t ) )
+					labelBlockmap.put( t, id );
+				else
+				{
+					labelBlockmap.put( t, id );
+					labelBlockmap.put( f, id );
+				}
+			}
+		}
+		for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( labelsTarget, blockZero ), blockZero ) )
+			p.getB().set( labelBlockmap.get( p.getA().get() ) );
+		blockImages.add( blockZero );
+		final TLongIntHashMap blockColors = new TLongIntHashMap();
+		final Random blockRng = new Random( 100 );
+		for ( final Long b : blockIds )
+			blockColors.put( b.longValue(), blockRng.nextInt() );
+
+		final ArrayList< RandomAccessibleInterval< LongType > > images = new ArrayList<>();
+		images.add( labelsTarget );
+		final RegionMerging.Visitor rmVisitor = ( parents ) -> {
+			final Img< LongType > img = labelsTarget.factory().create( images.get( 0 ), new LongType() );
+			for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( images.get( images.size() - 1 ), img ), img ) )
+				p.getB().set( mergedParents.contains( p.getA().get() ) ? mergedParents.get( p.getA().get() ) : p.getA().get() );
+			images.add( img );
+
+			final Img< LongType > blockImg = labelsTarget.factory().create( blockImages.get( 0 ), new LongType() );
+			for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( blockImages.get( blockImages.size() - 1 ), blockImg ), blockImg ) )
+				p.getB().set( parents.get( p.getA().get() ) );
+			blockImages.add( blockImg );
+		};
+		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, 50000.0, rmVisitor );
 
 		final List< Tuple2< Long, In > > gs = graphsAfterMerging.collect();
+
+		final RandomAccessibleInterval< ARGBType > coloredHistory = Converters.convert( Views.stack( images ), ( s, t ) -> {
+			t.set( colorMap.get( s.get() ) );
+		}, new ARGBType() );
+		BdvFunctions.show( coloredHistory, "colored history" );
+		System.out.println( "COLORED HISTORY SIZE " + images.size() + " COLORED BLOCK HISTORY SIZE " + blockImages.size() );
+
+		final RandomAccessibleInterval< ARGBType > coloredBlockHistory =
+				Converters.convert( Views.stack( blockImages ), ( s, t ) -> {
+					t.set( blockColors.get( s.get() ) );
+				}, new ARGBType() );
+		BdvFunctions.show( coloredBlockHistory, "colored block history" );
 
 		for ( final TLongIterator kIt = mergedParents.keySet().iterator(); kIt.hasNext(); )
 			MergeBloc.findRoot( mergedParents, kIt.next() );

@@ -6,7 +6,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.apache.spark.api.java.function.PairFunction;
 
 import de.hanslovsky.watersheds.DisjointSetsHashMap;
-import de.hanslovsky.watersheds.HashableLongArray;
 import de.hanslovsky.watersheds.graph.Edge;
 import de.hanslovsky.watersheds.graph.EdgeMerger;
 import de.hanslovsky.watersheds.graph.Function;
@@ -151,14 +150,8 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 		}
 
 		final TLongLongHashMap rootToGlobalId = new TLongLongHashMap();
-		final TLongLongHashMap nodeBlockAssignment = assignNodesToBlocks( idService, dj, parents, rootToGlobalId );// new
+		final TLongLongHashMap nodeBlockAssignment = assignNodesToBlocks( idService, dj, parents, rootToGlobalId );
 
-		for ( final TLongIterator vIt = rootToGlobalId.valueCollection().iterator(); vIt.hasNext(); )
-			if ( vIt.next() < 0 ) {
-				System.out.println( t._1() instanceof HashableLongArray ? Arrays.toString( ( ( HashableLongArray ) t._1() ).getData() ) : t._1() + " " + "vIt < 0!" );
-				System.out.println( rootToGlobalId );
-				System.exit( -1 );
-			}
 		final GetInternalEdgesAndSplits.IntraBlockOutput output = new IntraBlockOutput( t._2()._1(), t._2()._2(), t._2()._3(), g, nodeBlockAssignment, splitEdges, rootToGlobalId.values() );
 
 
@@ -174,11 +167,6 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 		final TLongLongHashMap assignment = new TLongLongHashMap();
 
 		long id = idService.requestIds( dj.setCount() );
-		if ( id < 0 )
-		{
-			System.out.println( "HOW CAN ID BE SMALLER THAN ZERO? " + id );
-			System.exit( -9001 );
-		}
 
 		for ( final TLongLongIterator it = parents.iterator(); it.hasNext(); )
 		{
