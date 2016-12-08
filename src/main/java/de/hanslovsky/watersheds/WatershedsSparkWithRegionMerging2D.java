@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
@@ -85,7 +84,7 @@ public class WatershedsSparkWithRegionMerging2D
 //		final int[] dimsInt = new int[] { 1554, 1670, 153, 3 }; // A
 		final long[] dims = new long[] { dimsInt[ 0 ], dimsInt[ 1 ], dimsInt[ 2 ] };
 		final long[] dimsNoChannels = new long[] { dimsInt[ 0 ], dimsInt[ 1 ] };
-		final int[] dimsIntervalInt = new int[] { 50, 50, 2 };
+		final int[] dimsIntervalInt = new int[] { 10, 10, 2 };
 		final long[] dimsInterval = new long[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ], dimsIntervalInt[ 2 ] };
 		final int[] dimsIntervalIntNoChannels = new int[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ] };
 		final long[] dimsIntervalNoChannels = new long[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ] };
@@ -243,7 +242,7 @@ public class WatershedsSparkWithRegionMerging2D
 				final byte[] message = labelsTargetListener.recv( 0 );
 				if ( message.length == 0 )
 					continue;
-				System.out.println( "RECEIVED MESSAGE OF SIZE " + message.length );
+//				System.out.println( "RECEIVED MESSAGE OF SIZE " + message.length );
 				final JsonObject json = gson.fromJson( new String( message ), JsonObject.class );
 				final long[] min = new long[ labelsTarget.numDimensions() ];
 				final long[] max = new long[ labelsTarget.numDimensions() ];
@@ -272,7 +271,7 @@ public class WatershedsSparkWithRegionMerging2D
 					else if ( n > M )
 						M = n;
 				}
-				System.out.println( "Got min=" + m + ", max=" + M + " for " + Arrays.toString( min ) + " " + Arrays.toString( max ) + " has background: " + hasZero );
+//				System.out.println( "Got min=" + m + ", max=" + M + " for " + Arrays.toString( min ) + " " + Arrays.toString( max ) + " has background: " + hasZero );
 				labelsTargetListener.send( "" );
 			}
 		} );
@@ -283,16 +282,16 @@ public class WatershedsSparkWithRegionMerging2D
 				.cache();
 
 		final TLongLongHashMap counts = new TLongLongHashMap();
-		offsetLabelsWithCounts.map( t -> {
-			System.out.println( t );
-			if ( t == null )
-				throw new RuntimeException( t + " is null!" );
-			else if ( t._1() == null )
-				throw new RuntimeException( "t._1() is null!" );
-			else if ( t._2() == null )
-				throw new RuntimeException( "t._2() is null!" );
-			return true;
-		} ).count();
+//		offsetLabelsWithCounts.map( t -> {
+////			System.out.println( t );
+//			if ( t == null )
+//				throw new RuntimeException( t + " is null!" );
+//			else if ( t._1() == null )
+//				throw new RuntimeException( "t._1() is null!" );
+//			else if ( t._2() == null )
+//				throw new RuntimeException( "t._2() is null!" );
+//			return true;
+//		} ).count();
 		for ( final TLongLongHashMap m : offsetLabelsWithCounts.values().mapToPair( t -> t ).values().collect() )
 			counts.putAll( m );
 

@@ -848,7 +848,6 @@ public class MergeBloc
 			e.setIndex( i );
 			System.out.println( e.from() + " " + e.to() + " " + e.weight() + " " + e.affinity() + " " + e.multiplicity() );
 		}
-//		System.exit( 234 );
 
 		final TLongObjectHashMap< TLongHashSet > borderNodes = new TLongObjectHashMap< TLongHashSet >();
 		borderNodes.put( 14, new TLongHashSet( new long[] { 2 } ) );

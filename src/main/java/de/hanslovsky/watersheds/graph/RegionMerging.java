@@ -57,8 +57,11 @@ public class RegionMerging
 	{
 		final List< Long > indices = rddIn.keys().collect();
 		final int[] parents = new int[ indices.size() ];
-		for ( final Long m : indices )
+		System.out.println();
+		for ( final Long m : indices ) {
+			System.out.println( m );
 			parents[ m.intValue() ] = m.intValue();
+		}
 		final DisjointSets dj = new DisjointSets( parents, new int[ parents.length ], parents.length );
 
 		JavaPairRDD< Long, MergeBloc.In > rdd = rddIn;
@@ -443,7 +446,6 @@ public class RegionMerging
 		System.out.println( result );
 		for ( final Tuple2< Long, In > rr : result )
 			System.out.println( rr._1() + " " + rr._2().counts );
-		System.exit( 234 );
 
 		final MultiGraph g = new MultiGraph( "graph" );
 

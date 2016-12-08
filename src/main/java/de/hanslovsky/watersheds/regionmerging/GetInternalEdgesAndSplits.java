@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.apache.spark.api.java.function.PairFunction;
 
 import de.hanslovsky.watersheds.DisjointSetsHashMap;
+import de.hanslovsky.watersheds.HashableLongArray;
 import de.hanslovsky.watersheds.graph.Edge;
 import de.hanslovsky.watersheds.graph.EdgeMerger;
 import de.hanslovsky.watersheds.graph.Function;
@@ -14,6 +15,7 @@ import de.hanslovsky.watersheds.graph.MergeBloc;
 import de.hanslovsky.watersheds.graph.RegionMerging;
 import de.hanslovsky.watersheds.graph.UndirectedGraph;
 import gnu.trove.iterator.TIntIterator;
+import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TIntArrayList;
@@ -122,11 +124,14 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 		final UndirectedGraph g = new UndirectedGraph( edges, edgeMerger );
 		final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap = g.nodeEdgeMap();
 
-		PrepareRegionMergingCutBlocks.addEdges( innerLabels, innerAffinities, blockDim, g, nodeEdgeMap, e, dummy, edgeMerger );
+		final TLongLongHashMap parents = new TLongLongHashMap();
+		PrepareRegionMergingCutBlocks.addEdges( innerLabels, innerAffinities, blockDim, g, nodeEdgeMap, e, dummy, edgeMerger, parents );
 		final int nIntraBlockEdges = e.size();
 
-		final TLongLongHashMap parents = new TLongLongHashMap();
-		final DisjointSetsHashMap dj = new DisjointSetsHashMap( parents, new TLongLongHashMap(), 0 );
+		final TLongLongHashMap ranks = new TLongLongHashMap();
+		for ( final TLongIterator it = parents.keySet().iterator(); it.hasNext(); )
+			ranks.put( it.next(), 0 );
+		final DisjointSetsHashMap dj = new DisjointSetsHashMap( parents, ranks, parents.size() );
 		final TIntArrayList splitEdges = new TIntArrayList();
 		for ( int i = 0; i < nIntraBlockEdges; ++i )
 		{
@@ -147,15 +152,13 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 
 		final TLongLongHashMap rootToGlobalId = new TLongLongHashMap();
 		final TLongLongHashMap nodeBlockAssignment = assignNodesToBlocks( idService, dj, parents, rootToGlobalId );// new
-		for ( int i = 0; i < e.size(); ++i )
-		{
-			e.setIndex( i );
-			if ( !nodeBlockAssignment.contains( e.from() ) || !nodeBlockAssignment.contains( e.to() ) )
-			{
-				System.out.println( "WARUM IST DAS NICHT DRIN?" + e.from() + " " + e.to() + " " + parents.contains( e.from() ) + " " + parents.contains( e.to() ) );
-				System.exit( 123 );
+
+		for ( final TLongIterator vIt = rootToGlobalId.valueCollection().iterator(); vIt.hasNext(); )
+			if ( vIt.next() < 0 ) {
+				System.out.println( t._1() instanceof HashableLongArray ? Arrays.toString( ( ( HashableLongArray ) t._1() ).getData() ) : t._1() + " " + "vIt < 0!" );
+				System.out.println( rootToGlobalId );
+				System.exit( -1 );
 			}
-		}
 		final GetInternalEdgesAndSplits.IntraBlockOutput output = new IntraBlockOutput( t._2()._1(), t._2()._2(), t._2()._3(), g, nodeBlockAssignment, splitEdges, rootToGlobalId.values() );
 
 
@@ -171,6 +174,11 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 		final TLongLongHashMap assignment = new TLongLongHashMap();
 
 		long id = idService.requestIds( dj.setCount() );
+		if ( id < 0 )
+		{
+			System.out.println( "HOW CAN ID BE SMALLER THAN ZERO? " + id );
+			System.exit( -9001 );
+		}
 
 		for ( final TLongLongIterator it = parents.iterator(); it.hasNext(); )
 		{
