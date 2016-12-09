@@ -337,7 +337,6 @@ public class WatershedsSparkWithRegionMerging2D
 			}
 		}
 
-		System.out.print( "Closing context" );
 		zmqContext.close();
 
 		final ExtendedRandomAccessibleInterval< LongType, Img< LongType > > labelsExtend = Views.extendValue( labelsTarget, new LongType( -1 ) );

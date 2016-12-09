@@ -105,10 +105,7 @@ public class UndirectedGraph implements Serializable
 		{
 			final int id = v.next();
 			e1.setIndex( id );
-//			System.out.println( id + " " + e1.size() );
-//			System.out.println( e1.weight() + " " + e1.affinity() + " " + e1.from() + " " + e1.to() + " " + e1.multiplicity() );
 			e1.weight( Math.min( counts.get( e1.from() ), counts.get( e1.to() ) ) / ( e1.affinity() * e1.affinity() ) );
-//			System.out.println( e1.weight() + " " + e1.affinity() + " " + e1.from() + " " + e1.to() + " " + e1.multiplicity() );
 		}
 
 		return edges;
@@ -140,14 +137,12 @@ public class UndirectedGraph implements Serializable
 				g.edgeMerger.merge( g.e2, g.e3 );
 			}
 			else {
-//				System.out.println( "Adding new edge " + g.e3.size() );
 				final int newEdgeIndex = g.e3.add(
 						g.e2.weight(),
 						g.e2.affinity(),
 						newIndex,
 						otherIndex,
 						g.e2.multiplicity() );
-//				System.out.println( "Added new edge " + g.e3.size() + " " + newEdgeIndex );
 				newEdges.put( otherIndex, newEdgeIndex );
 				g.nodeEdgeMap.get( otherIndex ).put( newIndex, newEdgeIndex );
 			}
