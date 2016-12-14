@@ -5,14 +5,13 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.spark.api.java.function.PairFunction;
 
+import de.hanslovsky.watersheds.DisjointSetsHashMap;
 import gnu.trove.iterator.TIntIntIterator;
 import gnu.trove.iterator.TIntIterator;
 import gnu.trove.iterator.TLongIterator;
-import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TIntIntHashMap;
-import gnu.trove.map.hash.TIntLongHashMap;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
@@ -20,9 +19,7 @@ import gnu.trove.set.hash.TIntHashSet;
 import gnu.trove.set.hash.TLongHashSet;
 import it.unimi.dsi.fastutil.ints.IntComparator;
 import it.unimi.dsi.fastutil.ints.IntHeapPriorityQueue;
-import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import scala.Tuple2;
-import scala.Tuple3;
 
 public class MergeBloc
 {
@@ -34,18 +31,21 @@ public class MergeBloc
 		 */
 		private static final long serialVersionUID = 8290046566497620074L;
 
-		public final TDoubleArrayList edges;
+		public final UndirectedGraph g;
 
 		public final TLongLongHashMap counts;
 
 		public final TLongObjectHashMap< TLongHashSet > borderNodes;
 
-		public In( final TDoubleArrayList edges, final TLongLongHashMap counts, final TLongObjectHashMap< TLongHashSet > borderNodes )
+		public final TLongLongHashMap outsideNodes;
+
+		public In( final UndirectedGraph g, final TLongLongHashMap counts, final TLongObjectHashMap< TLongHashSet > borderNodes, final TLongLongHashMap outsideNodes )
 		{
 			super();
-			this.edges = edges;
+			this.g = g;
 			this.counts = counts;
 			this.borderNodes = borderNodes;
+			this.outsideNodes = outsideNodes;
 		}
 
 	}
@@ -57,39 +57,44 @@ public class MergeBloc
 		 */
 		private static final long serialVersionUID = -3490542120283388985L;
 
-		public final TDoubleArrayList edges;
+		public final UndirectedGraph g;
 
 		public final TLongLongHashMap counts;
 
 		public final TLongObjectHashMap< TLongHashSet > borderNodes;
 
+		public final TLongLongHashMap outsideNodes;
+
 		public final TLongLongHashMap assignments;
 
-		public final TLongHashSet fragmentPointedToOutside;
+		public final TLongHashSet mergedBorderNodes;
 
 		public Out(
-				final TDoubleArrayList edges,
+				final UndirectedGraph g,
 				final TLongLongHashMap counts,
 				final TLongObjectHashMap< TLongHashSet > borderNodes,
+				final TLongLongHashMap outsideNodes,
 				final TLongLongHashMap assignments,
-				final long... fragmentPointedToOutside )
+				final long... mergedBorderNodes )
 		{
-			this( edges, counts, borderNodes, assignments, new TLongHashSet( fragmentPointedToOutside ) );
+			this( g, counts, borderNodes, outsideNodes, assignments, new TLongHashSet( mergedBorderNodes ) );
 		}
 
 		public Out(
-				final TDoubleArrayList edges,
+				final UndirectedGraph g,
 				final TLongLongHashMap counts,
 				final TLongObjectHashMap< TLongHashSet > borderNodes,
+				final TLongLongHashMap outsideNodes,
 				final TLongLongHashMap assignments,
-				final TLongHashSet fragmentPointedToOutside )
+				final TLongHashSet mergedBorderNodes )
 		{
 			super();
-			this.edges = edges;
+			this.g = g;
 			this.counts = counts;
 			this.borderNodes = borderNodes;
+			this.outsideNodes = outsideNodes;
 			this.assignments = assignments;
-			this.fragmentPointedToOutside = fragmentPointedToOutside;
+			this.mergedBorderNodes = mergedBorderNodes;
 		}
 
 	}
@@ -174,20 +179,12 @@ public class MergeBloc
 	}
 
 	public static EdgeMerger DEFAULT_EDGE_MERGER = ( e1, e2 ) -> {
-//		final double w1 = e1.weight();
-//		final double w2 = e2.weight();
-//		if ( w1 < w2 )
-//		{
-//			e2.weight( w1 );
-//			e2.affinity( e1.affinity() );
-//		}
 		e2.affinity( Math.max( e1.affinity(), e2.affinity() ) );
 		e2.multiplicity( e1.multiplicity() + e2.multiplicity() );
-
 		return e2;
 	};
 
-	public static class MergeBlocPairFunction2 implements PairFunction< Tuple2< Long, In >, Tuple2< Long, TLongHashSet >, Out >
+	public static class MergeBlocPairFunction2 implements PairFunction< Tuple2< Long, In >, Tuple2< Long, Long >, Out >
 	{
 
 		private static final long serialVersionUID = -1537751845300461154L;
@@ -220,77 +217,129 @@ public class MergeBloc
 
 
 		@Override
-		public Tuple2< Tuple2< Long, TLongHashSet >, Out > call( final Tuple2< Long, In > t ) throws Exception
+		public Tuple2< Tuple2< Long, Long >, Out > call( final Tuple2< Long, In > t ) throws Exception
 		{
 			final In in = t._2();
 
-			final IntHeapPriorityQueue queue = new IntHeapPriorityQueue( new EdgeComparator( in.edges ) );
-			final Edge e = new Edge( in.edges );
+			final UndirectedGraph g = new UndirectedGraph( in.g.edges(), merger );
+
+			final IntHeapPriorityQueue queue = new IntHeapPriorityQueue( new EdgeComparator( g.edges() ) );
+			final Edge e = new Edge( g.edges() );
 			for ( int i = 0; i < e.size(); ++i )
+			{
+				e.setIndex( i );
+//				System.out.println( "Enqueueing edge with " + e.weight() + " " + e.affinity() + " " + e.from() + " " + e.to() );
 				queue.enqueue( i );
-
-			boolean borderNodeIsInvolved = false;
-			TLongHashSet involvedNeighboringBlocks = null;
-			double maxWeightBeforeMerge = Double.NaN;
-			long borderNodeLabel = -1;
-
-			final UndirectedGraph g = new UndirectedGraph( in.edges, merger );
-			final TLongLongHashMap assignments = new TLongLongHashMap();
-			for ( final TLongIterator it = g.nodeEdgeMap().keySet().iterator(); it.hasNext(); ) {
-				final long k = it.next();
-				assignments.put( k, k );
 			}
 
-			final int count = 0;
-			while ( !queue.isEmpty() && count < 1000 )
+			boolean outsideNodeIsInvolved = false;
+			long involvedOutsideBlock = -1;
+			double maxWeightBeforeMerge = Double.NaN;
+			final TLongHashSet mergedBorderNodes = new TLongHashSet();
+
+
+			final TLongLongHashMap assignments = new TLongLongHashMap();
+			final DisjointSetsHashMap dj = new DisjointSetsHashMap( assignments, new TLongLongHashMap(), 0 );
+			for ( final TLongIterator it = g.nodeEdgeMap().keySet().iterator(); it.hasNext(); )
+				dj.findRoot( it.next() );
+
+//			int index = 0;
+//			final String path = System.getProperty( "user.home" ) + "/git/promotion-philipp/notes/watersheds";
+			while ( !queue.isEmpty() )
 			{
+
 				final int next = queue.dequeueInt();
 				e.setIndex( next );
 				final double w = e.weight();
-//				System.out.println( t._1() + ": " + next + " .. " + w + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() + " " + threshold + " " + borderNodeIsInvolved );
+
 				if ( w < 0 )
 					continue;
 
-				else if ( w > threshold || borderNodeIsInvolved && w > /*
-				 * 20 *
-				 */ maxWeightBeforeMerge )
+				else if ( w > threshold || outsideNodeIsInvolved && w > maxWeightBeforeMerge )
 					break;
 
-				final int from = ( int ) e.from();
-				final int to = ( int ) e.to();
 
-				if ( in.borderNodes.contains( from ) && in.borderNodes.get( from ) != null )
+				final long from = e.from();
+				final long to = e.to();
+
+				if ( in.outsideNodes.contains( from ) )
 				{
-					if ( !borderNodeIsInvolved )
+					if ( !outsideNodeIsInvolved )
 					{
-						borderNodeIsInvolved = true;
-						involvedNeighboringBlocks = in.borderNodes.get( from );
+						outsideNodeIsInvolved = true;
+						involvedOutsideBlock = in.outsideNodes.get( from );
 						maxWeightBeforeMerge = w;
-						borderNodeLabel = from;
 					}
 				}
-				else if ( in.borderNodes.contains( to ) && in.borderNodes.get( to ) != null )
+				else if ( in.outsideNodes.contains( to ) )
 				{
-					if ( !borderNodeIsInvolved ) {
-						borderNodeIsInvolved = true;
-						involvedNeighboringBlocks = in.borderNodes.get( to );
+					if ( !outsideNodeIsInvolved ) {
+						outsideNodeIsInvolved = true;
+						involvedOutsideBlock = in.outsideNodes.get( to );
 						maxWeightBeforeMerge = w;
-						borderNodeLabel = to;
 					}
 				}
 				else
 				{
+//					if ( from == 235 || to == 235 )
+//						System.out.println( "??? " + t._1() + " " + from + " " + to + " " + dj.findRoot( from ) + " " + dj.findRoot( to ) );
+//
+//					if ( !g.nodeEdgeMap().contains( from ) )
+//					{
+//						System.out.println( t._1() + " SOMETHING WRONG WITH FROM! " + from + " " + g.nodeEdgeMap().contains( dj.findRoot( from ) ) );
+//						System.exit( 123 );
+//					}
+//					if ( !g.nodeEdgeMap().contains( to ) )
+//					{
+//						System.out.println( t._1() + " SOMETHING WRONG WITH TO! " + to );
+//						System.exit( 456 );
+//					}
+//					System.out.println( "Merging: " + t._1() + ": " + next + " .. " + w + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() + " " + threshold );
+					final long r1 = dj.findRoot( from );
+					final long r2 = dj.findRoot( to );
+					if ( r1 == r2 || r1 != from || r2 != to )
+						continue;
+//					final long n = idService.requestIds( 1 );
+					final long n = dj.join( r1, r2 );
 
-					final long n = idService.requestIds( 1 );
+					// add to list of merged border nodes if appropriate
+					if ( in.borderNodes.contains( from ) )
+					{
+						if ( in.borderNodes.contains( n ) )
+							in.borderNodes.get( n ).addAll( in.borderNodes.get( from ) );
+						else
+							in.borderNodes.put( n, in.borderNodes.get( from ) );
+						mergedBorderNodes.add( from );
+					}
 
-					final long c1 = in.counts.remove( from );
-					final long c2 = in.counts.remove( to );
+					if ( in.borderNodes.contains( to ) )
+					{
+						if ( in.borderNodes.contains( n ) )
+							in.borderNodes.get( n ).addAll( in.borderNodes.get( to ) );
+						else
+							in.borderNodes.put( n, in.borderNodes.get( to ) );
+						mergedBorderNodes.add( to );
+					}
+
+
+					final long c1 = in.counts.remove( r1 );// from );
+					final long c2 = in.counts.remove( r2 );// to );
 					final long cn = c1 + c2;
 					in.counts.put( n, cn );
-					final TLongIntHashMap newEdges = g.contract( next, n, in.counts );
+					if ( n == 5711 )
+					{
+						System.out.println( next + " " + n + " " + e.from() + " " + e.to() );
+						System.out.println( g.nodeEdgeMap().get( e.from() ) + " " + g.nodeEdgeMap().get( e.to() ) );
+						System.out.println( in.borderNodes.get( n ) );
+						System.out.println();
+					}
+					final TLongIntHashMap newEdges = g.contract( next, n, in.counts, f );
 
 					if ( newEdges == null )
 					{
+						System.out.println( "IS NULL!" );
+						System.out.println( from + " " + to + " " + r1 + " " + r2 + " " + n + " " + c1 + " " + c2 + " " + cn );
+						System.exit( 123 );
 						in.counts.remove( n );
 						continue;
 					}
@@ -300,12 +349,15 @@ public class MergeBloc
 					{
 						final int id = it.next();
 						e.setIndex( id );
-						if ( e.weight() < threshold )
-							queue.enqueue( id );
+						// TODO
+						// should we still edges, even if larger than threshold?
+						// could re-use graph with different threshold then!
+//						if ( e.weight() < threshold )
+						queue.enqueue( id );
 					}
-					assignments.put( from, n );
-					assignments.put( to, n );
-					assignments.put( n, n );
+//					assignments.put( from, n );
+//					assignments.put( to, n );
+//					assignments.put( n, n );
 					mergerService.addMerge( from, to, n, w );
 
 				}
@@ -314,33 +366,44 @@ public class MergeBloc
 
 
 //			double[] resultEdges = new double[0];
-			final TDoubleArrayList resultEdges = new TDoubleArrayList();
-			final Edge re = new Edge( resultEdges );
-			for ( int k = 0; k < e.size(); ++k )
+			for ( int k = e.size() - 1; k >= 0; --k )
 			{
 				e.setIndex( k );
 				final double w = e.weight();
 				if ( w == -1.0d )
-					continue;
-
-				re.add( w, e.affinity(), e.from(), e.to(), e.multiplicity() );
+					e.remove();
 
 			}
 
-			final TLongLongHashMap resultAssignments = new TLongLongHashMap();
+			// make sure that everybody points to their roots
 			for ( final TLongIterator k = assignments.keySet().iterator(); k.hasNext(); )
 			{
-				final long id = k.next();
-				final long r = findRoot( assignments, id );
+				final long nxt = k.next();
+				final long r = dj.findRoot( nxt );
+//				if ( !g.nodeEdgeMap().contains( r ) )
+//					System.out.println( "Node edge map does not contain root region " + r + " (" + nxt + ")" );
+//				if ( !g.nodeEdgeMap().contains( nxt ) )
+//					System.out.println( "Node edge map does not contain initial region " + nxt + " (" + r + ")" );
+			}
+
+			if ( g.nodeEdgeMap().contains( 5711 ) )
+			{
+				System.out.println( "WO IST DAS DENN JETZT?" + " " + assignments.contains( 5711 ) );
+				System.out.println( assignments.get( 5676 ) );
+				System.out.println( assignments.get( 5711 ) );
+				System.out.println( g.nodeEdgeMap().get( 5676 ) );
+				System.out.println( g.nodeEdgeMap().get( 5711 ) );
+//				System.exit( 143 );
 			}
 
 			final Out result = new Out(
-					resultEdges,
+					g,
 					in.counts,
 					in.borderNodes,
+					in.outsideNodes,
 					assignments,
-					borderNodeLabel );
-			return new Tuple2<>( new Tuple2<>( t._1(), involvedNeighboringBlocks == null ? new TLongHashSet() : involvedNeighboringBlocks ), result );
+					mergedBorderNodes );
+			return new Tuple2<>( new Tuple2<>( t._1(), involvedOutsideBlock == -1 ? t._1() : involvedOutsideBlock ), result );
 
 
 		}
@@ -361,319 +424,6 @@ public class MergeBloc
 
 		}
 		return i1;
-	}
-
-	public static class MergeBlocPairFunction implements PairFunction< Tuple2< Long, EdgesAndCounts >, Tuple2< Long, Long >, EdgesAndCounts >
-	{
-
-		private static final long serialVersionUID = -1537751845300461154L;
-
-		private final Function f;
-
-		private final EdgeMerger merger;
-
-		private final double threshold;
-
-		private final IdService idService;
-
-		private final MergerService mergerService;
-
-		public MergeBlocPairFunction(
-				final Function f,
-				final EdgeMerger merger,
-				final double threshold,
-				final IdService idService,
-				final MergerService mergerService )
-		{
-			super();
-			this.f = f;
-			this.merger = merger;
-			this.threshold = threshold;
-			this.idService = idService;
-			this.mergerService = mergerService;
-		}
-
-		@Override
-		public Tuple2< Tuple2< Long, Long >, EdgesAndCounts > call( final Tuple2< Long, EdgesAndCounts > t ) throws Exception
-		{
-			final EdgesAndCounts edgesAndWeights = t._2();
-			final int numberOfNodesIncludingOutside = edgesAndWeights.counts.size();
-			final int numberOfOutsideNodes = edgesAndWeights.outside.size();
-			final int numberOfNodes = numberOfNodesIncludingOutside - numberOfOutsideNodes;
-			final long[] counts = new long[ numberOfNodesIncludingOutside ];
-			final TDoubleArrayList edges = new TDoubleArrayList( new double[ edgesAndWeights.edges.length ] );
-			final IntHeapPriorityQueue queue = new IntHeapPriorityQueue( new EdgeComparator( edges ) );
-			final Tuple3< TLongIntHashMap, long[], TIntHashSet[] > mappings =
-					mapToContiguousZeroBasedIndices( edgesAndWeights, edges, counts, queue, f, edgesAndWeights.outside );
-
-			final TLongIntHashMap fw = mappings._1();
-			final long[] bw = mappings._2();
-			final long[] newIds = bw.clone();
-			final TIntHashSet[] nodeEdgeMap = mappings._3();
-
-			final Edge e = new Edge( edges );
-			final Edge e1 = new Edge( edges );
-			final Edge e2 = new Edge( edges );
-
-			final TIntLongHashMap outside = new TIntLongHashMap();
-			for ( final TLongLongIterator it = edgesAndWeights.outside.iterator(); it.hasNext(); )
-			{
-				it.advance();
-				outside.put( fw.get( it.key() ), it.value() );
-			}
-
-			boolean pointsOutside = false;
-			long pointedToOutside = -1;
-			double outsideEdgeWeight = Double.NaN;
-
-			final int[] parents = new int[ numberOfNodes ];
-			final TLongLongHashMap assignments = edgesAndWeights.assignments;
-//
-//			for ( int i = 0; i < edgesAndWeights.assignments.length; i += EdgesAndCounts.ASSIGNMENTS_STEP )
-//				assignments.put( edgesAndWeights.assignments[i], edgesAndWeights.assignments[i+1] );
-
-			for ( int i = 0; i < numberOfNodes; ++i )
-				parents[ i ] = fw.get( assignments.get( bw[ i ] ) );
-
-			while ( !queue.isEmpty() )
-			{
-				final int next = queue.dequeueInt();
-				e.setIndex( next );
-				final double w = e.weight();
-
-				if ( w < 0 )
-					continue;
-
-				else if ( w > threshold || pointsOutside && w > outsideEdgeWeight )
-					break;
-
-				final int from = ( int ) e.from();
-				final int to = ( int ) e.to();
-
-				if ( outside.contains( from ) )
-				{
-					if ( !pointsOutside )
-					{
-						pointsOutside = true;
-						pointedToOutside = outside.get( from );
-						outsideEdgeWeight = w;
-					}
-				}
-				else if ( outside.contains( to ) )
-				{
-					if ( !pointsOutside ) {
-						pointsOutside = true;
-						pointedToOutside = outside.get( to );
-						outsideEdgeWeight = w;
-					}
-				}
-				else
-				{
-					mergeEdges( from, to, nodeEdgeMap, edges, queue, counts, f, e1, e2, merger );
-
-					final long c1 = counts[ from ];
-					final long c2 = counts[ to ];
-					counts[ from ] += c2;
-					counts[ to ] = 0;
-					parents[ to ] = from;
-
-					final long n = idService.requestIds( 1 );
-
-					final long n2 = newIds[ to ];
-					newIds[ to ] = n;
-
-					final long n1 = newIds[ from ];
-					newIds[ from ] = n;
-
-					mergerService.addMerge( n1, n2, n, w );
-
-				}
-
-			}
-
-			// circular graph here!
-			final DisjointSets dj = new DisjointSets( parents, new int[ parents.length ], parents.length );
-			for ( int i = 0; i < parents.length; ++i )
-				dj.findRoot( i );
-
-//			double[] resultEdges = new double[0];
-			final TDoubleArrayList resultEdges = new TDoubleArrayList();
-			final Edge re = new Edge( resultEdges );
-			for ( int k = 0; k < e.size(); ++k )
-			{
-				e.setIndex( k );
-				final double w = e.weight();
-				if ( w == -1 )
-					continue;
-
-				re.add( w, e.affinity(), newIds[ ( int ) e.from() ], newIds[ ( int ) e.to() ], e.multiplicity() );
-
-			}
-
-//			final long[] resultAssignments = new long[ numberOfNodes * EdgesAndCounts.ASSIGNMENTS_STEP ];
-			final TLongLongHashMap resultAssignments = new TLongLongHashMap();
-			for ( int i = 0, k = 0; i < numberOfNodes; ++i, k += EdgesAndCounts.ASSIGNMENTS_STEP )
-			{
-				final long id = bw[ i ];
-				resultAssignments.put( id, newIds[ parents[ i ] ] );
-//				resultAssignments[ k ] = id;
-//				resultAssignments[ k + 1 ] = newIds[ parents[ i ] ];
-			}
-
-			final int setCount = dj.setCount();
-//			final long[] resultCounts = new long[ setCount * EdgesAndCounts.COUNTS_STEP ];
-
-			final TLongLongHashMap resultCounts = new TLongLongHashMap();
-
-			for ( int i = 0; i < parents.length; ++i )
-			{
-				final long c = counts[ i ];
-				if ( c > 0 )
-				{
-					final long id = newIds[ parents[ i ] ];
-					resultCounts.put( id, c );
-//					resultCounts.add( id );
-//					resultCounts.add( c );
-//					resultCounts[ k ] = id;
-//					resultCounts[ k + 1 ] = c;
-//					++i;
-				}
-			}
-
-			final EdgesAndCounts result = new EdgesAndCounts(
-					resultEdges.toArray(),
-					resultCounts,
-					edgesAndWeights.outside,
-					resultAssignments );
-			return new Tuple2<>( new Tuple2<>( t._1(), pointedToOutside ), result );
-		}
-
-	}
-
-	public static Tuple3< TLongIntHashMap, long[], TIntHashSet[] > mapToContiguousZeroBasedIndices2(
-			final In edgesAndWeights,
-			final TDoubleArrayList edges,
-			final long[] counts,
-			final IntHeapPriorityQueue queue,
-			final Function f,
-			final TLongLongHashMap outside
-			) {
-		final TLongIntHashMap mappingToZeroBasedIndexSet = new TLongIntHashMap();
-		final long[] mappingToOriginalIndexSet = new long[ counts.length ];
-
-		final TLongLongIterator it = edgesAndWeights.counts.iterator();
-		for ( int i = 0, k = counts.length - outside.size(); it.hasNext(); )
-		{
-			it.advance();
-			final long index = it.key();
-			final int target = outside.contains( index ) ? k++ : i++;
-//			if ( outside.contains( index )) {
-//				target = k;
-//				++k
-//			}
-			mappingToOriginalIndexSet[ target ] = index;
-			counts[ target ] = it.value();
-			mappingToZeroBasedIndexSet.put( index, target );
-		}
-
-//		for ( int i = edgesAndWeights.counts.length / EdgesAndCounts.COUNTS_STEP, k = 0; i < counts.length; ++i, k += EdgesAndCounts.OUTSIDE_STEP )
-//		{
-//			final long index = edgesAndWeights.outside[ k ];
-//			mappingToOriginalIndexSet[ i ] = index;
-//			mappingToZeroBasedIndexSet.put( index, i );
-//			counts[ i ] = edgesAndWeights.outside[ k + 1 ];
-//		}
-		// TDoubleArrayList creates a copy. SUPER ANNOYING!
-		final Edge globalIndexingEdge = new Edge( new TDoubleArrayList( edgesAndWeights.edges ) );
-		final Edge localIndexingEdge = new Edge( edges );
-
-		final TIntHashSet[] nodeEdgeMap = new TIntHashSet[ counts.length ];
-		for ( int i = 0; i < nodeEdgeMap.length; ++i )
-			nodeEdgeMap[ i ] = new TIntHashSet();
-
-		for ( int k = 0; k < globalIndexingEdge.size(); ++k )
-		{
-			globalIndexingEdge.setIndex( k );
-			localIndexingEdge.setIndex( k );
-			final double w = globalIndexingEdge.weight();
-			final double a = globalIndexingEdge.affinity();
-			final int i1 = mappingToZeroBasedIndexSet.get( globalIndexingEdge.from() );
-			final int i2 = mappingToZeroBasedIndexSet.get( globalIndexingEdge.to() );
-			f.weight( a, counts[ i1 ], counts[ i2 ] );
-			localIndexingEdge.weight( Double.isNaN( w ) ? f.weight( a, counts[ i1 ], counts[ i2 ] ) : w );
-			localIndexingEdge.affinity( a );
-			localIndexingEdge.from( i1 );
-			localIndexingEdge.to( i2 );
-
-			queue.enqueue( k );
-			nodeEdgeMap[ i1 ].add( k );
-			nodeEdgeMap[ i2 ].add( k );
-		}
-
-		return new Tuple3<>( mappingToZeroBasedIndexSet, mappingToOriginalIndexSet, nodeEdgeMap );
-	}
-
-	public static Tuple3< TLongIntHashMap, long[], TIntHashSet[] > mapToContiguousZeroBasedIndices(
-			final EdgesAndCounts edgesAndWeights,
-			final TDoubleArrayList edges,
-			final long[] counts,
-			final IntHeapPriorityQueue queue,
-			final Function f,
-			final TLongLongHashMap outside
-			) {
-		final TLongIntHashMap mappingToZeroBasedIndexSet = new TLongIntHashMap();
-		final long[] mappingToOriginalIndexSet = new long[ counts.length ];
-
-		final TLongLongIterator it = edgesAndWeights.counts.iterator();
-		for ( int i = 0, k = counts.length - outside.size(); it.hasNext(); )
-		{
-			it.advance();
-			final long index = it.key();
-			final int target = outside.contains( index ) ? k++ : i++;
-//			if ( outside.contains( index )) {
-//				target = k;
-//				++k
-//			}
-			mappingToOriginalIndexSet[ target ] = index;
-			counts[ target ] = it.value();
-			mappingToZeroBasedIndexSet.put( index, target );
-		}
-
-//		for ( int i = edgesAndWeights.counts.length / EdgesAndCounts.COUNTS_STEP, k = 0; i < counts.length; ++i, k += EdgesAndCounts.OUTSIDE_STEP )
-//		{
-//			final long index = edgesAndWeights.outside[ k ];
-//			mappingToOriginalIndexSet[ i ] = index;
-//			mappingToZeroBasedIndexSet.put( index, i );
-//			counts[ i ] = edgesAndWeights.outside[ k + 1 ];
-//		}
-		// TDoubleArrayList creates a copy. SUPER ANNOYING!
-		final Edge globalIndexingEdge = new Edge( new TDoubleArrayList( edgesAndWeights.edges ) );
-		final Edge localIndexingEdge = new Edge( edges );
-
-		final TIntHashSet[] nodeEdgeMap = new TIntHashSet[ counts.length ];
-		for ( int i = 0; i < nodeEdgeMap.length; ++i )
-			nodeEdgeMap[ i ] = new TIntHashSet();
-
-		for ( int k = 0; k < globalIndexingEdge.size(); ++k )
-		{
-			globalIndexingEdge.setIndex( k );
-			localIndexingEdge.setIndex( k );
-			final double w = globalIndexingEdge.weight();
-			final double a = globalIndexingEdge.affinity();
-			final int i1 = mappingToZeroBasedIndexSet.get( globalIndexingEdge.from() );
-			final int i2 = mappingToZeroBasedIndexSet.get( globalIndexingEdge.to() );
-			f.weight( a, counts[ i1 ], counts[ i2 ] );
-			localIndexingEdge.weight( Double.isNaN( w ) ? f.weight( a, counts[ i1 ], counts[ i2 ] ) : w );
-			localIndexingEdge.affinity( a );
-			localIndexingEdge.from( i1 );
-			localIndexingEdge.to( i2 );
-
-			queue.enqueue( k );
-			nodeEdgeMap[ i1 ].add( k );
-			nodeEdgeMap[ i2 ].add( k );
-		}
-
-		return new Tuple3<>( mappingToZeroBasedIndexSet, mappingToOriginalIndexSet, nodeEdgeMap );
 	}
 
 	public static void mergeEdges(
@@ -782,6 +532,7 @@ public class MergeBloc
 
 	public static void main( final String[] args ) throws Exception
 	{
+
 		final TLongLongHashMap counts = new TLongLongHashMap(
 				new long[] { 10, 11, 12, 13, 14, 15 },
 				new long[] { 15, 20, 1, 2, 16, 4000 } );
@@ -796,21 +547,18 @@ public class MergeBloc
 				Math.min( counts.get( 10 ), counts.get( 15 ) ) / ( 0.2 * 0.2 ), 0.2, ltd( 10 ), ltd( 15 ), ltd( 1 )
 		};
 
-		final TLongObjectHashMap< TLongHashSet > borderNodes = new TLongObjectHashMap< TLongHashSet >();
-		borderNodes.put( 14, new TLongHashSet( new long[] { 2 } ) );
-		borderNodes.put( 15, new TLongHashSet( new long[] { 3 } ) );
-//				new long[] { 14, 15 },
-//				new long[] { 2, 3 } );
+		final TLongObjectHashMap< TLongHashSet > borderNodes = new TLongObjectHashMap<>();
+		borderNodes.put( 10, new TLongHashSet( new long[] { 1 } ) );
+		borderNodes.put( 11, new TLongHashSet( new long[] { 2 } ) );
 
-//		final long[] outside = new long[] {
-//				14, 15, 2,
-//				15, 4000, 3
-//		};
-
-		final In in = new In( new TDoubleArrayList( affinities ), counts, borderNodes );
-		final Tuple2< Long, In > input = new Tuple2<>( 0l, in );
+		final TLongLongHashMap outsideNodes = new TLongLongHashMap(
+				new long[] { 14, 15 },
+				new long[] { 2, 1 } );
 
 		final EdgeMerger merger = DEFAULT_EDGE_MERGER;
+		final In in = new In( new UndirectedGraph( new TDoubleArrayList( affinities ), merger ), counts, borderNodes, outsideNodes );
+		final Tuple2< Long, In > input = new Tuple2<>( 0l, in );
+
 
 
 		final AtomicLong currentId = new AtomicLong( 16 );
@@ -825,10 +573,10 @@ public class MergeBloc
 		};
 
 		final MergeBlocPairFunction2 mergeBloc = new MergeBlocPairFunction2( ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a ), merger, 180, idService, mergerService );
-		final Tuple2< Tuple2< Long, TLongHashSet >, Out > test = mergeBloc.call( input );
+		final Tuple2< Tuple2< Long, Long >, Out > test = mergeBloc.call( input );
 
 		System.out.println( "INDEX " + test._1() );
-		System.out.println( "EDGES " + test._2().edges );
+		System.out.println( "EDGES " + test._2().g.edges() );
 		System.out.println( "COUNT " + test._2().counts );
 		System.out.println( "ASSGN " + test._2().assignments );
 		System.out.println( "BORDR " + test._2().borderNodes );

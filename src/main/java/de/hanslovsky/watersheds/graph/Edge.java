@@ -1,8 +1,10 @@
 package de.hanslovsky.watersheds.graph;
 
+import java.io.Serializable;
+
 import gnu.trove.list.array.TDoubleArrayList;
 
-public class Edge
+public class Edge implements Serializable
 {
 
 	public static int SIZE = 5;
@@ -86,6 +88,12 @@ public class Edge
 		data.add( ltd( to ) );
 		data.add( ltd( multiplicity ) );
 		return index;
+	}
+
+	public int remove()
+	{
+		data.remove( data.size() - SIZE, SIZE );
+		return size();
 	}
 
 	public TDoubleArrayList data()

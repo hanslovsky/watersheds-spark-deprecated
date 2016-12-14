@@ -72,8 +72,18 @@ public class PrepareRegionMergingCutBlocks
 
 		final JavaPairRDD< Long, In > mergeBlocs = interBlockEdges
 				.values()
-				.map( new MapNodesAndSplitBlocks( sc.broadcast( filteredNodeBlockAssignments ) ) )
-				.flatMapToPair( new FlattenInputs() );
+				.map( new MapNodesAndSplitBlocks( sc.broadcast( filteredNodeBlockAssignments ), edgeMerger ) )
+				.flatMapToPair( new FlattenInputs() )
+				.mapToPair( t -> {
+					final Edge e = new Edge( t._2().g.edges() );
+					final TLongLongHashMap counts = t._2().counts;
+					for ( int i = 0; i < e.size(); ++i )
+					{
+						e.setIndex( i );
+						e.weight( func.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
+					}
+					return t;
+				} );
 
 		return new Tuple2<>( mergeBlocs, filteredNodeBlockAssignments );
 	}
@@ -200,10 +210,13 @@ public class PrepareRegionMergingCutBlocks
 
 		private final Broadcast< TLongLongHashMap > nodeBlockMapping;
 
-		public MapNodesAndSplitBlocks( final Broadcast< TLongLongHashMap > nodeBlockMapping )
+		private final EdgeMerger edgeMerger;
+
+		public MapNodesAndSplitBlocks( final Broadcast< TLongLongHashMap > nodeBlockMapping, final EdgeMerger edgeMerger )
 		{
 			super();
 			this.nodeBlockMapping = nodeBlockMapping;
+			this.edgeMerger = edgeMerger;
 		}
 
 		@Override
@@ -213,12 +226,17 @@ public class PrepareRegionMergingCutBlocks
 			final TLongLongHashMap nodeBlockMapping = this.nodeBlockMapping.getValue();
 
 			final TLongObjectHashMap< MergeBloc.In > regionMergingInput = new TLongObjectHashMap<>();
-			final TLongObjectHashMap< Edge > edges = new TLongObjectHashMap<>();
+//			final TLongObjectHashMap< Edge > edges = new TLongObjectHashMap<>();
 
 			for ( final long id : o.blockIds ) {
-				final In in = new MergeBloc.In( new TDoubleArrayList(), new TLongLongHashMap(), new TLongObjectHashMap<>() );
+//				final In in = new MergeBloc.In( new UndirectedGraph( new TDoubleArrayList(), edgeMerger ), new TLongLongHashMap(), new TLongObjectHashMap<>() );
+				final In in = new MergeBloc.In(
+						new UndirectedGraph( new TDoubleArrayList(), edgeMerger ),
+						new TLongLongHashMap(),
+						new TLongObjectHashMap<>(),
+						new TLongLongHashMap() );
 				regionMergingInput.put( id, in );
-				edges.put( id, new Edge( in.edges ) );
+//				edges.put( id, new Edge( in.edges ) );
 			}
 
 			final Edge e = new Edge( o.g.edges() );
@@ -242,7 +260,7 @@ public class PrepareRegionMergingCutBlocks
 						in.counts.put( from, o.counts.get( from ) );
 					if ( !in.counts.contains( to ) )
 						in.counts.put( to, o.counts.get( to ) );
-					edges.get( r1 ).add( w, a, from, to, m );
+					in.g.addEdge( w, a, from, to, m );
 				}
 				else
 				{
@@ -253,16 +271,18 @@ public class PrepareRegionMergingCutBlocks
 					if ( !in2.counts.contains( to ) )
 						in2.counts.put( to, o.counts.get( to ) );
 
-					edges.get( r1 ).add( w, a, from, to, m );
-					edges.get( r2 ).add( w, a, from, to, m );
+					in1.g.addEdge( w, a, from, to, m );
+					in2.g.addEdge( w, a, from, to, m );
 
 					if ( !in1.borderNodes.contains( from ) )
 						in1.borderNodes.put( from, new TLongHashSet() );
 					in1.borderNodes.get( from ).add( r2 );
+					in1.outsideNodes.put( to, r2 );
 
 					if ( !in2.borderNodes.contains( to ) )
 						in2.borderNodes.put( to, new TLongHashSet() );
 					in2.borderNodes.get( to ).add( r1 );
+					in1.outsideNodes.put( from, r1 );
 				}
 			}
 
@@ -287,7 +307,7 @@ public class PrepareRegionMergingCutBlocks
 
 				in.borderNodes.get( from ).add( r2 );
 
-				edges.get( r1 ).add( w, a, from, to, m );
+				in.g.addEdge( w, a, from, to, m );
 
 			}
 

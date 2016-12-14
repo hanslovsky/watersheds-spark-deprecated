@@ -46,6 +46,11 @@ public class UndirectedGraph implements Serializable
 		return this.edges;
 	}
 
+	public EdgeMerger edgeMerger()
+	{
+		return this.edgeMerger;
+	}
+
 	public boolean addNode( final long id )
 	{
 		if ( nodeEdgeMap.contains( id ) )
@@ -58,8 +63,12 @@ public class UndirectedGraph implements Serializable
 
 	public int addEdge( final double weight, final double affinity, final long from, final long to, final long multiplicity )
 	{
-		if ( !nodeEdgeMap.contains( from ) || !nodeEdgeMap.contains( to ) )
-			return -1;
+		if ( !nodeEdgeMap.contains( from ) )
+			nodeEdgeMap.put( from, new TLongIntHashMap() );
+		if ( !nodeEdgeMap.contains( to ) )
+			nodeEdgeMap.put( to, new TLongIntHashMap() );
+//		if ( !nodeEdgeMap.contains( from ) || !nodeEdgeMap.contains( to ) )
+//			return -1;
 
 		final int newEdge = e1.add( weight, affinity, from, to, multiplicity );
 		nodeEdgeMap.get( from ).put( to, newEdge );
@@ -83,13 +92,13 @@ public class UndirectedGraph implements Serializable
 		return true;
 	}
 
-	public TLongIntHashMap contract( final int edge, final long newNode, final TLongLongHashMap counts )
+	public TLongIntHashMap contract(
+			final int edge,
+			final long newNode,
+			final TLongLongHashMap counts,
+			final Function f )
 	{
-		if ( nodeEdgeMap.contains( newNode ) )
-			return null;
-
 		final TLongIntHashMap edges = new TLongIntHashMap();
-		nodeEdgeMap.put( newNode, edges );
 
 		e1.setIndex( edge );
 		final long from = e1.from();
@@ -98,6 +107,9 @@ public class UndirectedGraph implements Serializable
 			return null;
 		e1.weight( -1.0 );
 
+		if ( newNode == 5711 )
+			System.out.println( "Contracting " + from + " and " + to + " into " + newNode );
+
 		updateEdges( from, newNode, edge, to, edges, this );
 		updateEdges( to, newNode, edge, from, edges, this );
 
@@ -105,8 +117,10 @@ public class UndirectedGraph implements Serializable
 		{
 			final int id = v.next();
 			e1.setIndex( id );
-			e1.weight( Math.min( counts.get( e1.from() ), counts.get( e1.to() ) ) / ( e1.affinity() * e1.affinity() ) );
+			e1.weight( f.weight( e1.affinity(), counts.get( e1.from() ), counts.get( e1.to() ) ) );
 		}
+
+		nodeEdgeMap.put( newNode, edges );
 
 		return edges;
 
@@ -120,16 +134,31 @@ public class UndirectedGraph implements Serializable
 			final TLongIntHashMap newEdges,
 			final UndirectedGraph g )
 	{
+//		System.out.println( String.format( "old=%d new=%d ignore=%d", oldIndex, newIndex, ignoreIndex ) );
+//		System.out.println( "Removing map at " + oldIndex );
 		final TLongIntHashMap edges = g.nodeEdgeMap.remove( oldIndex );
+
+		boolean was5711 = false;
 		for ( final TLongIntIterator it = edges.iterator(); it.hasNext(); )
 		{
 			it.advance();
 			final long otherIndex = it.key();
 			final int edgeIndex = it.value();
+
 			g.e2.setIndex( edgeIndex );
 
 			if ( otherIndex == ignoreIndex )
 				continue;
+
+			if ( otherIndex == 5711 )
+			{
+				was5711 = true;
+				final Edge e = new Edge( g.edges );
+				e.setIndex( edge );
+				System.out.println( "5711 involved: " + e.from() + " " + e.to() + " " + oldIndex + " " + ignoreIndex );
+				e.setIndex( edgeIndex );
+				System.out.println( "5711 involved: " + e.from() + " " + e.to() + " " + oldIndex + " " + newIndex + " " + ignoreIndex + " " + edge + " " + edgeIndex );
+			}
 
 			if ( newEdges.contains( otherIndex ) )
 			{
@@ -147,10 +176,18 @@ public class UndirectedGraph implements Serializable
 				g.nodeEdgeMap.get( otherIndex ).put( newIndex, newEdgeIndex );
 			}
 
-			g.nodeEdgeMap.get( otherIndex ).remove( oldIndex );
+			// TODO REMOVING INDEX -- SOMETHING GOES WRONG HERE!!!
+			// Because I don't use new indices. How to fix it? Don't remove
+			// oldIndex? Only later?
+//			g.nodeEdgeMap.get( otherIndex ).remove( oldIndex );
+			if ( oldIndex != newIndex )
+				g.nodeEdgeMap.get( otherIndex ).remove( oldIndex );
 			g.e2.weight( -1.0 );
 
 		}
+
+		if ( was5711 )
+			System.out.println();
 	}
 
 	public static TLongObjectHashMap< TLongIntHashMap > generateNodeEdgeMap( final TDoubleArrayList edges )
@@ -203,7 +240,7 @@ public class UndirectedGraph implements Serializable
 			System.out.println( e.weight() + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() );
 		}
 
-		g.contract( 0, 3, new TLongLongHashMap( 0, 0, -1, 1 ) );
+		g.contract( 0, 3, new TLongLongHashMap( 0, 0, -1, 1 ), new RegionMerging.CountOverSquaredSize() );
 		System.out.println( g.nodeEdgeMap() );
 		for ( int i = 0; i < e.size(); ++i )
 		{
