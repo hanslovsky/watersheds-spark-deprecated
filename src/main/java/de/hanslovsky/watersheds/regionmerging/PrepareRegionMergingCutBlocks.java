@@ -28,6 +28,7 @@ import gnu.trove.map.hash.TLongObjectHashMap;
 import gnu.trove.set.TLongSet;
 import gnu.trove.set.hash.TLongHashSet;
 import net.imglib2.Cursor;
+import net.imglib2.Point;
 import net.imglib2.RandomAccess;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.img.array.ArrayImg;
@@ -59,6 +60,14 @@ public class PrepareRegionMergingCutBlocks
 		final JavaPairRDD< HashableLongArray, GetInternalEdgesAndSplits.IntraBlockOutput > allEdges =
 				blocksWithLabelsAffinitiesAndCounts.mapToPair( new GetInternalEdgesAndSplits<>( blockDim.getValue(), edgeMerger, func, edgeCheck, idService ) );
 
+//		allEdges.map( t -> {
+//			System.out.println( Arrays.toString( t._1().getData() ) + " " + t._2().splitEdges.size() + " " + t._2().splitEdges );
+//			return true;
+//		} ).count();
+
+//		for ( final Tuple2< HashableLongArray, IntraBlockOutput > e : allEdges.collect() )
+//			System.out.println( Arrays.toString( e._1().getData() ) + " " + e._2().splitEdges.size() + " " + e._2().splitEdges );
+
 		final JavaPairRDD< HashableLongArray, GetExternalEdges.BlockOutput > interBlockEdges =
 				allEdges.mapToPair( new GetExternalEdges( blockDim, blockDim, edgeMerger ) ).cache();
 		interBlockEdges.count();
@@ -83,7 +92,7 @@ public class PrepareRegionMergingCutBlocks
 						e.weight( func.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
 					}
 					return t;
-				} );
+				} ).cache();
 
 		return new Tuple2<>( mergeBlocs, filteredNodeBlockAssignments );
 	}
@@ -230,6 +239,7 @@ public class PrepareRegionMergingCutBlocks
 
 			for ( final long id : o.blockIds ) {
 //				final In in = new MergeBloc.In( new UndirectedGraph( new TDoubleArrayList(), edgeMerger ), new TLongLongHashMap(), new TLongObjectHashMap<>() );
+				System.out.println( "Block id " + id );
 				final In in = new MergeBloc.In(
 						new UndirectedGraph( new TDoubleArrayList(), edgeMerger ),
 						new TLongLongHashMap(),
@@ -282,7 +292,7 @@ public class PrepareRegionMergingCutBlocks
 					if ( !in2.borderNodes.contains( to ) )
 						in2.borderNodes.put( to, new TLongHashSet() );
 					in2.borderNodes.get( to ).add( r1 );
-					in1.outsideNodes.put( from, r1 );
+					in2.outsideNodes.put( from, r1 ); // was in1.,outsideNodes
 				}
 			}
 
@@ -363,6 +373,8 @@ public class PrepareRegionMergingCutBlocks
 			final RealComposite< T > affinity = affinitiesCursor.next();
 			labelsAccess.setPosition( affinitiesCursor );
 			final long label = labelsAccess.get().get();
+			if ( label == 26 )
+				System.out.println( "WIR HABEN HIER LABEL 26! " + new Point( labelsAccess ) );
 			parents.put( label, label );
 			for ( int d = 0; d < blockDim.length; ++d )
 				if ( labelsAccess.getLongPosition( d ) < blockDim[ d ] - 1 )

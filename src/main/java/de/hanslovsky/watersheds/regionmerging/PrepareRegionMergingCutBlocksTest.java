@@ -29,11 +29,13 @@ import com.google.gson.JsonObject;
 
 import bdv.img.h5.H5Utils;
 import bdv.util.BdvFunctions;
+import bdv.util.BdvStackSource;
 import de.hanslovsky.watersheds.HashableLongArray;
 import de.hanslovsky.watersheds.InitialWatershedBlock;
 import de.hanslovsky.watersheds.NumElements;
 import de.hanslovsky.watersheds.OffsetLabels;
 import de.hanslovsky.watersheds.Util;
+import de.hanslovsky.watersheds.ValueDisplayListener;
 import de.hanslovsky.watersheds.graph.EdgeMerger;
 import de.hanslovsky.watersheds.graph.Function;
 import de.hanslovsky.watersheds.graph.IdServiceZMQ;
@@ -46,6 +48,7 @@ import de.hanslovsky.watersheds.io.ZMQFileWriterLongType;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
+import gnu.trove.set.hash.TLongHashSet;
 import net.imglib2.Cursor;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.converter.Converters;
@@ -55,6 +58,7 @@ import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.basictypeaccess.array.FloatArray;
 import net.imglib2.img.cell.CellImg;
 import net.imglib2.img.cell.CellImgFactory;
+import net.imglib2.interpolation.randomaccess.NearestNeighborInterpolatorFactory;
 import net.imglib2.type.numeric.ARGBType;
 import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.type.numeric.real.FloatType;
@@ -374,12 +378,13 @@ public class PrepareRegionMergingCutBlocksTest
 		final Function weightFunc = ( Function & Serializable ) ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a );
 		final Tuple2< JavaPairRDD< Long, In >, TLongLongHashMap > graphsAndBorderNodes = PrepareRegionMergingCutBlocks.run( sc, blocksRdd, sc.broadcast( dimsNoChannels ),
 				sc.broadcast( dimsIntervalNoChannels ), merger, weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() > 0.1, blockIdService );
-		final JavaPairRDD< Long, In > graphs = graphsAndBorderNodes._1();
+		final JavaPairRDD< Long, In > graphs = graphsAndBorderNodes._1().cache();
+		System.out.println( "KEY TWO: " + graphs.filter( ( t ) -> t._1().longValue() == 2 ).values().collect().get( 0 ).counts );
 		{
 			final Random rng = new Random();
 			final TLongIntHashMap colors = new TLongIntHashMap();
-			for ( final Long k : graphs.keys().collect() )
-				colors.put( k, rng.nextInt() );
+			for ( final Tuple2< Long, In > t : graphs.collect() )
+				colors.put( t._1(), rng.nextInt() );
 			final TLongLongHashMap nodeBlockMap = graphs.aggregate(
 					new TLongLongHashMap(),
 					( m, t ) -> {
@@ -399,12 +404,45 @@ public class PrepareRegionMergingCutBlocksTest
 					} );
 
 			final RandomAccessibleInterval< LongType > labelsTargetRAI = labelsTarget;
-			BdvFunctions.show( Converters.convert( labelsTargetRAI, ( s, t ) -> {
-				t.set( colors.get( nodeBlockMap.get( s.get() ) ) );
-			}, new ARGBType() ), "INITIAL BLOCKS " + graphs.count() + " " + graphs.collect() );
+			final RandomAccessibleInterval< LongType > blockLabels = Converters.convert( labelsTargetRAI, ( s, t ) -> {
+				t.set( nodeBlockMap.get( s.get() ) );
+			}, new LongType() );
+			final RandomAccessibleInterval< ARGBType > coloredBlockLabels = Converters.convert( blockLabels, ( s, t ) -> {
+				t.set( colors.get( s.get() ) );
+			}, new ARGBType() );
+			final BdvStackSource< ARGBType > bdv = BdvFunctions.show( coloredBlockLabels, "INITIAL BLOCKS " + graphs.count() );
+
+			ValueDisplayListener.addValueOverlay( Views.interpolate(
+					Views.extendValue( Views.addDimension( blockLabels, 0, 0 ), new LongType( -1 ) ),
+					new NearestNeighborInterpolatorFactory<>() ), bdv.getBdvHandle().getViewerPanel() );
+
 
 		}
 
+		final TLongHashSet relevant = new TLongHashSet( new long[] { 26 } );
+		System.out.println( relevant );
+
+		BdvFunctions.show( Converters.convert(
+				( RandomAccessibleInterval< LongType > ) labelsTarget,
+				( s, t ) -> {
+					t.set( relevant.contains( s.get() ) ? 255 << 16 : 0 << 8 );
+				},
+				new ARGBType() ), "RELEVANT" );
+
+		final TLongIntHashMap colors = new TLongIntHashMap();
+		final Random rng = new Random( 100 );
+		final RandomAccessibleInterval< ARGBType > coloredLabels = Converters.convert(
+				( RandomAccessibleInterval< LongType > ) labelsTarget,
+				( s, t ) -> {
+					if ( !colors.contains( s.get() ) )
+						colors.put( s.get(), rng.nextInt() );
+					t.set( colors.get( s.get() ) );
+				},
+				new ARGBType() );
+
+		final BdvStackSource< ARGBType > bdv = BdvFunctions.show( coloredLabels, "coloredLabels" );
+
+		ValueDisplayListener.addValueOverlay( Views.interpolate( Views.extendValue( Views.addDimension( labelsTarget, 0, 0 ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ), bdv.getBdvHandle().getViewerPanel() );
 
 
 		ctx.close();

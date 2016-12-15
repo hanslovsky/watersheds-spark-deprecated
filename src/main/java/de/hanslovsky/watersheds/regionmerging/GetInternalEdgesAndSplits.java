@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.apache.spark.api.java.function.PairFunction;
 
 import de.hanslovsky.watersheds.DisjointSetsHashMap;
+import de.hanslovsky.watersheds.HashableLongArray;
 import de.hanslovsky.watersheds.graph.Edge;
 import de.hanslovsky.watersheds.graph.EdgeMerger;
 import de.hanslovsky.watersheds.graph.Function;
@@ -139,7 +140,11 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 			if ( edgeCheck.isGoodEdge( e ) )
 				dj.join( dj.findRoot( e.from() ), dj.findRoot( e.to() ) );
 			else
+			{
 				splitEdges.add( i );
+				dj.findRoot( e.from() );
+				dj.findRoot( e.to() );
+			}
 		}
 
 		for ( final TIntIterator it = splitEdges.iterator(); it.hasNext(); )
@@ -147,6 +152,8 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 			e.setIndex( it.next() );
 			dj.findRoot( e.from() );
 			dj.findRoot( e.to() );
+			if ( Arrays.equals( new long[] { 0, 0 }, ( ( HashableLongArray ) t._1() ).getData() ) )
+				System.out.println( e.from() + " " + e.to() );
 		}
 
 		final TLongLongHashMap rootToGlobalId = new TLongLongHashMap();
@@ -180,6 +187,8 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 			}
 			else
 				block = rootToGlobalIdMapping.get( r );
+			if ( it.key() == 9 || it.key() == 1 )
+				System.out.println( "REGION BLOCK? " + it.key() + " " + r + " " + block + " " + dj.setCount() );
 			assignment.put( it.key(), block );
 		}
 
