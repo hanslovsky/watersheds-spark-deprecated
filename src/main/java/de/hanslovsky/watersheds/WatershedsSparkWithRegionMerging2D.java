@@ -411,9 +411,14 @@ public class WatershedsSparkWithRegionMerging2D
 					} );
 
 			final RandomAccessibleInterval< LongType > labelsTargetRAI = labelsTarget;
-			BdvFunctions.show( Converters.convert( labelsTargetRAI, ( s, t ) -> {
-				t.set( colors.get( nodeBlockMap.get( s.get() ) ) );
-			}, new ARGBType() ), "INITIAL BLOCKS " + graphs.count() );
+			final RandomAccessibleInterval< LongType > initialBlocks = Converters.convert( labelsTargetRAI, ( s, t ) -> {
+				t.set( nodeBlockMap.get( s.get() ) );
+			}, new LongType() );
+			final RandomAccessibleInterval< ARGBType > coloredInitialBlocks = Converters.convert( initialBlocks, (s,t ) -> {
+				t.set( colors.get( s.get() ) ); }, new ARGBType() );
+			final BdvStackSource< ARGBType > bdv = BdvFunctions.show( coloredInitialBlocks, "INITIAL BLOCKS " + graphs.count() );
+			ValueDisplayListener.addValueOverlay( Views.interpolate( Views.extendValue(
+					Views.addDimension( initialBlocks, 0, 0 ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ), bdv.getBdvHandle().getViewerPanel() );
 
 		}
 

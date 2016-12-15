@@ -28,7 +28,6 @@ import gnu.trove.map.hash.TLongObjectHashMap;
 import gnu.trove.set.TLongSet;
 import gnu.trove.set.hash.TLongHashSet;
 import net.imglib2.Cursor;
-import net.imglib2.Point;
 import net.imglib2.RandomAccess;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.img.array.ArrayImg;
@@ -60,16 +59,9 @@ public class PrepareRegionMergingCutBlocks
 		final JavaPairRDD< HashableLongArray, GetInternalEdgesAndSplits.IntraBlockOutput > allEdges =
 				blocksWithLabelsAffinitiesAndCounts.mapToPair( new GetInternalEdgesAndSplits<>( blockDim.getValue(), edgeMerger, func, edgeCheck, idService ) );
 
-//		allEdges.map( t -> {
-//			System.out.println( Arrays.toString( t._1().getData() ) + " " + t._2().splitEdges.size() + " " + t._2().splitEdges );
-//			return true;
-//		} ).count();
-
-//		for ( final Tuple2< HashableLongArray, IntraBlockOutput > e : allEdges.collect() )
-//			System.out.println( Arrays.toString( e._1().getData() ) + " " + e._2().splitEdges.size() + " " + e._2().splitEdges );
 
 		final JavaPairRDD< HashableLongArray, GetExternalEdges.BlockOutput > interBlockEdges =
-				allEdges.mapToPair( new GetExternalEdges( blockDim, blockDim, edgeMerger ) ).cache();
+				allEdges.mapToPair( new GetExternalEdges( blockDim, dim, edgeMerger ) ).cache();
 		interBlockEdges.count();
 
 		final TLongLongHashMap filteredNodeBlockAssignments = interBlockEdges
@@ -165,6 +157,7 @@ public class PrepareRegionMergingCutBlocks
 			final long[] extendedAffinitiesBlockDim = getAffinityDims( extendedBlockDim );
 			final long[] offset = new long[ blockDim.length ];
 			Arrays.fill( offset, 1 );
+			// TODO numBlock By Dimensions is [1, 1] which is wrong. WHY?
 			final long[] numBlocksByDimension = new long[ blockDim.length ];
 			final long[] pos = t._1().getData();
 			for ( int d = 0; d < blockDim.length; ++d )
@@ -208,7 +201,9 @@ public class PrepareRegionMergingCutBlocks
 			}
 			final TLongLongHashMap nodesToBlockFiltered = filterBlockAssignments( o.nodeBlockAssignment, borderNodesToOutsideNodes.keySet() );
 
-			return new Tuple2<>( t._1(), new BlockOutput( o.counts, o.g, o.nodeBlockAssignment, nodesToBlockFiltered, o.splitEdges, borderNodesToOutsideNodes, o.blockIds, numberOfInternalEdges ) );
+			return new Tuple2<>(
+					t._1(),
+					new BlockOutput( o.counts, o.g, o.nodeBlockAssignment, nodesToBlockFiltered, o.splitEdges, borderNodesToOutsideNodes, o.blockIds, numberOfInternalEdges ) );
 		}
 
 	}
@@ -238,8 +233,6 @@ public class PrepareRegionMergingCutBlocks
 //			final TLongObjectHashMap< Edge > edges = new TLongObjectHashMap<>();
 
 			for ( final long id : o.blockIds ) {
-//				final In in = new MergeBloc.In( new UndirectedGraph( new TDoubleArrayList(), edgeMerger ), new TLongLongHashMap(), new TLongObjectHashMap<>() );
-				System.out.println( "Block id " + id );
 				final In in = new MergeBloc.In(
 						new UndirectedGraph( new TDoubleArrayList(), edgeMerger ),
 						new TLongLongHashMap(),
@@ -305,19 +298,36 @@ public class PrepareRegionMergingCutBlocks
 				final long to = e.to(); // outer
 				final long m = e.multiplicity();
 
-				final long r1 = o.nodeBlockAssignment.get( from );
-				final long r2 = nodeBlockMapping.get( to );
+				final long n1, n2;
+				if ( o.nodeBlockAssignment.contains( from ) )
+				{
+					n1 = from;
+					n2 = to;
+				} else
+				{
+					n1 = to;
+					n2 = from;
+				}
+
+				final long r1 = o.nodeBlockAssignment.get( n1 );
+				final long r2 = nodeBlockMapping.get( n2 );
 				final In in = regionMergingInput.get( r1 );
 
-				if ( !in.counts.contains( from ) )
-					in.counts.put( from, o.counts.get( from ) );
+				if ( !in.counts.contains( n1 ) )
+					in.counts.put( n1, o.counts.get( n1 ) );
 
-				if ( !in.borderNodes.contains( from ) )
-					in.borderNodes.put( from, new TLongHashSet() );
+				if ( !in.counts.contains( n2 ) )
+					in.counts.put( n2, o.counts.get( n2 ) );
 
-				in.borderNodes.get( from ).add( r2 );
+				if ( !in.borderNodes.contains( n1 ) )
+					in.borderNodes.put( n1, new TLongHashSet() );
+
+				in.borderNodes.get( n1 ).add( r2 );
 
 				in.g.addEdge( w, a, from, to, m );
+
+				if ( !in.outsideNodes.contains( n2 ) )
+					in.outsideNodes.put( n2, r2 );
 
 			}
 
@@ -373,8 +383,6 @@ public class PrepareRegionMergingCutBlocks
 			final RealComposite< T > affinity = affinitiesCursor.next();
 			labelsAccess.setPosition( affinitiesCursor );
 			final long label = labelsAccess.get().get();
-			if ( label == 26 )
-				System.out.println( "WIR HABEN HIER LABEL 26! " + new Point( labelsAccess ) );
 			parents.put( label, label );
 			for ( int d = 0; d < blockDim.length; ++d )
 				if ( labelsAccess.getLongPosition( d ) < blockDim[ d ] - 1 )
@@ -453,6 +461,7 @@ public class PrepareRegionMergingCutBlocks
 			final long label = iC.next().get();
 			final long otherLabel = oC.next().get();
 			final RealComposite< T > affs = aC.next();
+			// TODO this check seems unnecessary
 			if ( label != otherLabel )
 			{
 				final double aff = affs.get( d ).getRealDouble();

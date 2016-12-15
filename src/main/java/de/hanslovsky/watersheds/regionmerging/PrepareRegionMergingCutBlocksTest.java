@@ -15,6 +15,7 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.broadcast.Broadcast;
@@ -46,6 +47,7 @@ import de.hanslovsky.watersheds.io.LabelsChunkWriter;
 import de.hanslovsky.watersheds.io.ZMQFileOpenerFloatType;
 import de.hanslovsky.watersheds.io.ZMQFileWriterLongType;
 import gnu.trove.iterator.TLongIterator;
+import gnu.trove.iterator.TLongObjectIterator;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
 import gnu.trove.set.hash.TLongHashSet;
@@ -376,8 +378,9 @@ public class PrepareRegionMergingCutBlocksTest
 				sc.parallelizePairs( blocks ).cache();
 		final EdgeMerger merger = MergeBloc.DEFAULT_EDGE_MERGER;
 		final Function weightFunc = ( Function & Serializable ) ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a );
-		final Tuple2< JavaPairRDD< Long, In >, TLongLongHashMap > graphsAndBorderNodes = PrepareRegionMergingCutBlocks.run( sc, blocksRdd, sc.broadcast( dimsNoChannels ),
-				sc.broadcast( dimsIntervalNoChannels ), merger, weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() > 0.1, blockIdService );
+		final Tuple2< JavaPairRDD< Long, In >, TLongLongHashMap > graphsAndBorderNodes =
+				PrepareRegionMergingCutBlocks.run( sc, blocksRdd, sc.broadcast( dimsNoChannels ),
+						sc.broadcast( dimsIntervalNoChannels ), merger, weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() > 0.5, blockIdService );
 		final JavaPairRDD< Long, In > graphs = graphsAndBorderNodes._1().cache();
 		System.out.println( "KEY TWO: " + graphs.filter( ( t ) -> t._1().longValue() == 2 ).values().collect().get( 0 ).counts );
 		{
@@ -444,10 +447,47 @@ public class PrepareRegionMergingCutBlocksTest
 
 		ValueDisplayListener.addValueOverlay( Views.interpolate( Views.extendValue( Views.addDimension( labelsTarget, 0, 0 ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ), bdv.getBdvHandle().getViewerPanel() );
 
+		final JavaRDD< In > blockContaining5711 =
+				graphs.filter( t -> t._2().counts.contains( 5711 ) && !t._2().outsideNodes.contains( 5711 ) ).values();
+		final In data5711 = blockContaining5711.collect().get( 0 );
 
-		ctx.close();
+		final TLongIntHashMap cmap = new TLongIntHashMap();
+		final Random rg = new Random( 100 );
+		final BdvStackSource< ARGBType > bv = BdvFunctions.show(
+				Converters.convert(
+						( RandomAccessibleInterval< LongType > ) labelsTarget,
+						( s, t ) -> {
+							final long sv = s.get();
+							if ( data5711.counts.contains( sv ) )
+							{
+								if ( data5711.outsideNodes.contains( sv ) )
+									t.set( 80 << 16 | 80 << 8 | 80 << 0 );
+								else if ( data5711.borderNodes.contains( sv ) )
+									t.set( 160 << 16 | 160 << 8 | 160 << 0 );
+								else
+								{
+									if ( !cmap.contains( sv ) )
+										cmap.put( sv, rg.nextInt() );
+									t.set( cmap.get( sv ) );
+								}
+							}
+							else if ( data5711.outsideNodes.contains( sv ) )
+								t.set( 80 << 16 | 80 << 8 | 80 << 0 );
+							else
+								t.set( 0 );
+						},
+						new ARGBType() ),
+				"b386 " + data5711.outsideNodes.size() + " " + data5711.borderNodes.size() );
+
+		for ( final TLongObjectIterator< TLongHashSet > it = data5711.borderNodes.iterator(); it.hasNext(); )
+		{
+			it.advance();
+			System.out.println( it.key() + " " + it.value() );
+		}
 
 		sc.close();
+
+		ctx.close();
 
 
 

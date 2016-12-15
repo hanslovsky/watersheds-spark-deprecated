@@ -3,6 +3,7 @@ package de.hanslovsky.watersheds.graph;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.log4j.Level;
@@ -18,6 +19,7 @@ import org.zeromq.ZMQ.Context;
 import org.zeromq.ZMQ.Socket;
 
 import bdv.util.BdvFunctions;
+import bdv.util.BdvOptions;
 import bdv.util.BdvStackSource;
 import de.hanslovsky.watersheds.DisjointSetsHashMap;
 import de.hanslovsky.watersheds.graph.MergeBloc.In;
@@ -99,9 +101,56 @@ public class RegionMerging
 			System.out.println( "Ham wir das? " + mergedEdges.filter( t -> t._2().g.nodeEdgeMap().contains( 5711 ) ).count() );
 //			System.out.println( mergedEdges.filter( t -> t._2().g.nodeEdgeMap().contains( 5711 ) ).collect().get( 0 )._1() );
 			mergedEdges.filter( t -> t._2().g.nodeEdgeMap().contains( 5711 ) ).map( t -> {
-				System.out.println( "NEM " + t._2().g.nodeEdgeMap().get( 5676 ) + " " + t._2().g.nodeEdgeMap().get( 5711 ) );
+				System.out.println( "NEM " + t._1() + " " + t._2().g.nodeEdgeMap().get( 5676 ) + " " + t._2().g.nodeEdgeMap().get( 5711 ) );
 				return true;
 			} ).count();
+
+			final JavaPairRDD< Tuple2< Long, Long >, Out > b386 = mergedEdges.filter( t -> t._2().g.nodeEdgeMap().contains( 5711 ) );
+			final Out data = b386.values().collect().get( 0 );
+			final TLongIntHashMap cmap = new TLongIntHashMap();
+			final Random rg = new Random( 100 );
+			final BdvStackSource< ARGBType > bv = BdvFunctions.show(
+					Converters.convert(
+							labelsTarget,
+							( s, t ) -> {
+								final long sv = s.get();
+								if ( data.assignments.contains( sv ) )
+								{
+									if ( data.outsideNodes.contains( sv ) )
+										t.set( 125 << 16 | 125 << 8 | 125 << 0 );
+									else
+									{
+										if ( !cmap.contains( sv ) )
+											cmap.put( sv, rg.nextInt() );
+										t.set( cmap.get( sv ) );
+									}
+								}
+								else
+									t.set( 0 );
+							},
+							new ARGBType() ),
+					"b386" );
+			BdvFunctions.show(
+					Converters.convert(
+							labelsTarget,
+							( s, t ) -> {
+								final long sv = s.get();
+								if ( data.assignments.contains( sv ) )
+								{
+									if ( !data.outsideNodes.contains( sv ) )
+										t.set( 125 << 16 | 125 << 8 | 125 << 0 );
+									else
+									{
+										if ( !cmap.contains( sv ) )
+											cmap.put( sv, rg.nextInt() );
+										t.set( cmap.get( sv ) );
+									}
+								}
+								else
+									t.set( 0 );
+							},
+							new ARGBType() ),
+					"b386v2", BdvOptions.options().addTo( bv ) );
 
 			final long count = mergedEdges.filter( t -> {
 				for ( final TLongObjectIterator< TLongIntHashMap > it = t._2().g.nodeEdgeMap().iterator(); it.hasNext(); )
@@ -113,7 +162,7 @@ public class RegionMerging
 				return false;
 			} )
 					.map( t -> {
-						System.out.println( "NET OKE " + t._1() );
+//						System.out.println( "NET OKE " + t._1() );
 						return t;
 					} )
 					.count();
@@ -148,16 +197,16 @@ public class RegionMerging
 					t.set( mapping.get( s.get() ) == 5711 ? 255 << 16 : 255 << 8 );
 				}, new ARGBType() ), "okee" );
 				System.out.print( "MISSST EY! " + count + "/" + mergedEdges.count() );
-				try
-				{
-					Thread.sleep( ( long ) 1e9 );
-				}
-				catch ( final InterruptedException e )
-				{
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-				System.exit( 123 );
+//				try
+//				{
+//					Thread.sleep( ( long ) 1e9 );
+//				}
+//				catch ( final InterruptedException e )
+//				{
+//					// TODO Auto-generated catch block
+//					e.printStackTrace();
+//				}
+//				System.exit( 123 );
 			}
 
 			final List< Tuple2< Long, Long > > mergers = mergedEdges.keys().collect();
@@ -468,7 +517,7 @@ public class RegionMerging
 			// need r1 or id1 here?
 			final TLongIntHashMap edges = nodeEdgeMap.get( r1 );
 
-			System.out.println( id1 + " " + r1 + " " + edges );
+			System.out.println( id1 + " " + r1 + " " + assignments.contains( id1 ) + " " + edges );
 			if ( edges == null )
 				System.out.println( "WAS IST DA LOS?" );
 			for ( final TLongIntIterator eIt = edges.iterator(); eIt.hasNext(); )
