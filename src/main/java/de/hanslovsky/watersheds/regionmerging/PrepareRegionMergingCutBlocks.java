@@ -82,6 +82,8 @@ public class PrepareRegionMergingCutBlocks
 					{
 						e.setIndex( i );
 						e.weight( func.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
+						if ( !counts.contains( e.from()  ) || !counts.contains( e.to()  ) )
+							throw new RuntimeException( "No counts for " + e.from() + " or " + e.to() + " " + counts.get( e.from() )  + " " + counts.get( e.to() ) );
 					}
 					return t;
 				} ).cache();
@@ -268,9 +270,15 @@ public class PrepareRegionMergingCutBlocks
 				else
 				{
 					final In in1 = regionMergingInput.get( r1 );
+
 					if ( !in1.counts.contains( from ) )
 						in1.counts.put( from, o.counts.get( from ) );
+					if ( !in1.counts.contains( to ) )
+						in1.counts.put( to, o.counts.get( to ) );
+
 					final In in2 = regionMergingInput.get( r2 );
+					if ( !in2.counts.contains( from ) )
+						in2.counts.put( from, o.counts.get( from ) );
 					if ( !in2.counts.contains( to ) )
 						in2.counts.put( to, o.counts.get( to ) );
 

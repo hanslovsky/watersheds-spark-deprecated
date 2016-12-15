@@ -228,7 +228,6 @@ public class MergeBloc
 			for ( int i = 0; i < e.size(); ++i )
 			{
 				e.setIndex( i );
-//				System.out.println( "Enqueueing edge with " + e.weight() + " " + e.affinity() + " " + e.from() + " " + e.to() );
 				queue.enqueue( i );
 			}
 
@@ -326,13 +325,6 @@ public class MergeBloc
 					final long c2 = in.counts.remove( r2 );// to );
 					final long cn = c1 + c2;
 					in.counts.put( n, cn );
-					if ( n == 5711 )
-					{
-						System.out.println( next + " " + n + " " + e.from() + " " + e.to() );
-						System.out.println( g.nodeEdgeMap().get( e.from() ) + " " + g.nodeEdgeMap().get( e.to() ) );
-						System.out.println( in.borderNodes.get( n ) );
-						System.out.println();
-					}
 					final TLongIntHashMap newEdges = g.contract( next, n, in.counts, f );
 
 					if ( newEdges == null )
@@ -355,9 +347,6 @@ public class MergeBloc
 //						if ( e.weight() < threshold )
 						queue.enqueue( id );
 					}
-//					assignments.put( from, n );
-//					assignments.put( to, n );
-//					assignments.put( n, n );
 					mergerService.addMerge( from, to, n, w );
 
 				}
@@ -380,20 +369,6 @@ public class MergeBloc
 			{
 				final long nxt = k.next();
 				final long r = dj.findRoot( nxt );
-//				if ( !g.nodeEdgeMap().contains( r ) )
-//					System.out.println( "Node edge map does not contain root region " + r + " (" + nxt + ")" );
-//				if ( !g.nodeEdgeMap().contains( nxt ) )
-//					System.out.println( "Node edge map does not contain initial region " + nxt + " (" + r + ")" );
-			}
-
-			if ( g.nodeEdgeMap().contains( 5711 ) )
-			{
-				System.out.println( "WO IST DAS DENN JETZT?" + " " + assignments.contains( 5711 ) );
-				System.out.println( assignments.get( 5676 ) );
-				System.out.println( assignments.get( 5711 ) );
-				System.out.println( g.nodeEdgeMap().get( 5676 ) );
-				System.out.println( g.nodeEdgeMap().get( 5711 ) );
-//				System.exit( 143 );
 			}
 
 			final Out result = new Out(

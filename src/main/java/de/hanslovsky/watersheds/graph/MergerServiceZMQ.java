@@ -45,7 +45,6 @@ public class MergerServiceZMQ implements MergerService, Serializable
 		bb.putLong( n2 );
 		bb.putLong( n );
 		bb.putDouble( w );
-//		System.out.println( "Sending msg " + bytes );
 		socket.send( bytes, 0 );
 		socket.close();
 		ctx.close();

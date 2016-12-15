@@ -47,6 +47,7 @@ import de.hanslovsky.watersheds.io.ZMQFileOpenerFloatType;
 import de.hanslovsky.watersheds.io.ZMQFileWriterLongType;
 import de.hanslovsky.watersheds.regionmerging.EdgeCheck;
 import de.hanslovsky.watersheds.regionmerging.PrepareRegionMergingCutBlocks;
+import gnu.trove.iterator.TLongIntIterator;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.list.array.TLongArrayList;
@@ -457,7 +458,10 @@ public class WatershedsSparkWithRegionMerging2D
 		final Thread mergerThread = MergerServiceZMQ.createServerThread( mergerSocket, ( n1, n2, n, w ) -> {
 			action1.add( n1, n2, n, w );
 			action2.add( n1, n2, n, w );
-			colorMap.put( n, colorMap.get( n1 ) );
+			synchronized ( colorMap )
+			{
+				colorMap.put( n, colorMap.contains( n1 ) ? colorMap.get( n1 ) : colorMap.get( n2 ) );
+			}
 		} );
 		mergerThread.start();
 		final IdServiceZMQ idService = new IdServiceZMQ( idAddr );
@@ -530,34 +534,36 @@ public class WatershedsSparkWithRegionMerging2D
 		for ( final TLongIterator kIt = mergedParents.keySet().iterator(); kIt.hasNext(); )
 			MergeBloc.findRoot( mergedParents, kIt.next() );
 
-		final TLongIntHashMap colors = new TLongIntHashMap();
 		final Random rng = new Random( 100 );
-		for ( final TLongLongIterator it = mergedParents.iterator(); it.hasNext(); )
-		{
-			it.advance();
-			final long r = it.value();
-			if ( colors.contains( r ) )
-			{
 
-			}
-			else
-				colors.put( r, rng.nextInt() );
-		}
+		final TLongLongHashMap parents = new TLongLongHashMap();
+		final DisjointSetsHashMap dj = new DisjointSetsHashMap( parents, new TLongLongHashMap(), 0 );
+		for ( int i = 0; i < merges.size(); i += 4 )
+			dj.join( dj.findRoot( merges.get( i ) ), merges.get( i+1 ) );
 
 		final TLongIntHashMap colorsMap = new TLongIntHashMap();
-		for ( final TLongLongIterator it = mergedParents.iterator(); it.hasNext(); )
+		for ( final TLongLongIterator it = parents.iterator(); it.hasNext(); )
 		{
 			it.advance();
-			colorsMap.put( it.key(), colors.get( it.value() ) );
+			if ( !colorsMap.contains( it.value() ) )
+				colorsMap.put( it.value(), rng.nextInt() );
 		}
 
 		final RandomAccessibleInterval< LongType > rooted = Converters.convert( ( RandomAccessibleInterval< LongType > ) labelsTarget, ( s, t ) -> {
-			t.set( mergedParents.contains( s.get() ) ? mergedParents.get( s.get() ) : s.get() );
+			t.set( parents.contains( s.get() ) ? parents.get( s.get() ) : s.get() );
 		}, new LongType() );
 
-		final RandomAccessibleInterval< ARGBType > colored = Converters.convert( ( RandomAccessibleInterval< LongType > ) labelsTarget, ( s, t ) -> {
+		final RandomAccessibleInterval< ARGBType > colored = Converters.convert( rooted, ( s, t ) -> {
 			t.set( colorsMap.get( s.get() ) );
 		}, new ARGBType() );
+
+		System.out.println( "Printing cmap: " + colorsMap.size() + " " + merges.size() );
+		for ( final TLongIntIterator it = colorsMap.iterator(); it.hasNext(); )
+		{
+			it.advance();
+			System.out.println( "cmap " + it.key() + " " + it.value() );
+		}
+		System.out.println( "Done printing cmap!" );
 
 		final BdvStackSource< ARGBType > bdv = BdvFunctions.show( colored, "colored" );
 		BdvFunctions.show( Converters.convert(

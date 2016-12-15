@@ -47,6 +47,7 @@ import de.hanslovsky.watersheds.io.ZMQFileOpenerFloatType;
 import de.hanslovsky.watersheds.io.ZMQFileWriterLongType;
 import de.hanslovsky.watersheds.regionmerging.EdgeCheck;
 import de.hanslovsky.watersheds.regionmerging.PrepareRegionMergingCutBlocks;
+import gnu.trove.iterator.TLongIntIterator;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.list.array.TLongArrayList;
@@ -274,7 +275,6 @@ public class WatershedsSparkWithRegionMerging2DTwelveByTwelve
 					else if ( n > M )
 						M = n;
 				}
-//				System.out.println( "Got min=" + m + ", max=" + M + " for " + Arrays.toString( min ) + " " + Arrays.toString( max ) + " has background: " + hasZero );
 				labelsTargetListener.send( "" );
 			}
 		} );
@@ -285,16 +285,6 @@ public class WatershedsSparkWithRegionMerging2DTwelveByTwelve
 				.cache();
 
 		final TLongLongHashMap counts = new TLongLongHashMap();
-//		offsetLabelsWithCounts.map( t -> {
-////			System.out.println( t );
-//			if ( t == null )
-//				throw new RuntimeException( t + " is null!" );
-//			else if ( t._1() == null )
-//				throw new RuntimeException( "t._1() is null!" );
-//			else if ( t._2() == null )
-//				throw new RuntimeException( "t._2() is null!" );
-//			return true;
-//		} ).count();
 		for ( final TLongLongHashMap m : offsetLabelsWithCounts.values().mapToPair( t -> t ).values().collect() )
 			counts.putAll( m );
 
@@ -532,6 +522,12 @@ public class WatershedsSparkWithRegionMerging2DTwelveByTwelve
 		final RandomAccessibleInterval< LongType > rooted = Converters.convert( ( RandomAccessibleInterval< LongType > ) labelsTarget, ( s, t ) -> {
 			t.set( mergedParents.contains( s.get() ) ? mergedParents.get( s.get() ) : s.get() );
 		}, new LongType() );
+
+		for ( final TLongIntIterator it = colorsMap.iterator(); it.hasNext(); )
+		{
+			it.advance();
+			System.out.println( "cmap: " + it.key() + " " + it.value() );
+		}
 
 		final RandomAccessibleInterval< ARGBType > colored = Converters.convert( ( RandomAccessibleInterval< LongType > ) labelsTarget, ( s, t ) -> {
 			t.set( colorsMap.get( s.get() ) );

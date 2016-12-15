@@ -93,13 +93,7 @@ public class RegionMerging
 					.mapToPair( new MergeBloc.MergeBlocPairFunction2( f, merger, threshold, idService, mergerService ) )
 					.cache();
 
-//			if ( mergedEdges.filter( t -> t._2().g.nodeEdgeMap().contains( 5711 ) ).count() <= 0 )
-//			{
-//				System.out.println( "WARUM FEHLT DAS ASSIGNMENT HIER?" );
-//				System.exit( 631 );
-//			}
 			System.out.println( "Ham wir das? " + mergedEdges.filter( t -> t._2().g.nodeEdgeMap().contains( 5711 ) ).count() );
-//			System.out.println( mergedEdges.filter( t -> t._2().g.nodeEdgeMap().contains( 5711 ) ).collect().get( 0 )._1() );
 			mergedEdges.filter( t -> t._2().g.nodeEdgeMap().contains( 5711 ) ).map( t -> {
 				System.out.println( "NEM " + t._1() + " " + t._2().g.nodeEdgeMap().get( 5676 ) + " " + t._2().g.nodeEdgeMap().get( 5711 ) );
 				return true;
@@ -402,9 +396,6 @@ public class RegionMerging
 			addOutside( outsideNodes, md1.outsideNodes, r, parents );
 			addOutside( outsideNodes, md2.outsideNodes, r, parents );
 
-			if ( assignments.contains( 5676 ) )
-				System.out.println( "IS CONTAINED MAN!" );
-
 			return new Tuple2<>(
 					mdWithKey1._1(),
 					new MergeByKey.MergeData( edges, counts, borderNodes, assignments, md1.mergedBorderNodes, outsideNodes ) );
@@ -445,7 +436,6 @@ public class RegionMerging
 			addBorderNodes( t._2().borderNodes, borderNodes, t._1(), parents.getValue(), assignments );
 			final UndirectedGraph g = new UndirectedGraph( edges, edgeMerger );
 
-			System.out.println( "AMK " + t._1() + " " + parents.getValue().get( t._1() ) );
 			final TLongObjectHashMap< TLongObjectHashMap< TIntHashSet > > updateEdges =
 					collectUpdateEdges( g, candidates, assignments, borderNodes );
 
@@ -550,7 +540,7 @@ public class RegionMerging
 			it.advance();
 			final long k = it.key();
 			if ( !outsideNodes.contains( k ) )
-				source.put( k, it.value() );
+				target.put( k, it.value() );
 		}
 	}
 
