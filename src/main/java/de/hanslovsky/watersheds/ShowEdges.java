@@ -6,8 +6,8 @@ import org.scijava.ui.behaviour.InputTriggerAdder;
 import org.scijava.ui.behaviour.InputTriggerMap;
 import org.scijava.ui.behaviour.ScrollBehaviour;
 import org.scijava.ui.behaviour.io.InputTriggerConfig;
+import org.scijava.ui.behaviour.util.TriggerBehaviourBindings;
 
-import bdv.viewer.TriggerBehaviourBindings;
 import bdv.viewer.ViewerPanel;
 import net.imglib2.algorithm.morphology.watershed.AffinityWatershedBlocked.WeightedEdge;
 
