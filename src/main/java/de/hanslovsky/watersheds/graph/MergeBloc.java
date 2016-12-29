@@ -272,7 +272,8 @@ public class MergeBloc
 				}
 				else if ( in.outsideNodes.contains( to ) )
 				{
-					if ( !outsideNodeIsInvolved ) {
+					if ( !outsideNodeIsInvolved )
+					{
 						outsideNodeIsInvolved = true;
 						involvedOutsideBlock = in.outsideNodes.get( to );
 						maxWeightBeforeMerge = w;
@@ -293,7 +294,6 @@ public class MergeBloc
 //						System.out.println( t._1() + " SOMETHING WRONG WITH TO! " + to );
 //						System.exit( 456 );
 //					}
-//					System.out.println( "Merging: " + t._1() + ": " + next + " .. " + w + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() + " " + threshold );
 					final long r1 = dj.findRoot( from );
 					final long r2 = dj.findRoot( to );
 					if ( r1 == r2 || r1 != from || r2 != to )
@@ -319,7 +319,6 @@ public class MergeBloc
 							in.borderNodes.put( n, in.borderNodes.get( to ) );
 						mergedBorderNodes.add( to );
 					}
-
 
 					final long c1 = in.counts.remove( r1 );// from );
 					final long c2 = in.counts.remove( r2 );// to );

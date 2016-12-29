@@ -3,7 +3,6 @@ package de.hanslovsky.watersheds.graph;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.log4j.Level;
@@ -18,12 +17,10 @@ import org.zeromq.ZMQ;
 import org.zeromq.ZMQ.Context;
 import org.zeromq.ZMQ.Socket;
 
-import bdv.util.BdvFunctions;
-import bdv.util.BdvOptions;
-import bdv.util.BdvStackSource;
 import de.hanslovsky.watersheds.DisjointSetsHashMap;
 import de.hanslovsky.watersheds.graph.MergeBloc.In;
 import de.hanslovsky.watersheds.graph.MergeBloc.Out;
+import de.hanslovsky.watersheds.graph.RegionMerging.MergeByKey.MergeData;
 import gnu.trove.iterator.TIntIterator;
 import gnu.trove.iterator.TLongIntIterator;
 import gnu.trove.iterator.TLongIterator;
@@ -38,8 +35,6 @@ import gnu.trove.set.TLongSet;
 import gnu.trove.set.hash.TIntHashSet;
 import gnu.trove.set.hash.TLongHashSet;
 import net.imglib2.RandomAccessibleInterval;
-import net.imglib2.converter.Converters;
-import net.imglib2.type.numeric.ARGBType;
 import net.imglib2.type.numeric.integer.LongType;
 import scala.Tuple2;
 
@@ -85,123 +80,44 @@ public class RegionMerging
 
 		JavaPairRDD< Long, MergeBloc.In > rdd = rddIn;
 
-		for ( boolean hasChanged = true; hasChanged; )
+
+		int iteration = 0;
+		final long label = 5711;// 3693; // was 5711
+		final int targetIteration = 0;
+		for ( boolean hasChanged = true; hasChanged; ++iteration )
 		{
+
+			if ( iteration == targetIteration )
+			{
+				final List< Tuple2< Long, In > > initialSelection = rdd.filter( t -> t._2().g.nodeEdgeMap().contains( label ) ).collect();
+				if ( initialSelection.size() > 0 )
+				{
+					final In gr = initialSelection.get( 0 )._2();
+					final TLongObjectHashMap< TLongIntHashMap > nem = gr.g.nodeEdgeMap();
+					final TLongLongHashMap assgn = new TLongLongHashMap();
+					for ( final TLongIterator it = nem.keySet().iterator(); it.hasNext(); )
+					{
+						final long k = it.next();
+						assgn.put( k, k );
+					}
+//					VisTools.show( assgn, gr.outsideNodes, labelsTarget, "init1", "init2" );
+				}
+			}
 
 			final JavaPairRDD< Tuple2< Long, Long >, Out > mergedEdges =
 					rdd
 					.mapToPair( new MergeBloc.MergeBlocPairFunction2( f, merger, threshold, idService, mergerService ) )
 					.cache();
 
-			System.out.println( "Ham wir das? " + mergedEdges.filter( t -> t._2().g.nodeEdgeMap().contains( 5711 ) ).count() );
-			mergedEdges.filter( t -> t._2().g.nodeEdgeMap().contains( 5711 ) ).map( t -> {
-				System.out.println( "NEM " + t._1() + " " + t._2().g.nodeEdgeMap().get( 5676 ) + " " + t._2().g.nodeEdgeMap().get( 5711 ) );
+//			final JavaPairRDD< Tuple2< Long, Long >, Out > selection = iteration == targetIteration ? VisTools.showBlockSelectByNode( mergedEdges, labelsTarget, label ) : null;
+
+			System.out.println( "Ham wir das? " + mergedEdges.filter( t -> t._2().g.nodeEdgeMap().contains( label ) ).count() );
+			mergedEdges.filter( t -> t._2().g.nodeEdgeMap().contains( label ) ).map( t -> {
+				System.out.println( "NEM " + t._1() + " " + t._2().g.nodeEdgeMap().get( 5676 ) + " " + t._2().g.nodeEdgeMap().get( label ) );
 				return true;
 			} ).count();
 
-			final JavaPairRDD< Tuple2< Long, Long >, Out > b386 = mergedEdges.filter( t -> t._2().g.nodeEdgeMap().contains( 5711 ) );
-			final Out data = b386.values().collect().get( 0 );
-			final TLongIntHashMap cmap = new TLongIntHashMap();
-			final Random rg = new Random( 100 );
-			final BdvStackSource< ARGBType > bv = BdvFunctions.show(
-					Converters.convert(
-							labelsTarget,
-							( s, t ) -> {
-								final long sv = s.get();
-								if ( data.assignments.contains( sv ) )
-								{
-									if ( data.outsideNodes.contains( sv ) )
-										t.set( 125 << 16 | 125 << 8 | 125 << 0 );
-									else
-									{
-										if ( !cmap.contains( sv ) )
-											cmap.put( sv, rg.nextInt() );
-										t.set( cmap.get( sv ) );
-									}
-								}
-								else
-									t.set( 0 );
-							},
-							new ARGBType() ),
-					"b386" );
-			BdvFunctions.show(
-					Converters.convert(
-							labelsTarget,
-							( s, t ) -> {
-								final long sv = s.get();
-								if ( data.assignments.contains( sv ) )
-								{
-									if ( !data.outsideNodes.contains( sv ) )
-										t.set( 125 << 16 | 125 << 8 | 125 << 0 );
-									else
-									{
-										if ( !cmap.contains( sv ) )
-											cmap.put( sv, rg.nextInt() );
-										t.set( cmap.get( sv ) );
-									}
-								}
-								else
-									t.set( 0 );
-							},
-							new ARGBType() ),
-					"b386v2", BdvOptions.options().addTo( bv ) );
 
-			final long count = mergedEdges.filter( t -> {
-				for ( final TLongObjectIterator< TLongIntHashMap > it = t._2().g.nodeEdgeMap().iterator(); it.hasNext(); )
-				{
-					it.advance();
-					if ( it.value().size() == 0 )
-						return true;
-				}
-				return false;
-			} )
-					.map( t -> {
-//						System.out.println( "NET OKE " + t._1() );
-						return t;
-					} )
-					.count();
-			if ( count > 0 )
-			{
-				final BdvStackSource< ARGBType > bdv =
-						BdvFunctions.show( Converters.convert( labelsTarget, ( s, t ) -> {
-							t.set( s.get() == 5711 ? 255 << 8 : 255 << 16 );
-						}, new ARGBType() ), "5711" );
-				final TLongLongHashMap mapping = mergedEdges.values().aggregate(
-						new TLongLongHashMap(),
-						( m, o ) -> {
-							for ( final TLongLongIterator it = o.assignments.iterator(); it.hasNext(); )
-							{
-								it.advance();
-								final long k = it.key();
-								final long v = it.value();
-								if ( k != v )
-									m.put( k, v );
-								else if ( !m.contains( k ) )
-									m.put( k, v );
-							}
-							return m;
-						},
-						( m1, m2 ) -> {
-							final TLongLongHashMap m = new TLongLongHashMap();
-							m.putAll( m1 );
-							m.putAll( m2 );
-							return m;
-						} );
-				BdvFunctions.show( Converters.convert( labelsTarget, ( s, t ) -> {
-					t.set( mapping.get( s.get() ) == 5711 ? 255 << 16 : 255 << 8 );
-				}, new ARGBType() ), "okee" );
-				System.out.print( "MISSST EY! " + count + "/" + mergedEdges.count() );
-//				try
-//				{
-//					Thread.sleep( ( long ) 1e9 );
-//				}
-//				catch ( final InterruptedException e )
-//				{
-//					// TODO Auto-generated catch block
-//					e.printStackTrace();
-//				}
-//				System.exit( 123 );
-			}
 
 			final List< Tuple2< Long, Long > > mergers = mergedEdges.keys().collect();
 			boolean pointsOutside = false;
@@ -213,7 +129,6 @@ public class RegionMerging
 					pointsOutside = true;
 				final long r1 = dj.findRoot( index1 );
 				final long r2 = dj.findRoot( index2 );
-//				System.out.println( index1 + " " + index2 + " " + r1 + " " + r2 );
 				dj.join( r1, r2 );
 			}
 
@@ -223,11 +138,13 @@ public class RegionMerging
 				dj.findRoot( it.next() );
 			final Broadcast< TLongLongHashMap > parentsBC = sc.broadcast( parents );
 
-			rdd = mergedEdges
+			final JavaPairRDD< Long, MergeData > merged = mergedEdges
 					.mapToPair( new SetKeyToRoot<>( parentsBC ) )
 					.mapToPair( t -> new Tuple2<>( t._1(), new Tuple2<>( t._2()._1(), new MergeByKey.MergeData( t._2()._2() ) ) ) )
 					.reduceByKey( new MergeByKey( parentsBC ) )
 					.mapToPair( new RemoveFromValue<>() )
+					.cache();
+			rdd = merged
 					.mapToPair( new UpdateEdgesAndCounts( f, merger, parentsBC ) )
 					.cache();
 			rdd.count();
@@ -238,7 +155,33 @@ public class RegionMerging
 
 			visitor.visit( parents );
 
-			break;
+//			if ( iteration == targetIteration )
+//			{
+//				final long parentsKey = parents.get( selection.first()._1()._1() );
+//				final Tuple2< Long, MergeData > parentsSelection = merged.filter( t -> t._1().longValue() == parentsKey ).first();
+//				if ( parentsSelection != null )
+//				{
+//					final MergeData gr = parentsSelection._2();
+////					System.out.println( "ASSIGNM " + gr.assignments );
+////					System.out.println( "OUTSIDE " + gr.outsideNodes );
+//					int count = 0;
+//					for ( final TLongLongIterator it = gr.assignments.iterator(); it.hasNext(); )
+//					{
+//						it.advance();
+//						if ( it.key() != it.value() )
+//							++count;
+//					}
+//					System.out.println( count + " regions point to different parent" );
+//					VisTools.show( gr.assignments, gr.outsideNodes, labelsTarget, "after 1", "after 2" );
+//				}
+//			}
+
+			System.out.println( "CNT: " + rdd.count() + " " + hasChanged );
+			if ( iteration > 1 )
+				break;
+
+//			if ( rdd.count() <= 1 )
+//				break;
 
 		}
 
@@ -393,8 +336,8 @@ public class RegionMerging
 			mergedBorderNodes.addAll( md2.mergedBorderNodes );
 
 			final TLongLongHashMap outsideNodes = new TLongLongHashMap();
-			addOutside( outsideNodes, md1.outsideNodes, r, parents );
-			addOutside( outsideNodes, md2.outsideNodes, r, parents );
+			addOutside( md1.outsideNodes, outsideNodes, r, parents );
+			addOutside( md2.outsideNodes, outsideNodes, r, parents );
 
 			return new Tuple2<>(
 					mdWithKey1._1(),
@@ -453,7 +396,9 @@ public class RegionMerging
 
 
 
-			final MergeBloc.In result = new MergeBloc.In( new UndirectedGraph( target.data(), edgeMerger ), counts, borderNodes, t._2().outsideNodes );
+			new UndirectedGraph( target.data(), edgeMerger );
+			System.out.println( t._1() + " " + target.size() + " (" + edges.size() + ") edges!" );
+			final MergeBloc.In result = new MergeBloc.In( g, counts, borderNodes, t._2().outsideNodes );
 
 			return new Tuple2<>( t._1(), result );
 		}
@@ -496,7 +441,6 @@ public class RegionMerging
 			final TLongObjectHashMap< TLongHashSet > borderNodes )
 	{
 		final TLongObjectHashMap< TLongObjectHashMap< TIntHashSet > > updateEdges = new TLongObjectHashMap<>();
-
 		final Edge e = new Edge( g.edges() );
 		final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap = g.nodeEdgeMap();
 
@@ -539,8 +483,16 @@ public class RegionMerging
 		{
 			it.advance();
 			final long k = it.key();
-			if ( !outsideNodes.contains( k ) )
-				target.put( k, it.value() );
+			final long v = it.value();
+			// TODO wrong logic here! cannot use outsideNodes
+//			if ( !outsideNodes.contains( k ) )
+			if ( target.contains( k ) )
+			{
+				if ( k != v )
+					target.put( k, v );
+			}
+			else
+				target.put( k, v );
 		}
 	}
 

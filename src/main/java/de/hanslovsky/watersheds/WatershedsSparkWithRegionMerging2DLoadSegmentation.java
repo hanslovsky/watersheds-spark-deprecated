@@ -2,34 +2,22 @@ package de.hanslovsky.watersheds;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
-
-import javax.xml.bind.DatatypeConverter;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.broadcast.Broadcast;
-import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 import org.zeromq.ZMQ.Context;
 import org.zeromq.ZMQ.Socket;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-
 import bdv.img.h5.H5Utils;
 import bdv.util.BdvFunctions;
-import bdv.util.BdvOptions;
 import bdv.util.BdvStackSource;
 import de.hanslovsky.watersheds.graph.Edge;
 import de.hanslovsky.watersheds.graph.EdgeMerger;
@@ -41,10 +29,6 @@ import de.hanslovsky.watersheds.graph.MergerServiceZMQ;
 import de.hanslovsky.watersheds.graph.MergerServiceZMQ.MergeActionAddToList;
 import de.hanslovsky.watersheds.graph.MergerServiceZMQ.MergeActionParentMap;
 import de.hanslovsky.watersheds.graph.RegionMerging;
-import de.hanslovsky.watersheds.io.AffinitiesChunkLoader;
-import de.hanslovsky.watersheds.io.LabelsChunkWriter;
-import de.hanslovsky.watersheds.io.ZMQFileOpenerFloatType;
-import de.hanslovsky.watersheds.io.ZMQFileWriterLongType;
 import de.hanslovsky.watersheds.regionmerging.EdgeCheck;
 import de.hanslovsky.watersheds.regionmerging.PrepareRegionMergingCutBlocks;
 import gnu.trove.iterator.TLongIterator;
@@ -52,9 +36,7 @@ import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
-import gnu.trove.map.hash.TLongObjectHashMap;
-import gnu.trove.set.hash.TLongHashSet;
-import ij.io.FileSaver;
+import ij.ImagePlus;
 import net.imglib2.Cursor;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.converter.Converters;
@@ -62,24 +44,22 @@ import net.imglib2.img.Img;
 import net.imglib2.img.array.ArrayImg;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.basictypeaccess.array.FloatArray;
+import net.imglib2.img.basictypeaccess.array.LongArray;
 import net.imglib2.img.cell.CellImg;
-import net.imglib2.img.cell.CellImgFactory;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.interpolation.randomaccess.NearestNeighborInterpolatorFactory;
 import net.imglib2.type.numeric.ARGBType;
 import net.imglib2.type.numeric.integer.LongType;
+import net.imglib2.type.numeric.integer.UnsignedShortType;
 import net.imglib2.type.numeric.real.FloatType;
-import net.imglib2.util.IntervalIndexer;
 import net.imglib2.util.Intervals;
 import net.imglib2.util.Pair;
 import net.imglib2.view.ExtendedRandomAccessibleInterval;
-import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
-import net.imglib2.view.composite.RealComposite;
 import scala.Tuple2;
 import scala.Tuple3;
 
-public class WatershedsSparkWithRegionMerging2D
+public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 {
 
 	public static void main( final String[] args ) throws IOException
@@ -95,10 +75,6 @@ public class WatershedsSparkWithRegionMerging2D
 		final long[] dimsIntervalNoChannels = new long[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ] };
 		final int[] cellSize = new int[] { 300, 300, 2 };
 		final long inputSize = Intervals.numElements( dims );
-
-
-
-//		final String path = "/groups/saalfeld/home/funkej/workspace/projects/caffe/run/cremi/03_process_training/processed/setup26/100000/sample_A.augmented.0.hdf"; // A
 
 		final String HOME_DIR = System.getProperty( "user.home" );
 		final String path = HOME_DIR + String.format(
@@ -118,230 +94,16 @@ public class WatershedsSparkWithRegionMerging2D
 		for ( final Pair< FloatType, FloatType > p : Views.interval( Views.pair( Views.permuteCoordinates( data, perm, 2 ), input ), input ) )
 			p.getB().set( p.getA().getRealFloat() );
 
-		for ( int i = 0; i < Views.collapseReal( input ).numDimensions(); ++i )
-		{
-			final IntervalView< RealComposite< FloatType > > hs = Views.hyperSlice( Views.collapseReal( input ), i, Views.collapse( input ).max( i ) );
-			for ( final RealComposite< FloatType > c : hs )
-				c.get( i ).setReal( Float.NaN );
-		}
-
-		final Img< LongType > labelsTarget = new CellImgFactory< LongType >( dimsIntervalInt ).create( Views.collapseReal( input ), new LongType() );
-
-		final String addr = "ipc://data_server";
-		final ZContext zmqContext = new ZContext();
-		final Socket serverSocket = zmqContext.createSocket( ZMQ.REP );
-		serverSocket.bind( addr );
-		final Gson gson = new Gson();
-
-		final Thread serverThread = new Thread( () -> {
-			while ( !Thread.currentThread().isInterrupted() )
-			{
-				final byte[] message = serverSocket.recv( 0 );
-				if ( message.length == 0 )
-					continue;
-				final JsonArray req = gson.fromJson( new String( message ), JsonArray.class );
-				final long[] dim = new long[ 3 ];
-				final long[] offset = new long[ 3 ];
-				long reqSize = 1;
-				for ( int d = 0; d < dim.length; ++d )
-				{
-					offset[ d ] = req.get( d ).getAsLong();
-					dim[ d ] = req.get( d + dim.length ).getAsLong();
-					reqSize *= dim[ d ];
-				}
-
-				final byte[] bytes = new byte[ Float.BYTES * ( int ) reqSize ];
-
-				final ByteBuffer bb = ByteBuffer.wrap( bytes );
-
-				for ( final FloatType v : Views.flatIterable( Views.offsetInterval( Views.extendValue( input, new FloatType( Float.NaN ) ), offset, dim ) ) )
-					bb.putFloat( v.get() );
-
-				serverSocket.send( bytes, 0 );
-			}
-
-		} );
-		System.out.print( "Starting server thread!" );
-		serverThread.start();
-		System.out.println( "Started server thread!" );
-
-		System.out.println( "Generating map" );
-
-		final ArrayList< HashableLongArray > lowerBounds = new ArrayList<>();
-		for ( long y = 0; y < dims[ 1 ]; y += dimsIntervalInt[ 1 ] )
-			for ( long x = 0; x < dims[ 0 ]; x += dimsIntervalInt[ 0 ] )
-			{
-				final HashableLongArray t = new HashableLongArray( x, y );
-				lowerBounds.add( t );
 
 
-				final long[] lower = new long[] { x, y, 0 };
-				final long[] upper = new long[ lower.length ];
-				final long[] dm = new long[ upper.length ];
-				upper[ 2 ] = 2;
-				for ( int d = 0; d < upper.length; ++d )
-				{
-					upper[ d ] = Math.min( dims[ d ] - 1, lower[ d ] + dimsInterval[ d ] - 1 );
-					dm[ d ] = upper[ d ] - lower[ d ] + 1;
-				}
-
-			}
-
-		System.out.println( "Generated map" );
-
-
-		final PairFunction< Tuple2< HashableLongArray, float[] >, HashableLongArray, Tuple2< long[], long[] > > func =
-				new InitialWatershedBlock( dimsIntervalInt, dims, 0.0, ( a, b ) -> {} );
-//						new ShowTopLeftVisitor() );
-
-		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[1]" ).set( "spark.driver.maxResultSize", "4g" );
-		final JavaSparkContext sc = new JavaSparkContext( conf );
-		Logger.getRootLogger().setLevel( Level.ERROR );
-
-
-		final ZMQFileOpenerFloatType opener = new ZMQFileOpenerFloatType( addr );
-		final JavaPairRDD< HashableLongArray, float[] > imgs =
-				sc.parallelize( lowerBounds ).mapToPair( new AffinitiesChunkLoader( opener, dims, dimsIntervalInt ) ).cache();
-
-		final JavaPairRDD< HashableLongArray, Tuple2< long[], long[] > > ws = imgs.mapToPair(
-				func
-				).cache();
-
-		final List< Tuple2< HashableLongArray, Long > > labelingsAndCounts = ws
-				.mapToPair( t -> new Tuple2<>( t._1(), t._2()._2() ) )
-				.mapToPair( new NumElements<>() )
-				.collect();
-
-		final ArrayList< Tuple2< HashableLongArray, Long > > al = new ArrayList<>();
-		for ( final Tuple2< HashableLongArray, Long > lac : labelingsAndCounts )
-			al.add( lac );
-
-		Collections.sort( al, new Util.KeyAndCountsComparator<>( dimsNoChannels ) );
-
-		final TLongLongHashMap startIndices = new TLongLongHashMap( al.size(), 1.5f, -1, -1 );
-		long startIndex = 0;
-		for ( final Tuple2< HashableLongArray, Long > t : al )
-		{
-			final HashableLongArray t1 = t._1();
-			final long[] arr1 = t1.getData();// new long[] { t1._1(), t1._2(),
-			// t1._3() };
-			startIndices.put( IntervalIndexer.positionToIndex( arr1, dimsNoChannels ), startIndex );
-			// "real" labels start at 1, so no id conflicts
-			final long c = t._2() - 1l;
-			startIndex += c; // don't count background
-		} ;
-		final long numRegions = startIndex;
-
-		final Broadcast< TLongLongHashMap > startIndicesBC = sc.broadcast( startIndices );
-
-		System.out.println( "Start indices: " + startIndices );
-
-		System.out.println( "Collected " + labelingsAndCounts.size() + " labelings." );
-
-		final String listenerAddr = "ipc://labels_listener";
-		final Socket labelsTargetListener = zmqContext.createSocket( ZMQ.REP );
-		labelsTargetListener.bind( listenerAddr );
-		final Thread labelsThread = new Thread( () -> {
-			while ( !Thread.currentThread().isInterrupted() )
-			{
-				final byte[] message = labelsTargetListener.recv( 0 );
-				if ( message.length == 0 )
-					continue;
-//				System.out.println( "RECEIVED MESSAGE OF SIZE " + message.length );
-				final JsonObject json = gson.fromJson( new String( message ), JsonObject.class );
-				final long[] min = new long[ labelsTarget.numDimensions() ];
-				final long[] max = new long[ labelsTarget.numDimensions() ];
-				final byte[] bytes = DatatypeConverter.parseBase64Binary( json.get( "data" ).getAsString() );// .getBytes();
-				final ByteBuffer bb = ByteBuffer.wrap( bytes );
-				final JsonArray minA = json.get( "min" ).getAsJsonArray();
-				final JsonArray maxA = json.get( "max" ).getAsJsonArray();
-				for ( int d = 0; d < min.length; ++d )
-				{
-					min[ d ] = minA.get( d ).getAsLong();
-					max[ d ] = maxA.get( d ).getAsLong();
-				}
-
-				long m = Long.MAX_VALUE;
-				long M = Long.MIN_VALUE;
-				boolean hasZero = false;
-				final long validBits = ~( 1l << 63 | 1l << 62 );
-				for ( final LongType l : Views.flatIterable( Views.interval( labelsTarget, min, max ) ) )
-				{
-					final long n = bb.getLong() & validBits;
-					l.set( n );
-					if ( n == 0 )
-						hasZero = true;
-					else if ( n < m )
-						m = n;
-					else if ( n > M )
-						M = n;
-				}
-//				System.out.println( "Got min=" + m + ", max=" + M + " for " + Arrays.toString( min ) + " " + Arrays.toString( max ) + " has background: " + hasZero );
-				labelsTargetListener.send( "" );
-			}
-		} );
-		labelsThread.start();
-
-		final JavaPairRDD< HashableLongArray, Tuple2< long[], TLongLongHashMap > > offsetLabelsWithCounts = ws
-				.mapToPair( new OffsetLabels( startIndicesBC, dimsNoChannels ) )
-				.cache();
+		final Img< UnsignedShortType > labelsTargetInput = ImageJFunctions.wrapShort( new ImagePlus( System.getProperty( "user.home" ) + "/Dropbox/misc/excerpt2d-labels.tif" ) );
+		final ArrayImg< LongType, LongArray > labelsTarget = ArrayImgs.longs( Intervals.dimensionsAsLongArray( labelsTargetInput ) );
+		for ( final Pair< UnsignedShortType, LongType > p : Views.interval( Views.pair( labelsTargetInput, labelsTarget ), labelsTarget ) )
+			p.getB().set( p.getA().getIntegerLong() );
 
 		final TLongLongHashMap counts = new TLongLongHashMap();
-//		offsetLabelsWithCounts.map( t -> {
-////			System.out.println( t );
-//			if ( t == null )
-//				throw new RuntimeException( t + " is null!" );
-//			else if ( t._1() == null )
-//				throw new RuntimeException( "t._1() is null!" );
-//			else if ( t._2() == null )
-//				throw new RuntimeException( "t._2() is null!" );
-//			return true;
-//		} ).count();
-		for ( final TLongLongHashMap m : offsetLabelsWithCounts.values().mapToPair( t -> t ).values().collect() )
-			counts.putAll( m );
-
-		final JavaPairRDD< HashableLongArray, long[] > offsetLabels = offsetLabelsWithCounts.mapToPair( new Util.DropSecondValue<>() );
-
-		offsetLabels.mapToPair( new LabelsChunkWriter(
-				new ZMQFileWriterLongType( listenerAddr ),
-				dimsNoChannels,
-				dimsIntervalIntNoChannels ) ).count();
-
-		{
-			System.out.println( "Interrupting labels thread" );
-			labelsThread.interrupt();
-			final Socket closeSocket = zmqContext.createSocket( ZMQ.REQ );
-			closeSocket.connect( listenerAddr );
-			closeSocket.send( new byte[ 0 ], 0 );
-			try
-			{
-				labelsThread.join();
-			}
-			catch ( final InterruptedException e )
-			{
-				e.printStackTrace();
-			}
-		}
-
-		{
-			System.out.println( "Interrupting server thread" );
-			serverThread.interrupt();
-			final Socket closeSocket = zmqContext.createSocket( ZMQ.REQ );
-			closeSocket.connect( addr );
-			closeSocket.send( new byte[ 0 ], 0 );
-			try
-			{
-				serverThread.join();
-			}
-			catch ( final InterruptedException e )
-			{
-				e.printStackTrace();
-			}
-		}
-
-		zmqContext.close();
-
-		new FileSaver( ImageJFunctions.wrap( labelsTarget, "" ) ).saveAsTiff( System.getProperty( "user.home" ) + "/Dropbox/misc/excerpt2d-labels.tif" );
+		for ( final LongType l : labelsTarget )
+			counts.put( l.get(), counts.contains( l.get() ) ? counts.get( l.get() ) + 1 : 1  );
 
 		final ExtendedRandomAccessibleInterval< LongType, Img< LongType > > labelsExtend = Views.extendValue( labelsTarget, new LongType( -1 ) );
 
@@ -372,6 +134,10 @@ public class WatershedsSparkWithRegionMerging2D
 				blocks.add( new Tuple2<>( new HashableLongArray( x, y ), new Tuple3<>( labelData, affsData, counts ) ) );
 
 			}
+
+		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[1]" ).set( "spark.driver.maxResultSize", "4g" );
+		final JavaSparkContext sc = new JavaSparkContext( conf );
+		Logger.getRootLogger().setLevel( Level.ERROR );
 
 		final Context ctx = ZMQ.context( 1 );
 
@@ -427,9 +193,9 @@ public class WatershedsSparkWithRegionMerging2D
 			}, new LongType() );
 			final RandomAccessibleInterval< ARGBType > coloredInitialBlocks = Converters.convert( initialBlocks, (s,t ) -> {
 				t.set( colors.get( s.get() ) ); }, new ARGBType() );
-			final BdvStackSource< ARGBType > bdv = BdvFunctions.show( coloredInitialBlocks, "INITIAL BLOCKS " + graphs.count() );
-			ValueDisplayListener.addValueOverlay( Views.interpolate( Views.extendValue(
-					Views.addDimension( initialBlocks, 0, 0 ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ), bdv.getBdvHandle().getViewerPanel() );
+//			final BdvStackSource< ARGBType > bdv = BdvFunctions.show( coloredInitialBlocks, "INITIAL BLOCKS " + graphs.count() );
+//			ValueDisplayListener.addValueOverlay( Views.interpolate( Views.extendValue(
+//					Views.addDimension( initialBlocks, 0, 0 ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ), bdv.getBdvHandle().getViewerPanel() );
 
 		}
 
@@ -492,22 +258,27 @@ public class WatershedsSparkWithRegionMerging2D
 		for ( final Tuple2< Long, In > g : graphs.collect() )
 		{
 			final long id = g._1();
-			final TLongObjectHashMap< TLongHashSet > cbns = g._2().borderNodes;
+//			final TLongObjectHashMap< TLongHashSet > cbns = g._2().borderNodes;
+			final TLongLongHashMap cons = g._2().outsideNodes;
 			final Edge e = new Edge( g._2().g.edges() );
 			for ( int i = 0; i < e.size(); ++i )
 			{
 				e.setIndex( i );
 				final long f = e.from();
 				final long t = e.to();
-				if ( cbns.contains( f ) )
+				if ( !cons.contains( f ) )
 					labelBlockmap.put( f, id );
-				else if ( cbns.contains( t ) )
+				if ( !cons.contains( t ) )
 					labelBlockmap.put( t, id );
-				else
-				{
-					labelBlockmap.put( t, id );
-					labelBlockmap.put( f, id );
-				}
+//				if ( cbns.contains( f ) )
+//					labelBlockmap.put( f, id );
+//				else if ( cbns.contains( t ) )
+//					labelBlockmap.put( t, id );
+//				else
+//				{
+//					labelBlockmap.put( t, id );
+//					labelBlockmap.put( f, id );
+//				}
 			}
 		}
 		for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( labelsTarget, blockZero ), blockZero ) )
@@ -517,6 +288,10 @@ public class WatershedsSparkWithRegionMerging2D
 		final Random blockRng = new Random( 100 );
 		for ( final Long b : blockIds )
 			blockColors.put( b.longValue(), blockRng.nextInt() );
+
+		BdvFunctions.show( Converters.convert( blockImages.get( 0 ), ( s, t ) -> {
+			t.set( blockColors.get( s.get() ) );
+		}, new ARGBType() ), "blockZero" );
 
 		final ArrayList< RandomAccessibleInterval< LongType > > images = new ArrayList<>();
 		images.add( labelsTarget );
@@ -536,14 +311,17 @@ public class WatershedsSparkWithRegionMerging2D
 				p.getB().set( parents.contains( p.getA().get() ) ? parents.get( p.getA().get() ) : p.getA().get() );
 			blockImages.add( blockImg );
 		};
-		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, 50000.0, rmVisitor, labelsTarget );
+		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, 5e20, rmVisitor, labelsTarget );
 
 		final List< Tuple2< Long, In > > gs = graphsAfterMerging.collect();
 
 		final RandomAccessibleInterval< ARGBType > coloredHistory = Converters.convert( Views.stack( images ), ( s, t ) -> {
 			t.set( colorMap.get( s.get() ) );
 		}, new ARGBType() );
-		BdvFunctions.show( coloredHistory, "colored history" );
+		final BdvStackSource< ARGBType > chBdv = BdvFunctions.show( coloredHistory, "colored history" );
+		ValueDisplayListener.addValueOverlay(
+				Views.interpolate( Views.extendValue( Views.stack( images ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ),
+				chBdv.getBdvHandle().getViewerPanel() );
 		System.out.println( "COLORED HISTORY SIZE " + images.size() + " COLORED BLOCK HISTORY SIZE " + blockImages.size() );
 
 		final RandomAccessibleInterval< ARGBType > coloredBlockHistory =
@@ -555,7 +333,13 @@ public class WatershedsSparkWithRegionMerging2D
 //					}
 					t.set( blockColors.get( s.get() ) );
 				}, new ARGBType() );
-		BdvFunctions.show( coloredBlockHistory, "colored block history" );
+		final BdvStackSource< ARGBType > cbhBdv = BdvFunctions.show( coloredBlockHistory, "colored block history" );
+//		BdvFunctions.show( Converters.convert( Views.stack( blockImages ), ( s, t ) -> {
+//			t.set( s.get() == 154 ? 255 << 8 : 255 << 16 );
+//		}, new ARGBType() ), "154" );
+		ValueDisplayListener.addValueOverlay(
+				Views.interpolate( Views.extendValue( Views.stack( blockImages ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ),
+				cbhBdv.getBdvHandle().getViewerPanel() );
 
 		for ( final TLongIterator kIt = mergedParents.keySet().iterator(); kIt.hasNext(); )
 			MergeBloc.findRoot( mergedParents, kIt.next() );
@@ -583,19 +367,19 @@ public class WatershedsSparkWithRegionMerging2D
 			t.set( colorsMap.get( s.get() ) );
 		}, new ARGBType() );
 
-		final BdvStackSource< ARGBType > bdv = BdvFunctions.show( colored, "colored" );
-		BdvFunctions.show( Converters.convert(
-				( RandomAccessibleInterval< RealComposite< FloatType > > ) Views.collapseReal( input ),
-				( s, t ) -> {
-					t.set( ( int ) ( 255 * s.get( 0 ).get() ) << 8 | ( int ) ( 255 * s.get( 1 ).get() ) );
-//					t.setReal( Math.max( s.get( 0 ).get(), s.get( 1 ).get() ) );
-				}, new ARGBType() ),
-				"aff max projection", BdvOptions.options().addTo( bdv ) );
-
-
-		ValueDisplayListener.addValueOverlay(
-				Views.interpolate( Views.extendValue( Views.addDimension( rooted, 0, 0 ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ),
-				bdv.getBdvHandle().getViewerPanel() );
+//		final BdvStackSource< ARGBType > bdv = BdvFunctions.show( colored, "colored" );
+//		BdvFunctions.show( Converters.convert(
+//				( RandomAccessibleInterval< RealComposite< FloatType > > ) Views.collapseReal( input ),
+//				( s, t ) -> {
+//					t.set( ( int ) ( 255 * s.get( 0 ).get() ) << 8 | ( int ) ( 255 * s.get( 1 ).get() ) );
+////					t.setReal( Math.max( s.get( 0 ).get(), s.get( 1 ).get() ) );
+//				}, new ARGBType() ),
+//				"aff max projection", BdvOptions.options().addTo( bdv ) );
+//
+//
+//		ValueDisplayListener.addValueOverlay(
+//				Views.interpolate( Views.extendValue( Views.addDimension( rooted, 0, 0 ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ),
+//				bdv.getBdvHandle().getViewerPanel() );
 
 //		final RealComposite< FloatType > extension = Views.collapseReal( ArrayImgs.floats( new float[] { Float.NaN, Float.NaN }, 1, 2 ) ).randomAccess().get();
 //		ValueDisplayListener.addValueOverlay(
