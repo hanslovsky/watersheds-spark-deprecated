@@ -268,6 +268,8 @@ public class MergeBloc
 						outsideNodeIsInvolved = true;
 						involvedOutsideBlock = in.outsideNodes.get( from );
 						maxWeightBeforeMerge = w;
+						if ( t._1() == 1 )
+							System.out.println( "MERGING OUTSIDE " + t._1() + " " + e.weight() + " " + e.from() + " " + e.to() + " " + involvedOutsideBlock );
 					}
 				}
 				else if ( in.outsideNodes.contains( to ) )
@@ -277,6 +279,8 @@ public class MergeBloc
 						outsideNodeIsInvolved = true;
 						involvedOutsideBlock = in.outsideNodes.get( to );
 						maxWeightBeforeMerge = w;
+						if ( t._1() == 1 )
+							System.out.println( "MERGING OUTSIDE " + t._1() + " " + e.weight() + " " + e.from() + " " + e.to() + " " + involvedOutsideBlock );
 					}
 				}
 				else
@@ -294,6 +298,12 @@ public class MergeBloc
 //						System.out.println( t._1() + " SOMETHING WRONG WITH TO! " + to );
 //						System.exit( 456 );
 //					}
+					if ( t._1() == 1 )
+						System.out.println( "MERGING INSIDE " + t._1() + " " + e.weight() + " " + e.from() + " " + e.to() );
+
+					if ( e.to() == 24 || e.from() == 24 || e.to() == 23 && e.from() == 1 || e.to() == 1 && e.from() == 23 )
+						System.out.println( "MERGING 24 " + t._1() + " " + e.weight() + " " + e.from() + " " + e.to() );
+
 					final long r1 = dj.findRoot( from );
 					final long r2 = dj.findRoot( to );
 					if ( r1 == r2 || r1 != from || r2 != to )
