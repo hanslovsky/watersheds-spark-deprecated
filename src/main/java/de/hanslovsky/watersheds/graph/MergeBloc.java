@@ -323,30 +323,39 @@ public class MergeBloc
 					final long c1 = in.counts.remove( r1 );// from );
 					final long c2 = in.counts.remove( r2 );// to );
 					final long cn = c1 + c2;
-					in.counts.put( n, cn );
-					final TLongIntHashMap newEdges = g.contract( next, n, in.counts, f );
-
-					if ( newEdges == null )
+					// TODO THIS CHECK MUST BE FIXED
+					if ( cn > 1000 )
 					{
-						System.out.println( "IS NULL!" );
-						System.out.println( from + " " + to + " " + r1 + " " + r2 + " " + n + " " + c1 + " " + c2 + " " + cn );
-						System.exit( 123 );
-						in.counts.remove( n );
-						continue;
+						in.counts.put( r1, c1 );
+						in.counts.put( r2, c2 );
 					}
-
-
-					for ( final TIntIterator it = newEdges.valueCollection().iterator(); it.hasNext(); )
+					else
 					{
-						final int id = it.next();
-						e.setIndex( id );
-						// TODO
-						// should we still edges, even if larger than threshold?
-						// could re-use graph with different threshold then!
+						in.counts.put( n, cn );
+						final TLongIntHashMap newEdges = g.contract( next, n, in.counts, f );
+
+						if ( newEdges == null )
+						{
+							System.out.println( "IS NULL!" );
+							System.out.println( from + " " + to + " " + r1 + " " + r2 + " " + n + " " + c1 + " " + c2 + " " + cn );
+							System.exit( 123 );
+							in.counts.remove( n );
+							continue;
+						}
+
+
+						for ( final TIntIterator it = newEdges.valueCollection().iterator(); it.hasNext(); )
+						{
+							final int id = it.next();
+							e.setIndex( id );
+							// TODO
+							// should we still edges, even if larger than threshold?
+							// could re-use graph with different threshold then!
 //						if ( e.weight() < threshold )
-						queue.enqueue( id );
+							queue.enqueue( id );
+						}
+						mergerService.addMerge( from, to, n, w );
 					}
-					mergerService.addMerge( from, to, n, w );
 
 				}
 

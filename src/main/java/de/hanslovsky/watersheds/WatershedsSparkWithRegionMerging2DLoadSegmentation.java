@@ -18,6 +18,7 @@ import org.zeromq.ZMQ.Socket;
 
 import bdv.img.h5.H5Utils;
 import bdv.util.BdvFunctions;
+import bdv.util.BdvOptions;
 import bdv.util.BdvStackSource;
 import de.hanslovsky.watersheds.graph.Edge;
 import de.hanslovsky.watersheds.graph.EdgeMerger;
@@ -231,20 +232,21 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 			mergedParents.put( k, k );
 		}
 
-		final TLongIntHashMap colorMap = new TLongIntHashMap();
-		final Random rngCm = new Random( 100 );
-		for ( final LongType l : labelsTarget )
-			if ( !colorMap.contains( l.get() ) )
-				colorMap.put( l.get(), rngCm.nextInt() );
+//		final TLongIntHashMap colorMap = new TLongIntHashMap();
+//		final Random rngCm = new Random( 100 );
+//		for ( final LongType l : labelsTarget )
+//			if ( !colorMap.contains( l.get() ) )
+//				colorMap.put( l.get(), rngCm.nextInt() );
 
 		final Thread mergerThread = MergerServiceZMQ.createServerThread( mergerSocket, ( n1, n2, n, w ) -> {
 			action1.add( n1, n2, n, w );
 			action2.add( n1, n2, n, w );
-			synchronized ( colorMap )
-			{
-				colorMap.put( n, colorMap.contains( n1 ) ? colorMap.get( n1 ) : colorMap.get( n2 ) );
-			}
+//			synchronized ( colorMap )
+//			{
+//				colorMap.put( n, colorMap.contains( n1 ) ? colorMap.get( n1 ) : colorMap.get( n2 ) );
+//			}
 		} );
+
 		mergerThread.start();
 		final IdServiceZMQ idService = new IdServiceZMQ( idAddr );
 		final MergerServiceZMQ mergerService = new MergerServiceZMQ( mergerAddr );
@@ -289,16 +291,24 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 		for ( final Long b : blockIds )
 			blockColors.put( b.longValue(), blockRng.nextInt() );
 
-		BdvFunctions.show( Converters.convert( blockImages.get( 0 ), ( s, t ) -> {
-			t.set( blockColors.get( s.get() ) );
-		}, new ARGBType() ), "blockZero" );
-
 		final ArrayList< RandomAccessibleInterval< LongType > > images = new ArrayList<>();
+		final DisjointSetsHashMap mergeUnionFind = new DisjointSetsHashMap();
+
 		images.add( labelsTarget );
 		final RegionMerging.Visitor rmVisitor = ( parents ) -> {
 			final Img< LongType > img = labelsTarget.factory().create( images.get( 0 ), new LongType() );
+
+			for ( int i = 0; i < merges.size(); i += 4 )
+			{
+				final long f = mergeUnionFind.findRoot( merges.get( i ) );
+				final long t = mergeUnionFind.findRoot( merges.get( i + 1 ) );
+				if ( f != t )
+					mergeUnionFind.join( f, t );
+			}
+
 			for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( images.get( images.size() - 1 ), img ), img ) )
-				p.getB().set( mergedParents.contains( p.getA().get() ) ? mergedParents.get( p.getA().get() ) : p.getA().get() );
+//				p.getB().set( mergedParents.contains( p.getA().get() ) ? mergedParents.get( p.getA().get() ) : p.getA().get() );
+				p.getB().set( mergeUnionFind.findRoot( p.getA().get() ) );
 			images.add( img );
 
 			final Img< LongType > blockImg = labelsTarget.factory().create( blockImages.get( 0 ), new LongType() );
@@ -311,14 +321,24 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 				p.getB().set( parents.contains( p.getA().get() ) ? parents.get( p.getA().get() ) : p.getA().get() );
 			blockImages.add( blockImg );
 		};
-		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, 5e20, rmVisitor, labelsTarget );
+		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, Double.POSITIVE_INFINITY, rmVisitor, labelsTarget );
 
 		final List< Tuple2< Long, In > > gs = graphsAfterMerging.collect();
+
+		final TLongIntHashMap colorMap = new TLongIntHashMap();
+		{
+			final Random rng = new Random( 100 );
+			final RandomAccessibleInterval< LongType > i0 = images.get( 0 );
+			for ( final LongType i : Views.flatIterable( i0 ) )
+				if ( !colorMap.contains( i.get() ) )
+					colorMap.put( i.get(), rng.nextInt() );
+
+		}
 
 		final RandomAccessibleInterval< ARGBType > coloredHistory = Converters.convert( Views.stack( images ), ( s, t ) -> {
 			t.set( colorMap.get( s.get() ) );
 		}, new ARGBType() );
-		final BdvStackSource< ARGBType > chBdv = BdvFunctions.show( coloredHistory, "colored history" );
+		final BdvStackSource< ARGBType > chBdv = BdvFunctions.show( coloredHistory, "colored history", BdvOptions.options().is2D() );
 		ValueDisplayListener.addValueOverlay(
 				Views.interpolate( Views.extendValue( Views.stack( images ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ),
 				chBdv.getBdvHandle().getViewerPanel() );
@@ -333,7 +353,7 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 //					}
 					t.set( blockColors.get( s.get() ) );
 				}, new ARGBType() );
-		final BdvStackSource< ARGBType > cbhBdv = BdvFunctions.show( coloredBlockHistory, "colored block history" );
+		final BdvStackSource< ARGBType > cbhBdv = BdvFunctions.show( coloredBlockHistory, "colored block history", BdvOptions.options().is2D() );
 //		BdvFunctions.show( Converters.convert( Views.stack( blockImages ), ( s, t ) -> {
 //			t.set( s.get() == 154 ? 255 << 8 : 255 << 16 );
 //		}, new ARGBType() ), "154" );

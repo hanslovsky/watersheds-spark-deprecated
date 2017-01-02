@@ -177,8 +177,8 @@ public class RegionMerging
 //			}
 
 			System.out.println( "CNT: " + rdd.count() + " " + hasChanged );
-			if ( iteration > 1 )
-				break;
+//			if ( iteration > 1 )
+//				break;
 
 //			if ( rdd.count() <= 1 )
 //				break;

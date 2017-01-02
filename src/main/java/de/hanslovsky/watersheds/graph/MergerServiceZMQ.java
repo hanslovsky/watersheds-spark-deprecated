@@ -69,8 +69,9 @@ public class MergerServiceZMQ implements MergerService, Serializable
 		}
 
 		@Override
-		public void add( final long n1, final long n2, final long n, final double w )
+		public synchronized void add( final long n1, final long n2, final long n, final double w )
 		{
+			System.out.println( "Adding merge: " + n1 + " " + n2 + " " + n + " " + w );
 			list.add( n1 );
 			list.add( n2 );
 			list.add( n );
@@ -91,7 +92,7 @@ public class MergerServiceZMQ implements MergerService, Serializable
 		}
 
 		@Override
-		public void add( final long n1, final long n2, final long n, final double w )
+		public synchronized void add( final long n1, final long n2, final long n, final double w )
 		{
 
 			parents.put( n1, n );
