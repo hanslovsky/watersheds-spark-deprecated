@@ -2,7 +2,6 @@ package de.hanslovsky.watersheds.graph;
 
 import java.io.Serializable;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.zeromq.ZMQ;
@@ -48,12 +47,9 @@ public class IdServiceZMQ implements IdService, Serializable
 				final ByteBuffer bb = ByteBuffer.wrap( msg );
 				if ( msg.length == 0 )
 					continue;
-				final long id = atomicId.getAndAdd( bb.getLong() );
-				if ( id < 0 )
-				{
-					System.out.print( "ID IS SMALLER THAN ZERO WHY? " + Arrays.toString( msg ) );
-					System.exit( 123 );
-				}
+				final long n = bb.getLong();
+				final long id = atomicId.getAndAdd( n );
+				System.out.println( "Requested " + n + " ids" + " " + id );
 				bb.rewind();
 				bb.putLong( id );
 				socket.send( msg, 0 );

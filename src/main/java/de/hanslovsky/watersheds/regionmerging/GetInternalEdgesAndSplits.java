@@ -173,12 +173,15 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 	{
 		final TLongLongHashMap assignment = new TLongLongHashMap();
 
-		long id = idService.requestIds( dj.setCount() );
+		final long startingId = idService.requestIds( dj.setCount() );
+
+		long id = startingId;
 
 		for ( final TLongLongIterator it = parents.iterator(); it.hasNext(); )
 		{
 			it.advance();
-			final long r = it.value();
+			final long k = it.key();
+			final long r = dj.findRoot( k );
 			final long block;
 			if ( !rootToGlobalIdMapping.contains( r ) )
 			{
@@ -187,10 +190,12 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 			}
 			else
 				block = rootToGlobalIdMapping.get( r );
-			if ( it.key() == 9 || it.key() == 1 )
-				System.out.println( "REGION BLOCK? " + it.key() + " " + r + " " + block + " " + dj.setCount() );
-			assignment.put( it.key(), block );
+//			if ( it.key() == 9 || it.key() == 1 )
+//				System.out.println( "REGION BLOCK? " + it.key() + " " + r + " " + block + " " + dj.setCount() );
+			assignment.put( k, block );
 		}
+
+		System.out.println( "THE SAME? " + id + " " + startingId + " " + dj.setCount() );
 
 		return assignment;
 	}
