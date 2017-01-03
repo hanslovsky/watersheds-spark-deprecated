@@ -69,15 +69,18 @@ public class MergeBloc
 
 		public final TLongHashSet mergedBorderNodes;
 
+		public final boolean hasChanged;
+
 		public Out(
 				final UndirectedGraph g,
 				final TLongLongHashMap counts,
 				final TLongObjectHashMap< TLongHashSet > borderNodes,
 				final TLongLongHashMap outsideNodes,
 				final TLongLongHashMap assignments,
+				final boolean hasChanged,
 				final long... mergedBorderNodes )
 		{
-			this( g, counts, borderNodes, outsideNodes, assignments, new TLongHashSet( mergedBorderNodes ) );
+			this( g, counts, borderNodes, outsideNodes, assignments, hasChanged, new TLongHashSet( mergedBorderNodes ) );
 		}
 
 		public Out(
@@ -86,6 +89,7 @@ public class MergeBloc
 				final TLongObjectHashMap< TLongHashSet > borderNodes,
 				final TLongLongHashMap outsideNodes,
 				final TLongLongHashMap assignments,
+				final boolean hasChanged,
 				final TLongHashSet mergedBorderNodes )
 		{
 			super();
@@ -95,6 +99,7 @@ public class MergeBloc
 			this.outsideNodes = outsideNodes;
 			this.assignments = assignments;
 			this.mergedBorderNodes = mergedBorderNodes;
+			this.hasChanged = hasChanged;
 		}
 
 	}
@@ -199,12 +204,15 @@ public class MergeBloc
 
 		private final MergerService mergerService;
 
+		private final double maxMergeProportion;
+
 		public MergeBlocPairFunction2(
 				final Function f,
 				final EdgeMerger merger,
 				final double threshold,
 				final IdService idService,
-				final MergerService mergerService )
+				final MergerService mergerService,
+				final double maxMergeProportion )
 		{
 			super();
 			this.f = f;
@@ -212,6 +220,7 @@ public class MergeBloc
 			this.threshold = threshold;
 			this.idService = idService;
 			this.mergerService = mergerService;
+			this.maxMergeProportion = maxMergeProportion;
 		}
 
 
@@ -244,6 +253,8 @@ public class MergeBloc
 
 //			int index = 0;
 //			final String path = System.getProperty( "user.home" ) + "/git/promotion-philipp/notes/watersheds";
+			long count = 0;
+			final long maxActions = ( long ) ( g.nodeEdgeMap().size() * maxMergeProportion );
 			while ( !queue.isEmpty() )
 			{
 
@@ -285,33 +296,13 @@ public class MergeBloc
 				}
 				else
 				{
-//					if ( from == 235 || to == 235 )
-//						System.out.println( "??? " + t._1() + " " + from + " " + to + " " + dj.findRoot( from ) + " " + dj.findRoot( to ) );
-//
-//					if ( !g.nodeEdgeMap().contains( from ) )
-//					{
-//						System.out.println( t._1() + " SOMETHING WRONG WITH FROM! " + from + " " + g.nodeEdgeMap().contains( dj.findRoot( from ) ) );
-//						System.exit( 123 );
-//					}
-//					if ( !g.nodeEdgeMap().contains( to ) )
-//					{
-//						System.out.println( t._1() + " SOMETHING WRONG WITH TO! " + to );
-//						System.exit( 456 );
-//					}
-					if ( t._1() == 1 )
-						System.out.println( "MERGING INSIDE " + t._1() + " " + e.weight() + " " + e.from() + " " + e.to() );
-
-					if ( e.to() == 24 || e.from() == 24 || e.to() == 23 && e.from() == 1 || e.to() == 1 && e.from() == 23 )
-						System.out.println( "MERGING 24 " + t._1() + " " + e.weight() + " " + e.from() + " " + e.to() );
 
 					final long r1 = dj.findRoot( from );
 					final long r2 = dj.findRoot( to );
 					if ( r1 == r2 || r1 != from || r2 != to )
 						continue;
-//					final long n = idService.requestIds( 1 );
 					final long n = dj.join( r1, r2 );
 
-					// add to list of merged border nodes if appropriate
 					if ( in.borderNodes.contains( from ) )
 					{
 						if ( in.borderNodes.contains( n ) )
@@ -334,7 +325,7 @@ public class MergeBloc
 					final long c2 = in.counts.remove( r2 );// to );
 					final long cn = c1 + c2;
 					// TODO THIS CHECK MUST BE FIXED
-					if ( cn > 1000 )
+					if ( cn > Long.MAX_VALUE )
 					{
 						in.counts.put( r1, c1 );
 						in.counts.put( r2, c2 );
@@ -365,6 +356,7 @@ public class MergeBloc
 							queue.enqueue( id );
 						}
 						mergerService.addMerge( from, to, n, w );
+						++count;
 					}
 
 				}
@@ -395,6 +387,7 @@ public class MergeBloc
 					in.borderNodes,
 					in.outsideNodes,
 					assignments,
+					count > 0 || involvedOutsideBlock != -1,
 					mergedBorderNodes );
 			return new Tuple2<>( new Tuple2<>( t._1(), involvedOutsideBlock == -1 ? t._1() : involvedOutsideBlock ), result );
 
@@ -565,7 +558,7 @@ public class MergeBloc
 			merges.add( Double.doubleToLongBits( w ) );
 		};
 
-		final MergeBlocPairFunction2 mergeBloc = new MergeBlocPairFunction2( ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a ), merger, 180, idService, mergerService );
+		final MergeBlocPairFunction2 mergeBloc = new MergeBlocPairFunction2( ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a ), merger, 180, idService, mergerService, Long.MAX_VALUE );
 		final Tuple2< Tuple2< Long, Long >, Out > test = mergeBloc.call( input );
 
 		System.out.println( "INDEX " + test._1() );

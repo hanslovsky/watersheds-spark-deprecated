@@ -49,7 +49,6 @@ public class IdServiceZMQ implements IdService, Serializable
 					continue;
 				final long n = bb.getLong();
 				final long id = atomicId.getAndAdd( n );
-				System.out.println( "Requested " + n + " ids" + " " + id );
 				bb.rewind();
 				bb.putLong( id );
 				socket.send( msg, 0 );

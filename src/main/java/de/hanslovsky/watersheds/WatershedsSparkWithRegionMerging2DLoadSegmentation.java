@@ -68,7 +68,7 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 	public static void main( final String[] args ) throws IOException
 	{
 
-		final int[] dimsInt = new int[] { 60, 60, 2 }; // dropbox
+		final int[] dimsInt = new int[] { 300, 300, 2 }; // dropbox
 //		final int[] dimsInt = new int[] { 1554, 1670, 153, 3 }; // A
 		final long[] dims = new long[] { dimsInt[ 0 ], dimsInt[ 1 ], dimsInt[ 2 ] };
 		final long[] dimsNoChannels = new long[] { dimsInt[ 0 ], dimsInt[ 1 ] };
@@ -81,7 +81,7 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 
 		final String HOME_DIR = System.getProperty( "user.home" );
 		final String path = HOME_DIR + String.format(
-				"/Dropbox/misc/excerpt2D-60x60.h5" );
+				"/Dropbox/misc/excerpt2D.h5" );
 
 		System.out.println( "Loading data" );
 		final CellImg< FloatType, ?, ? > data =
@@ -106,7 +106,7 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 
 
 
-		final Img< UnsignedShortType > labelsTargetInput = ImageJFunctions.wrapShort( new ImagePlus( System.getProperty( "user.home" ) + "/Dropbox/misc/excerpt2d-labels-60x60.tif" ) );
+		final Img< UnsignedShortType > labelsTargetInput = ImageJFunctions.wrapShort( new ImagePlus( System.getProperty( "user.home" ) + "/Dropbox/misc/excerpt2d-labels.tif" ) );
 		final ArrayImg< LongType, LongArray > labelsTarget = ArrayImgs.longs( Intervals.dimensionsAsLongArray( labelsTargetInput ) );
 		for ( final Pair< UnsignedShortType, LongType > p : Views.interval( Views.pair( labelsTargetInput, labelsTarget ), labelsTarget ) )
 			p.getB().set( p.getA().getIntegerLong() );
@@ -145,7 +145,7 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 
 			}
 
-		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[1]" ).set( "spark.driver.maxResultSize", "4g" );
+		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[2]" ).set( "spark.driver.maxResultSize", "4g" );
 		final JavaSparkContext sc = new JavaSparkContext( conf );
 		Logger.getRootLogger().setLevel( Level.ERROR );
 
@@ -164,10 +164,16 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 //		final JavaPairRDD< Long, In > graphs =
 //				blocksRdd.mapToPair( new PrepareRegionMerging.BuildBlockedGraph( dimsNoChannels, dimsIntervalNoChannels, merger, weightFunc ) ).cache();
 		final Tuple2< JavaPairRDD< Long, In >, TLongLongHashMap > graphsAndBorderNodes = PrepareRegionMergingCutBlocks.run( sc, blocksRdd, sc.broadcast( dimsNoChannels ),
-				sc.broadcast( dimsIntervalNoChannels ), merger, weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() > 0.1, blockIdService );
-		final JavaPairRDD< Long, In > graphs = graphsAndBorderNodes._1();
+				sc.broadcast( dimsIntervalNoChannels ), merger, weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() > 0.5, blockIdService );
+		final JavaPairRDD< Long, In > graphs = graphsAndBorderNodes._1().cache();
 
-		System.out.println( "SEVENTEEN " + graphs.keys().filter( l -> l.longValue() == 17 ).count() );
+		final List< Tuple2< Long, Long > > duplicateKeys = graphs
+				.mapToPair( t -> new Tuple2<>( t._1(), 1l ) )
+				.reduceByKey( ( l1, l2 ) -> l1 + l2 )
+				.filter( t -> t._2() > 1 )
+				.collect();
+
+		System.out.println( "Duplicate keys!\n" + duplicateKeys );
 
 
 		// print to std out initial number of edges
@@ -332,7 +338,8 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 				p.getB().set( parents.contains( p.getA().get() ) ? parents.get( p.getA().get() ) : p.getA().get() );
 			blockImages.add( blockImg );
 		};
-		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, Double.POSITIVE_INFINITY, rmVisitor, labelsTarget );
+		final double threshold = 10000.0;// Double.POSITIVE_INFINITY;
+		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, threshold, rmVisitor, labelsTarget, 100.0 );
 
 		final TLongIntHashMap colorMap = new TLongIntHashMap();
 		{

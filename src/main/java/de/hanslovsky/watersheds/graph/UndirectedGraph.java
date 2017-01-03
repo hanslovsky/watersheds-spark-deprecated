@@ -63,6 +63,10 @@ public class UndirectedGraph implements Serializable
 
 	public int addEdge( final double weight, final double affinity, final long from, final long to, final long multiplicity )
 	{
+
+		if ( weight < 0.0 )
+			return -1;
+
 		if ( !nodeEdgeMap.contains( from ) )
 			nodeEdgeMap.put( from, new TLongIntHashMap() );
 		if ( !nodeEdgeMap.contains( to ) )
@@ -71,8 +75,23 @@ public class UndirectedGraph implements Serializable
 //			return -1;
 
 		final int newEdge = e1.add( weight, affinity, from, to, multiplicity );
-		nodeEdgeMap.get( from ).put( to, newEdge );
-		nodeEdgeMap.get( to ).put( from, newEdge );
+		final TLongIntHashMap n1 = nodeEdgeMap.get( from );
+		final TLongIntHashMap n2 = nodeEdgeMap.get( to );
+
+		if ( n1.contains( to ) && n2.contains( from ) )
+		{
+			e2.setIndex( n1.get( to ) );
+			if ( weight < e2.weight() )
+			{
+				n1.put( to, newEdge );
+				n2.put( from, newEdge );
+			}
+		}
+		else
+		{
+			n1.put( to, newEdge );
+			n2.put( from, newEdge );
+		}
 		return newEdge;
 	}
 
@@ -107,9 +126,6 @@ public class UndirectedGraph implements Serializable
 			return null;
 		e1.weight( -1.0 );
 
-		if ( newNode == 5711 )
-			System.out.println( "Contracting " + from + " and " + to + " into " + newNode );
-
 		updateEdges( from, newNode, edge, to, edges, this );
 		updateEdges( to, newNode, edge, from, edges, this );
 
@@ -138,7 +154,6 @@ public class UndirectedGraph implements Serializable
 //		System.out.println( "Removing map at " + oldIndex );
 		final TLongIntHashMap edges = g.nodeEdgeMap.remove( oldIndex );
 
-		boolean was5711 = false;
 		for ( final TLongIntIterator it = edges.iterator(); it.hasNext(); )
 		{
 			it.advance();
@@ -149,16 +164,6 @@ public class UndirectedGraph implements Serializable
 
 			if ( otherIndex == ignoreIndex )
 				continue;
-
-			if ( otherIndex == 5711 )
-			{
-				was5711 = true;
-				final Edge e = new Edge( g.edges );
-				e.setIndex( edge );
-				System.out.println( "5711 involved: " + e.from() + " " + e.to() + " " + oldIndex + " " + ignoreIndex );
-				e.setIndex( edgeIndex );
-				System.out.println( "5711 involved: " + e.from() + " " + e.to() + " " + oldIndex + " " + newIndex + " " + ignoreIndex + " " + edge + " " + edgeIndex );
-			}
 
 			if ( newEdges.contains( otherIndex ) )
 			{
@@ -176,18 +181,14 @@ public class UndirectedGraph implements Serializable
 				g.nodeEdgeMap.get( otherIndex ).put( newIndex, newEdgeIndex );
 			}
 
-			// TODO REMOVING INDEX -- SOMETHING GOES WRONG HERE!!!
-			// Because I don't use new indices. How to fix it? Don't remove
-			// oldIndex? Only later?
-//			g.nodeEdgeMap.get( otherIndex ).remove( oldIndex );
+			// TODO is second line also part of condition?
 			if ( oldIndex != newIndex )
 				g.nodeEdgeMap.get( otherIndex ).remove( oldIndex );
+
 			g.e2.weight( -1.0 );
 
 		}
 
-		if ( was5711 )
-			System.out.println();
 	}
 
 	public static TLongObjectHashMap< TLongIntHashMap > generateNodeEdgeMap( final TDoubleArrayList edges )

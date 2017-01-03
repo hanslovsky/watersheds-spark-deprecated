@@ -67,10 +67,10 @@ public class RegionMerging
 
 	public JavaPairRDD< Long, MergeBloc.In > run( final JavaSparkContext sc, final JavaPairRDD< Long, MergeBloc.In > rddIn, final double threshold, final RandomAccessibleInterval< LongType > labelsTarget )
 	{
-		return run( sc, rddIn, threshold, ( parents ) -> {}, labelsTarget );
+		return run( sc, rddIn, threshold, ( parents ) -> {}, labelsTarget, Long.MAX_VALUE );
 	}
 
-	public JavaPairRDD< Long, MergeBloc.In > run( final JavaSparkContext sc, final JavaPairRDD< Long, MergeBloc.In > rddIn, final double threshold, final Visitor visitor, final RandomAccessibleInterval< LongType > labelsTarget )
+	public JavaPairRDD< Long, MergeBloc.In > run( final JavaSparkContext sc, final JavaPairRDD< Long, MergeBloc.In > rddIn, final double threshold, final Visitor visitor, final RandomAccessibleInterval< LongType > labelsTarget, final double maxMergeProportion )
 	{
 		final List< Long > indices = rddIn.keys().collect();
 		final TLongLongHashMap parents = new TLongLongHashMap();
@@ -82,42 +82,21 @@ public class RegionMerging
 
 
 		int iteration = 0;
-		final long label = 5711;// 3693; // was 5711
 		final int targetIteration = 0;
-		for ( boolean hasChanged = true; hasChanged; ++iteration )
+		double actualThreshold = threshold;
+		for ( boolean hasChanged = true; hasChanged; ++iteration, actualThreshold *= 2 )
 		{
-
-			if ( iteration == targetIteration )
-			{
-				final List< Tuple2< Long, In > > initialSelection = rdd.filter( t -> t._2().g.nodeEdgeMap().contains( label ) ).collect();
-				if ( initialSelection.size() > 0 )
-				{
-					final In gr = initialSelection.get( 0 )._2();
-					final TLongObjectHashMap< TLongIntHashMap > nem = gr.g.nodeEdgeMap();
-					final TLongLongHashMap assgn = new TLongLongHashMap();
-					for ( final TLongIterator it = nem.keySet().iterator(); it.hasNext(); )
-					{
-						final long k = it.next();
-						assgn.put( k, k );
-					}
-//					VisTools.show( assgn, gr.outsideNodes, labelsTarget, "init1", "init2" );
-				}
-			}
 
 			final JavaPairRDD< Tuple2< Long, Long >, Out > mergedEdges =
 					rdd
-					.mapToPair( new MergeBloc.MergeBlocPairFunction2( f, merger, threshold, idService, mergerService ) )
+							.mapToPair( new MergeBloc.MergeBlocPairFunction2( f, merger, actualThreshold, idService, mergerService, maxMergeProportion ) )
 					.cache();
 
 //			final JavaPairRDD< Tuple2< Long, Long >, Out > selection = iteration == targetIteration ? VisTools.showBlockSelectByNode( mergedEdges, labelsTarget, label ) : null;
 
-			System.out.println( "Ham wir das? " + mergedEdges.filter( t -> t._2().g.nodeEdgeMap().contains( label ) ).count() );
-			mergedEdges.filter( t -> t._2().g.nodeEdgeMap().contains( label ) ).map( t -> {
-				System.out.println( "NEM " + t._1() + " " + t._2().g.nodeEdgeMap().get( 5676 ) + " " + t._2().g.nodeEdgeMap().get( label ) );
-				return true;
-			} ).count();
 
 
+			hasChanged = mergedEdges.filter( t -> t._2().hasChanged ).count() > 0;
 
 			final List< Tuple2< Long, Long > > mergers = mergedEdges.keys().collect();
 			boolean pointsOutside = false;
@@ -132,7 +111,7 @@ public class RegionMerging
 				dj.join( r1, r2 );
 			}
 
-			hasChanged = pointsOutside;
+//			hasChanged = pointsOutside;
 
 			for ( final TLongIterator it = parents.keySet().iterator(); it.hasNext(); )
 				dj.findRoot( it.next() );
@@ -150,6 +129,7 @@ public class RegionMerging
 			rdd.count();
 			System.out.println( rdd.keys().collect() );
 			System.out.println( "Merged blocks, now " + rdd.count() + " blocks" );
+
 			if ( rdd.count() == 0 )
 				hasChanged = false;
 
@@ -332,7 +312,8 @@ public class RegionMerging
 			borderNodes.putAll( md1.borderNodes );
 			borderNodes.putAll( md2.borderNodes );
 
-			final TLongHashSet mergedBorderNodes = md1.mergedBorderNodes;
+			final TLongHashSet mergedBorderNodes = new TLongHashSet();
+			mergedBorderNodes.addAll( md1.mergedBorderNodes );
 			mergedBorderNodes.addAll( md2.mergedBorderNodes );
 
 			final TLongLongHashMap outsideNodes = new TLongLongHashMap();
@@ -397,7 +378,6 @@ public class RegionMerging
 
 
 			new UndirectedGraph( target.data(), edgeMerger );
-			System.out.println( t._1() + " " + target.size() + " (" + edges.size() + ") edges!" );
 			final MergeBloc.In result = new MergeBloc.In( g, counts, borderNodes, t._2().outsideNodes );
 
 			return new Tuple2<>( t._1(), result );

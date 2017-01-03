@@ -479,7 +479,7 @@ public class WatershedsSparkWithRegionMerging2DTwelveByTwelve
 				p.getB().set( parents.get( p.getA().get() ) );
 			blockImages.add( blockImg );
 		};
-		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, 50000.0, rmVisitor, labelsTarget );
+		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, 50000.0, rmVisitor, labelsTarget, Long.MAX_VALUE );
 
 		final List< Tuple2< Long, In > > gs = graphsAfterMerging.collect();
 

@@ -195,8 +195,6 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 			assignment.put( k, block );
 		}
 
-		System.out.println( "THE SAME? " + id + " " + startingId + " " + dj.setCount() );
-
 		return assignment;
 	}
 
