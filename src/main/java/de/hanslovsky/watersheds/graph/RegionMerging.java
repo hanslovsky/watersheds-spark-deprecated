@@ -81,11 +81,19 @@ public class RegionMerging
 		JavaPairRDD< Long, MergeBloc.In > rdd = rddIn;
 
 
-		int iteration = 0;
-		final int targetIteration = 0;
-		double actualThreshold = threshold;
-		for ( boolean hasChanged = true; hasChanged; ++iteration, actualThreshold *= 2 )
+		for ( boolean hasChanged = true; hasChanged; )
 		{
+
+			final long blockCount = rdd.count();
+
+			final double actualThreshold = blockCount == 1 ? Double.POSITIVE_INFINITY : rdd.values().map( in -> {
+				final Edge e = new Edge( in.g.edges() );
+				double max = Double.NEGATIVE_INFINITY;
+				for ( int i = 0; i < e.size(); ++i )
+					if ( e.weight() > max )
+						max = e.weight();
+				return max;
+			} ).reduce( ( d1, d2 ) -> Math.min( d1, d2 ) ).doubleValue();
 
 			final JavaPairRDD< Tuple2< Long, Long >, Out > mergedEdges =
 					rdd
