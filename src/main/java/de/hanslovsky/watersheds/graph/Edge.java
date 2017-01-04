@@ -92,7 +92,7 @@ public class Edge implements Serializable
 
 	public int remove()
 	{
-		data.remove( data.size() - SIZE, SIZE );
+		data.remove( k, SIZE );
 		return size();
 	}
 
