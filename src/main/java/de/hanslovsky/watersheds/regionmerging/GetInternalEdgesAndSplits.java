@@ -235,7 +235,7 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 		System.out.println( lRa.get() );
 
 		final AtomicLong startId = new AtomicLong( l.length );
-		final GetInternalEdgesAndSplits< Long > splits = new GetInternalEdgesAndSplits<>( blockDim, MergeBloc.DEFAULT_EDGE_MERGER, new RegionMerging.CountOverSquaredSize(), ( e ) -> e.affinity() > 0, ( n ) -> {
+		final GetInternalEdgesAndSplits< Long > splits = new GetInternalEdgesAndSplits<>( blockDim, MergeBloc.DEFAULT_EDGE_MERGER, new RegionMerging.CountOverSquaredAffinity(), ( e ) -> e.affinity() > 0, ( n ) -> {
 			return startId.getAndIncrement();
 		} );
 

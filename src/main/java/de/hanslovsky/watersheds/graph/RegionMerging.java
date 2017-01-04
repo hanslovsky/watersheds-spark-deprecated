@@ -142,7 +142,7 @@ public class RegionMerging
 		return rdd;
 	}
 
-	public static class CountOverSquaredSize implements Function, Serializable
+	public static class CountOverSquaredAffinity implements Function, Serializable
 	{
 		/**
 		 *
@@ -153,6 +153,44 @@ public class RegionMerging
 		public double weight( final double a, final long c1, final long c2 )
 		{
 			return Math.min( c1, c2 ) / ( a * a );
+		}
+
+	}
+
+	public static class CountOverAffinityToFourthPower implements Function, Serializable
+	{
+		/**
+		 *
+		 */
+		private static final long serialVersionUID = -2382379605891324313L;
+
+		@Override
+		public double weight( final double a, final long c1, final long c2 )
+		{
+			return Math.min( c1, c2 ) / ( a * a * ( a * a ) );
+		}
+
+	}
+
+	public static class CountOverAffinityToPower implements Function, Serializable
+	{
+		/**
+		 *
+		 */
+		private static final long serialVersionUID = -2382379605891324313L;
+
+		private final double power;
+
+		public CountOverAffinityToPower( final double power )
+		{
+			super();
+			this.power = power;
+		}
+
+		@Override
+		public double weight( final double a, final long c1, final long c2 )
+		{
+			return Math.min( c1, c2 ) / Math.pow( a, power );
 		}
 
 	}
@@ -513,7 +551,7 @@ public class RegionMerging
 		final JavaSparkContext sc = new JavaSparkContext( conf );
 		Logger.getRootLogger().setLevel( Level.ERROR );
 
-		final CountOverSquaredSize func = new CountOverSquaredSize();
+		final CountOverSquaredAffinity func = new CountOverSquaredAffinity();
 
 		final ArrayList< Tuple2< Long, MergeBloc.In > > al = new ArrayList<>();
 		{

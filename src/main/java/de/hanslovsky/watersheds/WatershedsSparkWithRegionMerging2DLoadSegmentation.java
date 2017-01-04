@@ -160,7 +160,9 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 		final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksRdd =
 				sc.parallelizePairs( blocks ).cache();
 		final EdgeMerger merger = MergeBloc.DEFAULT_EDGE_MERGER;
-		final Function weightFunc = ( Function & Serializable ) ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a );
+//		final Function weightFunc = ( Function & Serializable ) ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a );
+//		final Function weightFunc = new RegionMerging.CountOverAffinityToFourthPower();
+		final Function weightFunc = new RegionMerging.CountOverAffinityToPower( 8.0 );
 //		final JavaPairRDD< Long, In > graphs =
 //				blocksRdd.mapToPair( new PrepareRegionMerging.BuildBlockedGraph( dimsNoChannels, dimsIntervalNoChannels, merger, weightFunc ) ).cache();
 		final Tuple2< JavaPairRDD< Long, In >, TLongLongHashMap > graphsAndBorderNodes = PrepareRegionMergingCutBlocks.run( sc, blocksRdd, sc.broadcast( dimsNoChannels ),

@@ -44,7 +44,7 @@ public class UndirectedGraphTest
 			final long r2 = dj.findRoot( 272 );
 			final long n = dj.join( r1, r2 );
 			System.out.println( r1 + " " + r2 + " " + n );
-			g.contract( 1, n, new TLongLongHashMap(), new RegionMerging.CountOverSquaredSize() );
+			g.contract( 1, n, new TLongLongHashMap(), new RegionMerging.CountOverSquaredAffinity() );
 		}
 		System.out.println();
 
@@ -65,7 +65,7 @@ public class UndirectedGraphTest
 			final long r2 = dj.findRoot( 230 );
 			final long n = dj.join( r1, r2 );
 			System.out.println( r1 + " " + r2 + " " + n );
-			g.contract( 4, n, new TLongLongHashMap(), new RegionMerging.CountOverSquaredSize() );
+			g.contract( 4, n, new TLongLongHashMap(), new RegionMerging.CountOverSquaredAffinity() );
 		}
 		System.out.println();
 

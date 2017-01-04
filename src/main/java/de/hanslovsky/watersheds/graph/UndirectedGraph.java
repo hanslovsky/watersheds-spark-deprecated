@@ -241,7 +241,7 @@ public class UndirectedGraph implements Serializable
 			System.out.println( e.weight() + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() );
 		}
 
-		g.contract( 0, 3, new TLongLongHashMap( 0, 0, -1, 1 ), new RegionMerging.CountOverSquaredSize() );
+		g.contract( 0, 3, new TLongLongHashMap( 0, 0, -1, 1 ), new RegionMerging.CountOverSquaredAffinity() );
 		System.out.println( g.nodeEdgeMap() );
 		for ( int i = 0; i < e.size(); ++i )
 		{
