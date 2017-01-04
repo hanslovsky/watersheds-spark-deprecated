@@ -4,7 +4,17 @@ import java.util.Comparator;
 
 import org.apache.spark.api.java.function.PairFunction;
 
+import net.imglib2.Dimensions;
+import net.imglib2.RandomAccessibleInterval;
+import net.imglib2.converter.Converter;
+import net.imglib2.img.Img;
+import net.imglib2.img.ImgFactory;
+import net.imglib2.type.numeric.RealType;
 import net.imglib2.util.IntervalIndexer;
+import net.imglib2.util.Pair;
+import net.imglib2.view.Views;
+import net.imglib2.view.composite.CompositeIntervalView;
+import net.imglib2.view.composite.RealComposite;
 import scala.Tuple2;
 
 public class Util
@@ -56,5 +66,39 @@ public class Util
 			return new Tuple2<>( t._1(), t._2()._1() );
 		}
 
+	}
+
+	public static < T extends RealType< T >, U extends RealType< U > > RandomAccessibleInterval< RealComposite< U > > prepareAffinities( final RandomAccessibleInterval< T > data, final ImgFactory< U > fac, final U u, final int... perm )
+	{
+		return Util.prepareAffinities( data, fac, u, ( s, t ) -> {
+			t.setReal( s.getRealDouble() );
+		}, perm );
+	}
+
+	public static < T extends RealType< T >, U extends RealType< U > > RandomAccessibleInterval< RealComposite< U > > prepareAffinities( final RandomAccessibleInterval< T > data, final ImgFactory< U > fac, final U u, final Converter< T, U > conv, final int... perm )
+	{
+		final Img< U > input = fac.create( data, u );
+		for ( final Pair< T, U > p : Views.interval( Views.pair( Views.permuteCoordinates( data, perm, data.numDimensions() - 1 ), input ), input ) )
+			conv.convert( p.getA(), p.getB() );
+	
+		final CompositeIntervalView< U, RealComposite< U > > affs = Views.collapseReal( input );
+		return affs;
+	}
+
+	public static int[] getFlipPermutation( final int numDimensions )
+	{
+		final int[] perm = new int[ numDimensions ];
+		for ( int d = 0, flip = numDimensions - 1; d < numDimensions; ++d, --flip )
+			perm[ d ] = flip;
+		return perm;
+	}
+
+	public static int[] getStride( final Dimensions dim )
+	{
+		final int[] stride = new int[ dim.numDimensions() ];
+		stride[ 0 ] = 1;
+		for ( int d = 1; d < stride.length; ++d )
+			stride[ d ] = stride[ d - 1 ] * ( int ) dim.dimension( d - 1 );
+		return stride;
 	}
 }

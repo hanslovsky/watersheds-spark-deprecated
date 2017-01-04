@@ -9,13 +9,9 @@ import bdv.util.BdvOptions;
 import bdv.util.BdvStackSource;
 import gnu.trove.map.hash.TLongIntHashMap;
 import net.imglib2.Cursor;
-import net.imglib2.Dimensions;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
-import net.imglib2.converter.Converter;
 import net.imglib2.converter.Converters;
-import net.imglib2.img.Img;
-import net.imglib2.img.ImgFactory;
 import net.imglib2.img.array.ArrayCursor;
 import net.imglib2.img.array.ArrayImg;
 import net.imglib2.img.array.ArrayImgFactory;
@@ -28,10 +24,8 @@ import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.IntervalIndexer;
 import net.imglib2.util.Intervals;
-import net.imglib2.util.Pair;
 import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
-import net.imglib2.view.composite.CompositeIntervalView;
 import net.imglib2.view.composite.RealComposite;
 
 public class NaiveMerging
@@ -55,40 +49,6 @@ public class NaiveMerging
 		}
 	}
 
-	public static < T extends RealType< T >, U extends RealType< U > > RandomAccessibleInterval< RealComposite< U > > prepareAffinities( final RandomAccessibleInterval< T > data, final ImgFactory< U > fac, final U u, final int... perm )
-	{
-		return prepareAffinities( data, fac, u, ( s, t ) -> {
-			t.setReal( s.getRealDouble() );
-		}, perm );
-	}
-
-	public static < T extends RealType< T >, U extends RealType< U > > RandomAccessibleInterval< RealComposite< U > > prepareAffinities( final RandomAccessibleInterval< T > data, final ImgFactory< U > fac, final U u, final Converter< T, U > conv, final int... perm )
-	{
-		final Img< U > input = fac.create( data, u );
-		for ( final Pair< T, U > p : Views.interval( Views.pair( Views.permuteCoordinates( data, perm, data.numDimensions() - 1 ), input ), input ) )
-			conv.convert( p.getA(), p.getB() );
-
-		final CompositeIntervalView< U, RealComposite< U > > affs = Views.collapseReal( input );
-		return affs;
-	}
-
-	public static int[] getFlipPermutation( final int numDimensions )
-	{
-		final int[] perm = new int[ numDimensions ];
-		for ( int d = 0, flip = numDimensions - 1; d < numDimensions; ++d, --flip )
-			perm[ d ] = flip;
-		return perm;
-	}
-
-	public static int[] getStride( final Dimensions dim )
-	{
-		final int[] stride = new int[ dim.numDimensions() ];
-		stride[ 0 ] = 1;
-		for ( int d = 1; d < stride.length; ++d )
-			stride[ d ] = stride[ d - 1 ] * ( int ) dim.dimension( d - 1 );
-		return stride;
-	}
-
 	public static void main( final String... args )
 	{
 		final int[] cellSize = new int[] { 60, 60, 60, 2 };
@@ -98,8 +58,8 @@ public class NaiveMerging
 
 		final CellImg< FloatType, ?, ? > data = H5Utils.loadFloat( path, "main", cellSize );
 
-		System.out.println( data.numDimensions() + " " + Arrays.toString( getFlipPermutation( data.numDimensions() - 1 ) ) );
-		final RandomAccessibleInterval< RealComposite< FloatType > > affs = prepareAffinities( data, new ArrayImgFactory<>(), new FloatType(), getFlipPermutation( data.numDimensions() - 1 ) );
+		System.out.println( data.numDimensions() + " " + Arrays.toString( Util.getFlipPermutation( data.numDimensions() - 1 ) ) );
+		final RandomAccessibleInterval< RealComposite< FloatType > > affs = Util.prepareAffinities( data, new ArrayImgFactory<>(), new FloatType(), Util.getFlipPermutation( data.numDimensions() - 1 ) );
 
 		final long[] dimsNoChannels = Intervals.dimensionsAsLongArray( affs );
 
@@ -115,7 +75,7 @@ public class NaiveMerging
 
 		final double threshold = 0.99;
 
-		final int[] stride = getStride( affs );
+		final int[] stride = Util.getStride( affs );
 
 		merge( affs, dj, threshold, stride );
 
