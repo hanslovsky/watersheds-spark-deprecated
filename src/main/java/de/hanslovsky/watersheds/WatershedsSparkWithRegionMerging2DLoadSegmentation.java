@@ -68,7 +68,7 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 	public static void main( final String[] args ) throws IOException
 	{
 
-		final int[] dimsInt = new int[] { 300, 300, 2 }; // dropbox
+		final int[] dimsInt = new int[] { 60, 60, 2 }; // dropbox
 //		final int[] dimsInt = new int[] { 1554, 1670, 153, 3 }; // A
 		final long[] dims = new long[] { dimsInt[ 0 ], dimsInt[ 1 ], dimsInt[ 2 ] };
 		final long[] dimsNoChannels = new long[] { dimsInt[ 0 ], dimsInt[ 1 ] };
@@ -81,7 +81,7 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 
 		final String HOME_DIR = System.getProperty( "user.home" );
 		final String path = HOME_DIR + String.format(
-				"/Dropbox/misc/excerpt2D.h5" );
+				"/Dropbox/misc/excerpt2D-60x60.h5" );
 
 		System.out.println( "Loading data" );
 		final CellImg< FloatType, ?, ? > data =
@@ -106,7 +106,7 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 
 
 
-		final Img< UnsignedShortType > labelsTargetInput = ImageJFunctions.wrapShort( new ImagePlus( System.getProperty( "user.home" ) + "/Dropbox/misc/excerpt2d-labels.tif" ) );
+		final Img< UnsignedShortType > labelsTargetInput = ImageJFunctions.wrapShort( new ImagePlus( System.getProperty( "user.home" ) + "/Dropbox/misc/excerpt2d-labels-60x60.tif" ) );
 		final ArrayImg< LongType, LongArray > labelsTarget = ArrayImgs.longs( Intervals.dimensionsAsLongArray( labelsTargetInput ) );
 		for ( final Pair< UnsignedShortType, LongType > p : Views.interval( Views.pair( labelsTargetInput, labelsTarget ), labelsTarget ) )
 			p.getB().set( p.getA().getIntegerLong() );
@@ -339,7 +339,7 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 			blockImages.add( blockImg );
 		};
 		final double threshold = 10000.0;// Double.POSITIVE_INFINITY;
-		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, threshold, rmVisitor, labelsTarget, 100.0 );
+		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, threshold, rmVisitor, labelsTarget );
 
 		final TLongIntHashMap colorMap = new TLongIntHashMap();
 		{

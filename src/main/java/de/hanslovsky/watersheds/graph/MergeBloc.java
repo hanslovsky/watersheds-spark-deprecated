@@ -204,15 +204,12 @@ public class MergeBloc
 
 		private final MergerService mergerService;
 
-		private final double maxMergeProportion;
-
 		public MergeBlocPairFunction2(
 				final Function f,
 				final EdgeMerger merger,
 				final double threshold,
 				final IdService idService,
-				final MergerService mergerService,
-				final double maxMergeProportion )
+				final MergerService mergerService )
 		{
 			super();
 			this.f = f;
@@ -220,7 +217,6 @@ public class MergeBloc
 			this.threshold = threshold;
 			this.idService = idService;
 			this.mergerService = mergerService;
-			this.maxMergeProportion = maxMergeProportion;
 		}
 
 
@@ -254,7 +250,6 @@ public class MergeBloc
 //			int index = 0;
 //			final String path = System.getProperty( "user.home" ) + "/git/promotion-philipp/notes/watersheds";
 			long count = 0;
-			final long maxActions = ( long ) ( g.nodeEdgeMap().size() * maxMergeProportion );
 			while ( !queue.isEmpty() )
 			{
 
@@ -558,7 +553,7 @@ public class MergeBloc
 			merges.add( Double.doubleToLongBits( w ) );
 		};
 
-		final MergeBlocPairFunction2 mergeBloc = new MergeBlocPairFunction2( ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a ), merger, 180, idService, mergerService, Long.MAX_VALUE );
+		final MergeBlocPairFunction2 mergeBloc = new MergeBlocPairFunction2( ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a ), merger, 180, idService, mergerService );
 		final Tuple2< Tuple2< Long, Long >, Out > test = mergeBloc.call( input );
 
 		System.out.println( "INDEX " + test._1() );

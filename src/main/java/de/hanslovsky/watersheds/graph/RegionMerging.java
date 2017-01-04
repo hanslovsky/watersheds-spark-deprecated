@@ -67,10 +67,10 @@ public class RegionMerging
 
 	public JavaPairRDD< Long, MergeBloc.In > run( final JavaSparkContext sc, final JavaPairRDD< Long, MergeBloc.In > rddIn, final double threshold, final RandomAccessibleInterval< LongType > labelsTarget )
 	{
-		return run( sc, rddIn, threshold, ( parents ) -> {}, labelsTarget, Long.MAX_VALUE );
+		return run( sc, rddIn, threshold, ( parents ) -> {}, labelsTarget );
 	}
 
-	public JavaPairRDD< Long, MergeBloc.In > run( final JavaSparkContext sc, final JavaPairRDD< Long, MergeBloc.In > rddIn, final double threshold, final Visitor visitor, final RandomAccessibleInterval< LongType > labelsTarget, final double maxMergeProportion )
+	public JavaPairRDD< Long, MergeBloc.In > run( final JavaSparkContext sc, final JavaPairRDD< Long, MergeBloc.In > rddIn, final double threshold, final Visitor visitor, final RandomAccessibleInterval< LongType > labelsTarget )
 	{
 		final List< Long > indices = rddIn.keys().collect();
 		final TLongLongHashMap parents = new TLongLongHashMap();
@@ -89,29 +89,20 @@ public class RegionMerging
 
 			final JavaPairRDD< Tuple2< Long, Long >, Out > mergedEdges =
 					rdd
-							.mapToPair( new MergeBloc.MergeBlocPairFunction2( f, merger, actualThreshold, idService, mergerService, maxMergeProportion ) )
+					.mapToPair( new MergeBloc.MergeBlocPairFunction2( f, merger, actualThreshold, idService, mergerService ) )
 					.cache();
-
-//			final JavaPairRDD< Tuple2< Long, Long >, Out > selection = iteration == targetIteration ? VisTools.showBlockSelectByNode( mergedEdges, labelsTarget, label ) : null;
-
-
 
 			hasChanged = mergedEdges.filter( t -> t._2().hasChanged ).count() > 0;
 
 			final List< Tuple2< Long, Long > > mergers = mergedEdges.keys().collect();
-			boolean pointsOutside = false;
 			for ( final Tuple2< Long, Long > m : mergers )
 			{
 				final long index1 = m._1();
 				final long index2 = m._2();
-				if ( index1 != index2 )
-					pointsOutside = true;
 				final long r1 = dj.findRoot( index1 );
 				final long r2 = dj.findRoot( index2 );
 				dj.join( r1, r2 );
 			}
-
-//			hasChanged = pointsOutside;
 
 			for ( final TLongIterator it = parents.keySet().iterator(); it.hasNext(); )
 				dj.findRoot( it.next() );
@@ -135,33 +126,8 @@ public class RegionMerging
 
 			visitor.visit( parents );
 
-//			if ( iteration == targetIteration )
-//			{
-//				final long parentsKey = parents.get( selection.first()._1()._1() );
-//				final Tuple2< Long, MergeData > parentsSelection = merged.filter( t -> t._1().longValue() == parentsKey ).first();
-//				if ( parentsSelection != null )
-//				{
-//					final MergeData gr = parentsSelection._2();
-////					System.out.println( "ASSIGNM " + gr.assignments );
-////					System.out.println( "OUTSIDE " + gr.outsideNodes );
-//					int count = 0;
-//					for ( final TLongLongIterator it = gr.assignments.iterator(); it.hasNext(); )
-//					{
-//						it.advance();
-//						if ( it.key() != it.value() )
-//							++count;
-//					}
-//					System.out.println( count + " regions point to different parent" );
-//					VisTools.show( gr.assignments, gr.outsideNodes, labelsTarget, "after 1", "after 2" );
-//				}
-//			}
 
 			System.out.println( "CNT: " + rdd.count() + " " + hasChanged );
-//			if ( iteration > 1 )
-//				break;
-
-//			if ( rdd.count() <= 1 )
-//				break;
 
 		}
 
