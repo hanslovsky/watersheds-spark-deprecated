@@ -481,29 +481,29 @@ public class WatershedsSpark
 			final RealRandomAccessible< LongType > rra = Views.interpolate( Views.extendValue( mergedLabels, new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() );
 			ValueDisplayListener.addValueOverlay( rra, bdv.getBdvHandle().getViewerPanel() );
 
-			final ShowEdges se = new ShowEdges(
-					AffinityWatershedBlocked.EDGES,
-					bdv.getBdvHandle().getViewerPanel(),
-					bdv.getBdvHandle().getTriggerbindings() );
-
-			final RandomAccessibleInterval< ARGBType > singleEdgeDisplay = Converters.convert(
-					( RandomAccessibleInterval< LongType > ) labelsTarget,
-					( s, t ) -> {
-						final WeightedEdge e = se.getEdge();
-						if ( e == null )
-							t.set( 0 );
-						else if ( s.get() == e.getFirst() )
-							t.set( ARGBType.rgba( 255, 0, 0, 255 ) );
-						else if ( s.get() == e.getSecond() )
-							t.set( ARGBType.rgba( 0, 255, 0, 255 ) );
-						else
-							t.set( 0 );
-					},
-					new ARGBType() );
-
-			BdvFunctions.show( singleEdgeDisplay, "single edges", BdvOptions.options().addTo( bdv ) );
-
-			BdvFunctions.show( labelsTarget, "labels", BdvOptions.options().addTo( bdv ) );
+//			final ShowEdges se = new ShowEdges(
+//					AffinityWatershedBlocked.EDGES,
+//					bdv.getBdvHandle().getViewerPanel(),
+//					bdv.getBdvHandle().getTriggerbindings() );
+//
+//			final RandomAccessibleInterval< ARGBType > singleEdgeDisplay = Converters.convert(
+//					( RandomAccessibleInterval< LongType > ) labelsTarget,
+//					( s, t ) -> {
+//						final WeightedEdge e = se.getEdge();
+//						if ( e == null )
+//							t.set( 0 );
+//						else if ( s.get() == e.getFirst() )
+//							t.set( ARGBType.rgba( 255, 0, 0, 255 ) );
+//						else if ( s.get() == e.getSecond() )
+//							t.set( ARGBType.rgba( 0, 255, 0, 255 ) );
+//						else
+//							t.set( 0 );
+//					},
+//					new ARGBType() );
+//
+//			BdvFunctions.show( singleEdgeDisplay, "single edges", BdvOptions.options().addTo( bdv ) );
+//
+//			BdvFunctions.show( labelsTarget, "labels", BdvOptions.options().addTo( bdv ) );
 
 		}
 

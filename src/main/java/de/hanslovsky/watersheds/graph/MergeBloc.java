@@ -6,8 +6,10 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.apache.spark.api.java.function.PairFunction;
 
 import de.hanslovsky.watersheds.DisjointSetsHashMap;
+import de.hanslovsky.watersheds.util.ChangeablePriorityQueue;
 import gnu.trove.iterator.TIntIntIterator;
 import gnu.trove.iterator.TIntIterator;
+import gnu.trove.iterator.TLongIntIterator;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TLongArrayList;
@@ -186,6 +188,45 @@ public class MergeBloc
 	public static EdgeMerger DEFAULT_EDGE_MERGER = ( e1, e2 ) -> {
 		e2.affinity( Math.max( e1.affinity(), e2.affinity() ) );
 		e2.multiplicity( e1.multiplicity() + e2.multiplicity() );
+		e2.weight( Double.NaN );
+		return e2;
+	};
+
+	public static EdgeMerger DEFAULT_EDGE_MERGER2 = ( e1, e2 ) -> {
+		final long m1 = e1.multiplicity();
+		final long m2 = e2.multiplicity();
+		final long m = m1 + m2;
+		e2.affinity( ( m1 * e1.affinity() + m2 * e2.affinity() ) / m );
+		e2.multiplicity( m );
+		e2.weight( Double.NaN );
+		return e2;
+	};
+
+	public static EdgeMerger AVERAGING_EDGE_MERGER = ( e1, e2 ) -> {
+		final long m1 = e1.multiplicity();
+		final long m2 = e2.multiplicity();
+		final long m = m1 + m2;
+		e2.weight( ( m1 * e1.weight() + m2 * e2.weight() ) / m );
+		e2.multiplicity( m );
+		return e2;
+	};
+
+	public static EdgeMerger MAX_EDGE_MERGER = ( e1, e2 ) -> {
+		e2.weight( Math.max( e1.weight(), e2.weight() ) );
+		e2.multiplicity( e1.multiplicity() + e2.multiplicity() );
+		return e2;
+	};
+
+	public static EdgeMerger MIN_EDGE_MERGER = ( e1, e2 ) -> {
+		e2.weight( Math.min( e1.weight(), e2.weight() ) );
+		e2.multiplicity( e1.multiplicity() + e2.multiplicity() );
+		return e2;
+	};
+
+	public static EdgeMerger MAX_AFFINITY_MERGER = ( e1, e2 ) -> {
+		e2.affinity( Math.max( e1.affinity(), e2.affinity() ) );
+		e2.weight( Double.NaN );
+		e2.multiplicity( e1.multiplicity() + e2.multiplicity() );
 		return e2;
 	};
 
@@ -228,12 +269,14 @@ public class MergeBloc
 
 			final UndirectedGraph g = new UndirectedGraph( in.g.edges(), merger );
 
-			final IntHeapPriorityQueue queue = new IntHeapPriorityQueue( new EdgeComparator( g.edges() ) );
+//			final IntHeapPriorityQueue queue = new IntHeapPriorityQueue( new EdgeComparator( g.edges() ) );
 			final Edge e = new Edge( g.edges() );
+			final ChangeablePriorityQueue queue = new ChangeablePriorityQueue( e.size(), ChangeablePriorityQueue.DEFAULT_COMPARE );
 			for ( int i = 0; i < e.size(); ++i )
 			{
 				e.setIndex( i );
-				queue.enqueue( i );
+				queue.push( i, e.weight() );
+//				queue.enqueue( i );
 			}
 
 			boolean outsideNodeIsInvolved = false;
@@ -250,16 +293,17 @@ public class MergeBloc
 //			int index = 0;
 //			final String path = System.getProperty( "user.home" ) + "/git/promotion-philipp/notes/watersheds";
 			long count = 0;
-			while ( !queue.isEmpty() )
+			while ( !queue.empty() )
 			{
 
-				final int next = queue.dequeueInt();
+				final int next = queue.top();
+				queue.pop();
 				e.setIndex( next );
 				final double w = e.weight();
 
 				if ( w < 0 )
+					//					queue.deleteItem( next );
 					continue;
-
 				else if ( w > threshold || outsideNodeIsInvolved && w > maxWeightBeforeMerge )
 					break;
 
@@ -291,12 +335,18 @@ public class MergeBloc
 				}
 				else
 				{
-
 					final long r1 = dj.findRoot( from );
 					final long r2 = dj.findRoot( to );
 					if ( r1 == r2 || r1 != from || r2 != to )
 						continue;
 					final long n = dj.join( r1, r2 );
+//					e.from( r1 );
+//					e.to( r2 );
+
+					System.out.println( "MERGING " + t._1() + " " + e.weight() + " " + e.from() + " " + e.to() + " " + r1 + " " + r2 + " " + n + " " + next );
+					System.out.println( g.nodeEdgeMap().get( r1 ) );
+					System.out.println( g.nodeEdgeMap().get( r2 ) );
+					System.out.println();
 
 					if ( in.borderNodes.contains( from ) )
 					{
@@ -328,33 +378,40 @@ public class MergeBloc
 					else
 					{
 						in.counts.put( n, cn );
-						final TLongIntHashMap newEdges = g.contract( next, n, in.counts, f );
+						final TLongIntHashMap edgesOfUnusedNode = g.contract( next, r1, r2, n, in.counts, dj, f );
 
-						if ( newEdges == null )
+						for ( final TLongIntIterator it = edgesOfUnusedNode.iterator(); it.hasNext(); )
 						{
-							System.out.println( "IS NULL!" );
-							System.out.println( from + " " + to + " " + r1 + " " + r2 + " " + n + " " + c1 + " " + c2 + " " + cn );
-							System.exit( 123 );
-							in.counts.remove( n );
-							continue;
-						}
-
-
-						for ( final TIntIterator it = newEdges.valueCollection().iterator(); it.hasNext(); )
-						{
-							final int id = it.next();
+							it.advance();
+							final int id = it.value();
 							e.setIndex( id );
-							// TODO
-							// should we still edges, even if larger than threshold?
-							// could re-use graph with different threshold then!
-//						if ( e.weight() < threshold )
-							queue.enqueue( id );
+							final double weight = e.weight();
+							if ( weight < 0.0 && id != next )
+							{
+								if (!queue.contains( id ) )
+								{
+//									System.out.println( "Queue does not contain edge " + id + " -- why ? " );
+//									System.exit( 123 );
+								}
+								else
+									queue.deleteItem( id );
+							}
+							else
+								queue.changePriority( id, e.weight() );
 						}
 						mergerService.addMerge( from, to, n, w );
 						++count;
 					}
 
 				}
+
+//				System.out.println( e.size() + " edges remaining." );
+//				for ( int i = 0; i < e.size(); ++i )
+//				{
+//					e.setIndex( i );
+//					System.out.println( e.weight() + " " + queue.priority( i ) );
+//				}
+//				System.out.println( "" );
 
 			}
 

@@ -1,5 +1,7 @@
 package de.hanslovsky.watersheds.io;
 
+import java.util.Arrays;
+
 import org.apache.spark.api.java.function.PairFunction;
 
 import de.hanslovsky.watersheds.HashableLongArray;
@@ -40,6 +42,7 @@ PairFunction< HashableLongArray, HashableLongArray, float[] >
 		final long[] currentDims = Util.getCurrentChunkDimensions( o, dims, intervalDims );
 		final long nElements = Intervals.numElements( currentDims );
 		final float[] store = new float[ ( int ) nElements ];
+		System.out.println( nElements + " " + Arrays.toString( currentDims ) );
 		opener.open( o, currentDims, ArrayImgs.floats( store, currentDims ) );
 		return new Tuple2<>( t, store );
 	}

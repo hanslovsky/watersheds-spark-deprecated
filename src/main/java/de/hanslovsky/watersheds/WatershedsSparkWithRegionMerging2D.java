@@ -75,6 +75,7 @@ import net.imglib2.util.Pair;
 import net.imglib2.view.ExtendedRandomAccessibleInterval;
 import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
+import net.imglib2.view.composite.CompositeIntervalView;
 import net.imglib2.view.composite.RealComposite;
 import scala.Tuple2;
 import scala.Tuple3;
@@ -85,38 +86,37 @@ public class WatershedsSparkWithRegionMerging2D
 	public static void main( final String[] args ) throws IOException
 	{
 
-		final int[] dimsInt = new int[] { 300, 300, 2 }; // dropbox
-//		final int[] dimsInt = new int[] { 1554, 1670, 153, 3 }; // A
-		final long[] dims = new long[] { dimsInt[ 0 ], dimsInt[ 1 ], dimsInt[ 2 ] };
-		final long[] dimsNoChannels = new long[] { dimsInt[ 0 ], dimsInt[ 1 ] };
-		final int[] dimsIntervalInt = new int[] { 30, 30, 2 };
+		final int[] cellSize = new int[] { 300, 300, 2 };
+		final int[] dimsIntervalInt = new int[] { 300, 300, 2 };
 		final long[] dimsInterval = new long[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ], dimsIntervalInt[ 2 ] };
 		final int[] dimsIntervalIntNoChannels = new int[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ] };
 		final long[] dimsIntervalNoChannels = new long[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ] };
-		final int[] cellSize = new int[] { 300, 300, 2 };
-		final long inputSize = Intervals.numElements( dims );
 
-
-
-//		final String path = "/groups/saalfeld/home/funkej/workspace/projects/caffe/run/cremi/03_process_training/processed/setup26/100000/sample_A.augmented.0.hdf"; // A
 
 		final String HOME_DIR = System.getProperty( "user.home" );
-		final String path = HOME_DIR + String.format(
-				"/Dropbox/misc/excerpt2D.h5" );
+		final String path = HOME_DIR + String.format( "/Dropbox/misc/excerpt2D.h5" );
 
 		System.out.println( "Loading data" );
 		final CellImg< FloatType, ?, ? > data =
 				H5Utils.loadFloat( path, "main", cellSize );
+
+		final long[] dims = Intervals.dimensionsAsLongArray( data );
+		final long inputSize = Intervals.numElements( data );
+
 		System.out.println( "Loaded data (" + inputSize + ")" );
+
 
 		final int[] cellDims = new int[ data.numDimensions() ];
 		data.getCells().cellDimensions( cellDims );
 
-		final int[] perm = new int[] { 1, 0 };
+		final int[] perm = Util.getFlipPermutation( data.numDimensions() - 1 );
 //		final CellImg< FloatType, ?, ? > input = new CellImgFactory< FloatType >( dimsIntervalInt ).create( dims, new FloatType() );
 		final ArrayImg< FloatType, FloatArray > input = ArrayImgs.floats( dims );
 		for ( final Pair< FloatType, FloatType > p : Views.interval( Views.pair( Views.permuteCoordinates( data, perm, 2 ), input ), input ) )
 			p.getB().set( p.getA().getRealFloat() );
+
+		final CompositeIntervalView< FloatType, RealComposite< FloatType > > affs = Views.collapseReal( input );
+		final long[] dimsNoChannels = Intervals.dimensionsAsLongArray( affs );
 
 		for ( int i = 0; i < Views.collapseReal( input ).numDimensions(); ++i )
 		{

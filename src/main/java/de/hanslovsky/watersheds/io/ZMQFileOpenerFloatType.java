@@ -45,6 +45,8 @@ public class ZMQFileOpenerFloatType implements FileOpener< FloatType >, Serializ
 		final long size = Intervals.numElements( d );
 		assert size == response.length * Float.BYTES;
 
+		System.out.println( size + " " + response.length * Float.BYTES );
+
 		for ( final FloatType t : target )
 			t.set( bb.getFloat() );
 

@@ -72,6 +72,11 @@ public class RegionMerging
 
 	public JavaPairRDD< Long, MergeBloc.In > run( final JavaSparkContext sc, final JavaPairRDD< Long, MergeBloc.In > rddIn, final double threshold, final Visitor visitor, final RandomAccessibleInterval< LongType > labelsTarget )
 	{
+		return run( sc, rddIn, threshold, visitor, labelsTarget, 1.0 );
+	}
+
+	public JavaPairRDD< Long, MergeBloc.In > run( final JavaSparkContext sc, final JavaPairRDD< Long, MergeBloc.In > rddIn, final double threshold, final Visitor visitor, final RandomAccessibleInterval< LongType > labelsTarget, final double thresholdTolerance )
+	{
 		final List< Long > indices = rddIn.keys().collect();
 		final TLongLongHashMap parents = new TLongLongHashMap();
 		final DisjointSetsHashMap dj = new DisjointSetsHashMap( parents, new TLongLongHashMap(), 0 );
@@ -86,14 +91,14 @@ public class RegionMerging
 
 			final long blockCount = rdd.count();
 
-			final double actualThreshold = blockCount == 1 ? Double.POSITIVE_INFINITY : rdd.values().map( in -> {
+			final double actualThreshold = blockCount == 1 ? threshold : Math.min( threshold, thresholdTolerance * rdd.values().map( in -> {
 				final Edge e = new Edge( in.g.edges() );
 				double max = Double.NEGATIVE_INFINITY;
 				for ( int i = 0; i < e.size(); ++i )
 					if ( e.weight() > max )
 						max = e.weight();
 				return max;
-			} ).reduce( ( d1, d2 ) -> Math.min( d1, d2 ) ).doubleValue();
+			} ).reduce( ( d1, d2 ) -> Math.min( d1, d2 ) ).doubleValue() );
 
 			final JavaPairRDD< Tuple2< Long, Long >, Out > mergedEdges =
 					rdd
@@ -191,6 +196,17 @@ public class RegionMerging
 		public double weight( final double a, final long c1, final long c2 )
 		{
 			return Math.min( c1, c2 ) / Math.pow( a, power );
+		}
+
+	}
+
+	public static class FunkyWeights implements Function, Serializable
+	{
+
+		@Override
+		public double weight( final double affinity, final long c1, final long c2 )
+		{
+			return Math.min( c1, c2 ) * ( 1.0 - affinity );
 		}
 
 	}

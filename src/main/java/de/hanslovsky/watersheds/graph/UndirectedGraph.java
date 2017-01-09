@@ -2,7 +2,7 @@ package de.hanslovsky.watersheds.graph;
 
 import java.io.Serializable;
 
-import gnu.trove.iterator.TIntIterator;
+import de.hanslovsky.watersheds.DisjointSetsHashMap;
 import gnu.trove.iterator.TLongIntIterator;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
@@ -113,11 +113,14 @@ public class UndirectedGraph implements Serializable
 
 	public TLongIntHashMap contract(
 			final int edge,
+			final long r1,
+			final long r2,
 			final long newNode,
 			final TLongLongHashMap counts,
+			final DisjointSetsHashMap dj,
 			final Function f )
 	{
-		final TLongIntHashMap edges = new TLongIntHashMap();
+//		final TLongIntHashMap edges = new TLongIntHashMap();
 
 		e1.setIndex( edge );
 		final long from = e1.from();
@@ -126,19 +129,65 @@ public class UndirectedGraph implements Serializable
 			return null;
 		e1.weight( -1.0 );
 
-		updateEdges( from, newNode, edge, to, edges, this );
-		updateEdges( to, newNode, edge, from, edges, this );
+//		updateEdges( from, newNode, edge, to, edges, this );
+//		updateEdges( to, newNode, edge, from, edges, this );
 
-		for ( final TIntIterator v = edges.valueCollection().iterator(); v.hasNext(); )
+		final long otherNode = newNode == from ? to : from;
+		final TLongIntHashMap edges = nodeEdgeMap.get( newNode );
+		final TLongIntHashMap otherEdges = nodeEdgeMap.get( otherNode );
+
+		edges.remove( otherNode );
+
+		for ( final TLongIntIterator v = otherEdges.iterator(); v.hasNext(); )
 		{
-			final int id = v.next();
+			v.advance();
+			final long k = v.key();
+			final int id = v.value();
 			e1.setIndex( id );
-			e1.weight( f.weight( e1.affinity(), counts.get( e1.from() ), counts.get( e1.to() ) ) );
+
+			if ( k == newNode )
+				continue;// e1.weight( -1.0 );
+
+			// if edge is present in new node (duplicate edges), do a merge! Set
+			// old edge to invalid!
+			if ( edges.contains( k ) )
+			{
+				e2.setIndex( edges.get( k ) );
+				this.edgeMerger.merge( e1, e2 );
+				e1.weight( -1.0 );
+				e2.from( dj.findRoot( e2.from() ) );
+				e2.to( dj.findRoot( e2.to() ) );
+				e2.weight( f.weight( e2.affinity(), counts.get( e2.from() ), counts.get( e2.to() ) ) );
+			}
+			// else: add edge to existing set of edges for newNode
+			else
+			{
+				edges.put( k, id );
+				e1.from( dj.findRoot( e1.to() ) );
+				e1.to( dj.findRoot( e1.to() ) );
+				e1.weight( f.weight( e1.affinity(), counts.get( e2.from() ), counts.get( e2.to() ) ) );
+			}
+
+			nodeEdgeMap.get( k ).remove( otherNode );
 		}
 
-		nodeEdgeMap.put( newNode, edges );
+		// update edges of neighbors
+		for ( final TLongIntIterator it = edges.iterator(); it.hasNext(); )
+		{
+			it.advance();
+			final TLongIntHashMap nem = nodeEdgeMap.get( it.key() );
+			nem.remove( from );
+			nem.remove( to );
+			nem.put( newNode, it.value() );
+			e1.setIndex( it.value() );
+			e1.from( newNode );
+			e1.to( it.key() );
+		}
 
-		return edges;
+//		nodeEdgeMap.put( newNode, edges );
+		nodeEdgeMap.remove( otherNode );
+
+		return otherEdges;
 
 	}
 
@@ -216,39 +265,6 @@ public class UndirectedGraph implements Serializable
 
 		}
 		return nodeEdgeMap;
-	}
-
-	public static void main( final String[] args )
-	{
-		final TDoubleArrayList edges = new TDoubleArrayList();
-		final Edge e = new Edge( edges );
-		e.add( 1.0, 0.3, 0, 1, 1 );
-		e.add( 2.0, 0.4, 1, 2, 3 );
-		e.add( 3.0, 0.5, 0, 2, 2 );
-
-		final UndirectedGraph g = new UndirectedGraph( edges, ( source, target ) -> {
-			target.weight( Math.max( source.weight(), target.weight() ) );
-			System.out.println( "MULT1 " + target.multiplicity() + " " + source.multiplicity() );
-			target.multiplicity( target.multiplicity() + source.multiplicity() );
-			System.out.println( "MULT2 " + target.multiplicity() + " " + source.multiplicity() );
-			return target;
-		} );
-
-		System.out.println( g.nodeEdgeMap );
-		for ( int i = 0; i < e.size(); ++i )
-		{
-			e.setIndex( i );
-			System.out.println( e.weight() + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() );
-		}
-
-		g.contract( 0, 3, new TLongLongHashMap( 0, 0, -1, 1 ), new RegionMerging.CountOverSquaredAffinity() );
-		System.out.println( g.nodeEdgeMap() );
-		for ( int i = 0; i < e.size(); ++i )
-		{
-			e.setIndex( i );
-			System.out.println( e.weight() + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() );
-		}
-
 	}
 
 }

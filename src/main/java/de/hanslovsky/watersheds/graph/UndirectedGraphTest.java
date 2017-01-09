@@ -29,7 +29,7 @@ public class UndirectedGraphTest
 
 		for ( int i = 0; i < e.size(); ++i )
 		{
-			e.setIndex( i );;
+			e.setIndex( i );
 			System.out.println( i + " " + e.weight() + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() );
 		}
 		for ( final TLongObjectIterator< TLongIntHashMap > it = g.nodeEdgeMap().iterator(); it.hasNext(); )
@@ -44,7 +44,7 @@ public class UndirectedGraphTest
 			final long r2 = dj.findRoot( 272 );
 			final long n = dj.join( r1, r2 );
 			System.out.println( r1 + " " + r2 + " " + n );
-			g.contract( 1, n, new TLongLongHashMap(), new RegionMerging.CountOverSquaredAffinity() );
+			g.contract( 1, 235, 272, n, new TLongLongHashMap(), new DisjointSetsHashMap(), new RegionMerging.CountOverSquaredAffinity() );
 		}
 		System.out.println();
 
@@ -59,26 +59,26 @@ public class UndirectedGraphTest
 			System.out.println( it.key() + " " + it.value() );
 		}
 
-		System.out.println();
-		{
-			final long r1 = dj.findRoot( 235 );
-			final long r2 = dj.findRoot( 230 );
-			final long n = dj.join( r1, r2 );
-			System.out.println( r1 + " " + r2 + " " + n );
-			g.contract( 4, n, new TLongLongHashMap(), new RegionMerging.CountOverSquaredAffinity() );
-		}
-		System.out.println();
-
-		for ( int i = 0; i < e.size(); ++i )
-		{
-			e.setIndex( i );;
-			System.out.println( i + " " + e.weight() + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() );
-		}
-		for ( final TLongObjectIterator< TLongIntHashMap > it = g.nodeEdgeMap().iterator(); it.hasNext(); )
-		{
-			it.advance();
-			System.out.println( it.key() + " " + it.value() );
-		}
+//		System.out.println();
+//		{
+//			final long r1 = dj.findRoot( 235 );
+//			final long r2 = dj.findRoot( 230 );
+//			final long n = dj.join( r1, r2 );
+//			System.out.println( r1 + " " + r2 + " " + n );
+//			g.contract( 4, n, new TLongLongHashMap(), new RegionMerging.CountOverSquaredAffinity() );
+//		}
+//		System.out.println();
+//
+//		for ( int i = 0; i < e.size(); ++i )
+//		{
+//			e.setIndex( i );
+//			System.out.println( i + " " + e.weight() + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() );
+//		}
+//		for ( final TLongObjectIterator< TLongIntHashMap > it = g.nodeEdgeMap().iterator(); it.hasNext(); )
+//		{
+//			it.advance();
+//			System.out.println( it.key() + " " + it.value() );
+//		}
 
 		System.out.println( parents );
 

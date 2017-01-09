@@ -3,6 +3,7 @@ package de.hanslovsky.watersheds;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
@@ -18,7 +19,6 @@ import org.zeromq.ZMQ.Socket;
 
 import bdv.img.h5.H5Utils;
 import bdv.util.BdvFunctions;
-import bdv.util.BdvOptions;
 import bdv.util.BdvStackSource;
 import de.hanslovsky.watersheds.graph.Edge;
 import de.hanslovsky.watersheds.graph.EdgeMerger;
@@ -37,78 +37,70 @@ import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
-import ij.ImagePlus;
 import net.imglib2.Cursor;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.converter.Converters;
 import net.imglib2.img.Img;
 import net.imglib2.img.array.ArrayImg;
 import net.imglib2.img.array.ArrayImgs;
-import net.imglib2.img.basictypeaccess.array.FloatArray;
 import net.imglib2.img.basictypeaccess.array.LongArray;
 import net.imglib2.img.cell.CellImg;
-import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.interpolation.randomaccess.NearestNeighborInterpolatorFactory;
 import net.imglib2.type.numeric.ARGBType;
 import net.imglib2.type.numeric.integer.LongType;
-import net.imglib2.type.numeric.integer.UnsignedShortType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.Intervals;
 import net.imglib2.util.Pair;
 import net.imglib2.view.ExtendedRandomAccessibleInterval;
-import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
+import net.imglib2.view.composite.CompositeIntervalView;
 import net.imglib2.view.composite.RealComposite;
 import scala.Tuple2;
 import scala.Tuple3;
 
-public class WatershedsSparkWithRegionMerging2DLoadSegmentation
+public class WatershedsSparkWithRegionMergingLoadSegmentation
 {
 
 	public static void main( final String[] args ) throws IOException
 	{
 
-		final int[] dimsInt = new int[] { 300, 300, 2 }; // dropbox
-//		final int[] dimsInt = new int[] { 1554, 1670, 153, 3 }; // A
-		final long[] dims = new long[] { dimsInt[ 0 ], dimsInt[ 1 ], dimsInt[ 2 ] };
-		final long[] dimsNoChannels = new long[] { dimsInt[ 0 ], dimsInt[ 1 ] };
-		final int[] dimsIntervalInt = new int[] { 150, 150, 2 };
-		final long[] dimsInterval = new long[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ], dimsIntervalInt[ 2 ] };
-		final int[] dimsIntervalIntNoChannels = new int[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ] };
-		final long[] dimsIntervalNoChannels = new long[] { dimsIntervalInt[ 0 ], dimsIntervalInt[ 1 ] };
-		final int[] cellSize = new int[] { 60, 60, 2 };
-		final long inputSize = Intervals.numElements( dims );
+		final int[] cellSize = new int[] { 300, 300, 2 };
+		final int[] cellSizeLabels = Util.dropLast( cellSize );
+		final int[] dimsIntervalInt = new int[] { 300, 300, 2 };
+		final long[] dimsInterval = Arrays.stream( dimsIntervalInt ).mapToLong( i -> i ).toArray();
+		final int[] dimsIntervalIntNoChannels = Util.dropLast( dimsIntervalInt );
+		final long[] dimsIntervalNoChannels = Util.dropLast( dimsInterval );
 
-		final String HOME_DIR = System.getProperty( "user.home" );
-		final String path = HOME_DIR + String.format(
-				"/Dropbox/misc/excerpt2D.h5" );
+
+		final String path = Util.HOME_DIR + String.format( "/Dropbox/misc/excerpt2D.h5" );
 
 		System.out.println( "Loading data" );
-		final CellImg< FloatType, ?, ? > data =
-				H5Utils.loadFloat( path, "main", cellSize );
+		final CellImg< FloatType, ?, ? > data = H5Utils.loadFloat( path, "main", cellSize );
+
+		final long[] dims = Intervals.dimensionsAsLongArray( data );
+		final long inputSize = Intervals.numElements( data );
+
 		System.out.println( "Loaded data (" + inputSize + ")" );
 
-		final int[] cellDims = new int[ data.numDimensions() ];
-		data.getCells().cellDimensions( cellDims );
 
-		final int[] perm = new int[] { 1, 0 };
-//		final CellImg< FloatType, ?, ? > input = new CellImgFactory< FloatType >( dimsIntervalInt ).create( dims, new FloatType() );
-		final ArrayImg< FloatType, FloatArray > input = ArrayImgs.floats( dims );
-		for ( final Pair< FloatType, FloatType > p : Views.interval( Views.pair( Views.permuteCoordinates( data, perm, 2 ), input ), input ) )
-			p.getB().set( p.getA().getRealFloat() );
+		final int[] perm = Util.getFlipPermutation( data.numDimensions() - 1 );
+		final RandomAccessibleInterval< FloatType > input = Views.permuteCoordinates( data, perm, data.numDimensions() - 1 );
 
-		for ( int d = 0; d < Views.collapseReal( input ).numDimensions(); ++d )
-		{
-			final IntervalView< RealComposite< FloatType > > hs = Views.hyperSlice( Views.collapseReal( input ), d, Views.collapseReal( input ).max( d ) );
-			for ( final RealComposite< FloatType > c : hs )
-				c.get( d ).set( Float.NaN );
-		}
+		final CompositeIntervalView< FloatType, RealComposite< FloatType > > affs = Views.collapseReal( input );
+		final long[] dimsNoChannels = Intervals.dimensionsAsLongArray( affs );
+
+		BdvFunctions.show( Converters.convert( affs, ( s, t ) -> {
+			Util.max( s, t, affs.numDimensions() );
+			t.mul( ( 1 << 16 ) * 1.0 );
+		}, new FloatType() ), "affs", Util.bdvOptions( affs ) );
+
+//		BdvFunctions.show( img, name )
 
 
 
-		final Img< UnsignedShortType > labelsTargetInput = ImageJFunctions.wrapShort( new ImagePlus( System.getProperty( "user.home" ) + "/Dropbox/misc/excerpt2d-labels.tif" ) );
+		final Img< LongType > labelsTargetInput = H5Utils.loadUnsignedLong( path, "zws", cellSizeLabels );
 		final ArrayImg< LongType, LongArray > labelsTarget = ArrayImgs.longs( Intervals.dimensionsAsLongArray( labelsTargetInput ) );
-		for ( final Pair< UnsignedShortType, LongType > p : Views.interval( Views.pair( labelsTargetInput, labelsTarget ), labelsTarget ) )
+		for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( labelsTargetInput, labelsTarget ), labelsTarget ) )
 			p.getB().set( p.getA().getIntegerLong() );
 
 		final TLongLongHashMap counts = new TLongLongHashMap();
@@ -130,20 +122,35 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 		final int extendedBlockElementsAffs = (int) Intervals.numElements( extendedBlockSizeAffs );
 
 		final ArrayList< Tuple2< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > > blocks = new ArrayList<>();
-		for ( long y = 0; y < dims[1]; y += dimsInterval[1] )
-			for ( long x = 0; x < dims[0]; x += dimsInterval[0] ) {
-				final long[] labelData = new long[ extendedBlockElements ];
-				final Cursor< LongType > l = Views.offsetInterval( labelsExtend, new long[] { x - 1, y - 1 }, extendedBlockSize ).cursor();
-				for ( int i = 0; l.hasNext(); ++i )
-					labelData[i] = l.next().get();
-				final float[] affsData = new float[ extendedBlockElementsAffs ];
-				final Cursor< FloatType > a = Views.offsetInterval( Views.extendValue( input, new FloatType( Float.NaN ) ), new long[] { x - 1, y - 1, 0 }, extendedBlockSizeAffs ).cursor();
-				for ( int i = 0; a.hasNext(); ++i )
-					affsData[ i ] = a.next().get();
 
-				blocks.add( new Tuple2<>( new HashableLongArray( x, y ), new Tuple3<>( labelData, affsData, counts ) ) );
+		final long[] offset = new long[ dimsNoChannels.length ];
+		for ( int d = 0; d < dimsNoChannels.length; )
+		{
+			System.out.println( Arrays.toString( offset ) );
+			final long[] labelData = new long[ extendedBlockElements ];
+			final long[] lower = Arrays.stream( offset ).map( val -> val - 1 ).toArray();
+			final Cursor< LongType > l = Views.offsetInterval( labelsExtend, lower, extendedBlockSize ).cursor();
+			for ( int i = 0; l.hasNext(); ++i )
+				labelData[ i ] = l.next().get();
 
+			final float[] affsData = new float[ extendedBlockElementsAffs ];
+
+
+			final Cursor< FloatType > a = Views.offsetInterval( Views.extendValue( input, new FloatType( Float.NaN ) ), Util.append( lower, 0 ), extendedBlockSizeAffs ).cursor();
+			for ( int i = 0; a.hasNext(); ++i )
+				affsData[ i ] = a.next().get();
+
+			blocks.add( new Tuple2<>( new HashableLongArray( offset.clone() ), new Tuple3<>( labelData, affsData, counts ) ) );
+
+			for ( d = 0; d < dimsNoChannels.length; ++d )
+			{
+				offset[ d ] += dimsIntervalIntNoChannels[ d ];
+				if ( offset[ d ] < dimsNoChannels[ d ] )
+					break;
+				else
+					offset[ d ] = 0;
 			}
+		}
 
 		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[*]" ).set( "spark.driver.maxResultSize", "4g" );
 		final JavaSparkContext sc = new JavaSparkContext( conf );
@@ -160,14 +167,16 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 		final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksRdd =
 				sc.parallelizePairs( blocks ).cache();
 //		final EdgeMerger merger = MergeBloc.MIN_EDGE_MERGER;
-		final EdgeMerger merger = MergeBloc.DEFAULT_EDGE_MERGER;
+//		final EdgeMerger merger = MergeBloc.DEFAULT_EDGE_MERGER;
+		final EdgeMerger merger = MergeBloc.MAX_AFFINITY_MERGER;
 //		final Function weightFunc = ( Function & Serializable ) ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a );
 //		final Function weightFunc = new RegionMerging.CountOverAffinityToFourthPower();
-		final Function weightFunc = new RegionMerging.CountOverAffinityToPower( 8.0 );
+//		final Function weightFunc = new RegionMerging.CountOverAffinityToPower( 8.0 );
+		final Function weightFunc = new RegionMerging.FunkyWeights();
 //		final JavaPairRDD< Long, In > graphs =
 //				blocksRdd.mapToPair( new PrepareRegionMerging.BuildBlockedGraph( dimsNoChannels, dimsIntervalNoChannels, merger, weightFunc ) ).cache();
 		final Tuple2< JavaPairRDD< Long, In >, TLongLongHashMap > graphsAndBorderNodes = PrepareRegionMergingCutBlocks.run( sc, blocksRdd, sc.broadcast( dimsNoChannels ),
-				sc.broadcast( dimsIntervalNoChannels ), merger, weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() > 0.5, blockIdService );
+				sc.broadcast( dimsIntervalNoChannels ), merger, weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() >= 0.0, blockIdService );
 		final JavaPairRDD< Long, In > graphs = graphsAndBorderNodes._1().cache();
 
 		final List< Tuple2< Long, Long > > duplicateKeys = graphs
@@ -260,7 +269,7 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 
 		final Thread mergerThread = MergerServiceZMQ.createServerThread( mergerSocket, ( n1, n2, n, w ) -> {
 			action1.add( n1, n2, n, w );
-			action2.add( n1, n2, n, w );
+//			action2.add( n1, n2, n, w );
 //			synchronized ( colorMap )
 //			{
 //				colorMap.put( n, colorMap.contains( n1 ) ? colorMap.get( n1 ) : colorMap.get( n2 ) );
@@ -341,8 +350,8 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 				p.getB().set( parents.contains( p.getA().get() ) ? parents.get( p.getA().get() ) : p.getA().get() );
 			blockImages.add( blockImg );
 		};
-		final double threshold = Double.POSITIVE_INFINITY;
-		final double thresholdTolerance = 10.0;
+		final double threshold = 3;// Double.POSITIVE_INFINITY;
+		final double thresholdTolerance = 1e0;
 		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, threshold, rmVisitor, labelsTarget, thresholdTolerance );
 
 		final TLongIntHashMap colorMap = new TLongIntHashMap();
@@ -358,7 +367,7 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 		final RandomAccessibleInterval< ARGBType > coloredHistory = Converters.convert( Views.stack( images ), ( s, t ) -> {
 			t.set( colorMap.get( s.get() ) );
 		}, new ARGBType() );
-		final BdvStackSource< ARGBType > chBdv = BdvFunctions.show( coloredHistory, "colored history", BdvOptions.options().is2D() );
+		final BdvStackSource< ARGBType > chBdv = BdvFunctions.show( coloredHistory, "colored history", Util.bdvOptions( labelsTarget ) );
 		ValueDisplayListener.addValueOverlay(
 				Views.interpolate( Views.extendValue( Views.stack( images ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ),
 				chBdv.getBdvHandle().getViewerPanel() );
@@ -374,7 +383,7 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 //					}
 					t.set( blockColors.get( s.get() ) );
 				}, new ARGBType() );
-		final BdvStackSource< ARGBType > cbhBdv = BdvFunctions.show( coloredBlockHistory, "colored block history", BdvOptions.options().is2D() );
+		final BdvStackSource< ARGBType > cbhBdv = BdvFunctions.show( coloredBlockHistory, "colored block history", Util.bdvOptions( labelsTarget ) );
 //		BdvFunctions.show( Converters.convert( Views.stack( blockImages ), ( s, t ) -> {
 //			t.set( s.get() == 154 ? 255 << 8 : 255 << 16 );
 //		}, new ARGBType() ), "154" );
@@ -408,31 +417,31 @@ public class WatershedsSparkWithRegionMerging2DLoadSegmentation
 			t.set( colorsMap.get( s.get() ) );
 		}, new ARGBType() );
 
-		final ArrayList< RandomAccessibleInterval< LongType > > everySingleMerge = new ArrayList<>();
-		{
-			everySingleMerge.add( images.get( 0 ) );
-			final long[] baseDim = Intervals.dimensionsAsLongArray( images.get( 0 ) );
-			final DisjointSetsHashMap djshm = new DisjointSetsHashMap();
-			for ( int i = 0; i < merges.size(); i += 4 )
-			{
-				final long f = merges.get( i );
-				final long t = merges.get( i + 1 );
-				djshm.join( djshm.findRoot( f ), djshm.findRoot( t ) );
-				final ArrayImg< LongType, LongArray > target = ArrayImgs.longs( baseDim );
-
-				for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( images.get( 0 ), target ), target ) )
-					p.getB().set( djshm.findRoot( p.getA().get() ) );
-
-				everySingleMerge.add( target );
-
-			}
-
-		}
-
-		final RandomAccessibleInterval< ARGBType > everySingleMergeImg = Converters.convert( Views.stack( everySingleMerge ), ( s, t ) -> {
-			t.set( colorMap.get( s.get() ) );
-		}, new ARGBType() );
-		final BdvStackSource< ARGBType > esmBdv = BdvFunctions.show( everySingleMergeImg, "every single merge", BdvOptions.options().is2D() );
+//		final ArrayList< RandomAccessibleInterval< LongType > > everySingleMerge = new ArrayList<>();
+//		{
+//			everySingleMerge.add( images.get( 0 ) );
+//			final long[] baseDim = Intervals.dimensionsAsLongArray( images.get( 0 ) );
+//			final DisjointSetsHashMap djshm = new DisjointSetsHashMap();
+//			for ( int i = 0; i < merges.size(); i += 4 )
+//			{
+//				final long f = merges.get( i );
+//				final long t = merges.get( i + 1 );
+//				djshm.join( djshm.findRoot( f ), djshm.findRoot( t ) );
+//				final ArrayImg< LongType, LongArray > target = ArrayImgs.longs( baseDim );
+//
+//				for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( images.get( 0 ), target ), target ) )
+//					p.getB().set( djshm.findRoot( p.getA().get() ) );
+//
+//				everySingleMerge.add( target );
+//
+//			}
+//
+//		}
+//
+//		final RandomAccessibleInterval< ARGBType > everySingleMergeImg = Converters.convert( Views.stack( everySingleMerge ), ( s, t ) -> {
+//			t.set( colorMap.get( s.get() ) );
+//		}, new ARGBType() );
+//		final BdvStackSource< ARGBType > esmBdv = BdvFunctions.show( everySingleMergeImg, "every single merge", BdvOptions.options().is2D() );
 
 		sc.close();
 
