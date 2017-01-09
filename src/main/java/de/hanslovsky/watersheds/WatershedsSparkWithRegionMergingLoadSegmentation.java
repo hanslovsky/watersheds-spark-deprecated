@@ -107,6 +107,8 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		for ( final LongType l : labelsTarget )
 			counts.put( l.get(), counts.contains( l.get() ) ? counts.get( l.get() ) + 1 : 1  );
 
+
+
 		final ExtendedRandomAccessibleInterval< LongType, Img< LongType > > labelsExtend = Views.extendValue( labelsTarget, new LongType( -1 ) );
 
 		final long[] extendedBlockSize = new long[ dimsInterval.length ];
@@ -166,6 +168,8 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksRdd =
 				sc.parallelizePairs( blocks ).cache();
+
+
 //		final EdgeMerger merger = MergeBloc.MIN_EDGE_MERGER;
 //		final EdgeMerger merger = MergeBloc.DEFAULT_EDGE_MERGER;
 		final EdgeMerger merger = MergeBloc.MAX_AFFINITY_MERGER;
@@ -350,8 +354,9 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 				p.getB().set( parents.contains( p.getA().get() ) ? parents.get( p.getA().get() ) : p.getA().get() );
 			blockImages.add( blockImg );
 		};
-		final double threshold = 3;// Double.POSITIVE_INFINITY;
+		final double threshold = 200;// Double.POSITIVE_INFINITY;
 		final double thresholdTolerance = 1e0;
+
 		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, threshold, rmVisitor, labelsTarget, thresholdTolerance );
 
 		final TLongIntHashMap colorMap = new TLongIntHashMap();

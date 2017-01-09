@@ -113,24 +113,17 @@ public class UndirectedGraph implements Serializable
 
 	public TLongIntHashMap contract(
 			final int edge,
-			final long r1,
-			final long r2,
 			final long newNode,
 			final TLongLongHashMap counts,
 			final DisjointSetsHashMap dj,
 			final Function f )
 	{
-//		final TLongIntHashMap edges = new TLongIntHashMap();
-
 		e1.setIndex( edge );
 		final long from = e1.from();
 		final long to = e1.to();
 		if ( !nodeEdgeMap.contains( from ) || !nodeEdgeMap.contains( to ) )
 			return null;
 		e1.weight( -1.0 );
-
-//		updateEdges( from, newNode, edge, to, edges, this );
-//		updateEdges( to, newNode, edge, from, edges, this );
 
 		final long otherNode = newNode == from ? to : from;
 		final TLongIntHashMap edges = nodeEdgeMap.get( newNode );
@@ -141,18 +134,18 @@ public class UndirectedGraph implements Serializable
 		for ( final TLongIntIterator v = otherEdges.iterator(); v.hasNext(); )
 		{
 			v.advance();
-			final long k = v.key();
-			final int id = v.value();
-			e1.setIndex( id );
+			final long nodeId = v.key();
+			final int edgeId = v.value();
+			e1.setIndex( edgeId );
 
-			if ( k == newNode )
+			if ( nodeId == newNode )
 				continue;// e1.weight( -1.0 );
 
 			// if edge is present in new node (duplicate edges), do a merge! Set
 			// old edge to invalid!
-			if ( edges.contains( k ) )
+			if ( edges.contains( nodeId ) )
 			{
-				e2.setIndex( edges.get( k ) );
+				e2.setIndex( edges.get( nodeId ) );
 				this.edgeMerger.merge( e1, e2 );
 				e1.weight( -1.0 );
 				e2.from( dj.findRoot( e2.from() ) );
@@ -162,29 +155,29 @@ public class UndirectedGraph implements Serializable
 			// else: add edge to existing set of edges for newNode
 			else
 			{
-				edges.put( k, id );
+				edges.put( nodeId, edgeId );
 				e1.from( dj.findRoot( e1.to() ) );
 				e1.to( dj.findRoot( e1.to() ) );
-				e1.weight( f.weight( e1.affinity(), counts.get( e2.from() ), counts.get( e2.to() ) ) );
+				e1.weight( f.weight( e1.affinity(), counts.get( e1.from() ), counts.get( e1.to() ) ) );
 			}
 
-			nodeEdgeMap.get( k ).remove( otherNode );
+//			nodeEdgeMap.get( nodeId ).remove( otherNode );
 		}
 
 		// update edges of neighbors
 		for ( final TLongIntIterator it = edges.iterator(); it.hasNext(); )
 		{
 			it.advance();
+			final int edgeIndex = it.value();
 			final TLongIntHashMap nem = nodeEdgeMap.get( it.key() );
 			nem.remove( from );
 			nem.remove( to );
-			nem.put( newNode, it.value() );
-			e1.setIndex( it.value() );
+			nem.put( newNode, edgeIndex );
+			e1.setIndex( edgeIndex );
 			e1.from( newNode );
 			e1.to( it.key() );
 		}
 
-//		nodeEdgeMap.put( newNode, edges );
 		nodeEdgeMap.remove( otherNode );
 
 		return otherEdges;

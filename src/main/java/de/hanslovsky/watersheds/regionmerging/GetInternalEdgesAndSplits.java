@@ -1,10 +1,12 @@
 package de.hanslovsky.watersheds.regionmerging;
 
+import java.io.Serializable;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.spark.api.java.function.PairFunction;
 
+import bdv.util.BdvFunctions;
 import de.hanslovsky.watersheds.DisjointSetsHashMap;
 import de.hanslovsky.watersheds.HashableLongArray;
 import de.hanslovsky.watersheds.graph.Edge;
@@ -22,6 +24,8 @@ import gnu.trove.list.array.TIntArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
+import net.imglib2.RandomAccessibleInterval;
+import net.imglib2.converter.Converters;
 import net.imglib2.img.array.ArrayImg;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.array.ArrayRandomAccess;
@@ -41,7 +45,7 @@ public class GetInternalEdgesAndSplits< K > implements
 PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetInternalEdgesAndSplits.IntraBlockOutput >
 {
 
-	public static class IntraBlockOutput
+	public static class IntraBlockOutput implements Serializable
 	{
 
 		public final long[] labels;
@@ -113,6 +117,18 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 				Views.collapseReal( ArrayImgs.floats( t._2()._2(), extendedAffinitiesBlockDim ) );
 
 		final IntervalView< LongType > innerLabels = Views.offsetInterval( labels, offset, blockDim );
+		for ( final LongType il : innerLabels )
+			if ( il.get() < 0 || il.get() > 9000000 ) {
+				System.out.println( "INNER LABELS CONTAIN GARBAGE! " + il );
+				BdvFunctions.show( Converters.convert( ( RandomAccessibleInterval< LongType > ) labels, ( src, tgt ) -> {
+					tgt.set( src.get() < 0 ? 1 << 16 : 0 );
+				}, new LongType() ), "LAB" );
+				BdvFunctions.show( Converters.convert( ( RandomAccessibleInterval< LongType > ) innerLabels, ( src, tgt ) -> {
+					tgt.set( src.get() < 0 ? 1 << 16 : 0 );
+				}, new LongType() ), "INNER LAB" );
+				Thread.sleep( 100000000 );
+//				System.exit( 123 );
+			}
 		final IntervalView< RealComposite< FloatType > > innerAffinities = Views.offsetInterval( affinities, offset, blockDim );
 
 		final TDoubleArrayList edges = new TDoubleArrayList();
@@ -127,6 +143,7 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 		final TLongLongHashMap parents = new TLongLongHashMap();
 		PrepareRegionMergingCutBlocks.addEdges( innerLabels, innerAffinities, blockDim, g, nodeEdgeMap, e, dummy, edgeMerger, parents );
 		final int nIntraBlockEdges = e.size();
+
 
 		final TLongLongHashMap ranks = new TLongLongHashMap();
 		for ( final TLongIterator it = parents.keySet().iterator(); it.hasNext(); )
@@ -147,11 +164,14 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 			}
 		}
 
+
+
 		for ( final TIntIterator it = splitEdges.iterator(); it.hasNext(); )
 		{
 			e.setIndex( it.next() );
 			dj.findRoot( e.from() );
 			dj.findRoot( e.to() );
+
 			if ( Arrays.equals( new long[] { 0, 0 }, ( ( HashableLongArray ) t._1() ).getData() ) )
 				System.out.println( e.from() + " " + e.to() );
 		}

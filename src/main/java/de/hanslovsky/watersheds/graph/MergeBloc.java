@@ -271,6 +271,7 @@ public class MergeBloc
 
 //			final IntHeapPriorityQueue queue = new IntHeapPriorityQueue( new EdgeComparator( g.edges() ) );
 			final Edge e = new Edge( g.edges() );
+
 			final ChangeablePriorityQueue queue = new ChangeablePriorityQueue( e.size(), ChangeablePriorityQueue.DEFAULT_COMPARE );
 			for ( int i = 0; i < e.size(); ++i )
 			{
@@ -340,13 +341,8 @@ public class MergeBloc
 					if ( r1 == r2 || r1 != from || r2 != to )
 						continue;
 					final long n = dj.join( r1, r2 );
-//					e.from( r1 );
-//					e.to( r2 );
 
-					System.out.println( "MERGING " + t._1() + " " + e.weight() + " " + e.from() + " " + e.to() + " " + r1 + " " + r2 + " " + n + " " + next );
-					System.out.println( g.nodeEdgeMap().get( r1 ) );
-					System.out.println( g.nodeEdgeMap().get( r2 ) );
-					System.out.println();
+					System.out.println( "MERGING " + t._1() + " " + e.affinity() + " " + e.weight() + " " + e.from() + " " + e.to() + " " + r1 + " " + r2 + " " + n + " " + next + " " + ( e.weight() == 0.0 ) + " " + in.counts.get( e.from() ) + " " + in.counts.get( e.to() ) );
 
 					if ( in.borderNodes.contains( from ) )
 					{
@@ -366,6 +362,12 @@ public class MergeBloc
 						mergedBorderNodes.add( to );
 					}
 
+					if ( !in.counts.contains( r1 ) || !in.counts.contains( r2 ) )
+					{
+						System.out.println( "Counts does not contain " + r1 + " " + r2 + " " + from + " " + to );
+						System.exit( 123 );
+					}
+
 					final long c1 = in.counts.remove( r1 );// from );
 					final long c2 = in.counts.remove( r2 );// to );
 					final long cn = c1 + c2;
@@ -378,7 +380,7 @@ public class MergeBloc
 					else
 					{
 						in.counts.put( n, cn );
-						final TLongIntHashMap edgesOfUnusedNode = g.contract( next, r1, r2, n, in.counts, dj, f );
+						final TLongIntHashMap edgesOfUnusedNode = g.contract( next, n, in.counts, dj, f );
 
 						for ( final TLongIntIterator it = edgesOfUnusedNode.iterator(); it.hasNext(); )
 						{
@@ -387,15 +389,13 @@ public class MergeBloc
 							e.setIndex( id );
 							final double weight = e.weight();
 							if ( weight < 0.0 && id != next )
-							{
-								if (!queue.contains( id ) )
-								{
-//									System.out.println( "Queue does not contain edge " + id + " -- why ? " );
-//									System.exit( 123 );
-								}
-								else
-									queue.deleteItem( id );
-							}
+								//								if (!queue.contains( id ) )
+//								{
+////									System.out.println( "Queue does not contain edge " + id + " -- why ? " );
+////									System.exit( 123 );
+//								}
+//								else
+								queue.deleteItem( id );
 							else
 								queue.changePriority( id, e.weight() );
 						}

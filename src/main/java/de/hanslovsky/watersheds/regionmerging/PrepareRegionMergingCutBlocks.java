@@ -59,7 +59,6 @@ public class PrepareRegionMergingCutBlocks
 		final JavaPairRDD< HashableLongArray, GetInternalEdgesAndSplits.IntraBlockOutput > allEdges =
 				blocksWithLabelsAffinitiesAndCounts.mapToPair( new GetInternalEdgesAndSplits<>( blockDim.getValue(), edgeMerger, func, edgeCheck, idService ) );
 
-
 		final JavaPairRDD< HashableLongArray, GetExternalEdges.BlockOutput > interBlockEdges =
 				allEdges.mapToPair( new GetExternalEdges( blockDim, dim, edgeMerger ) ).cache();
 		interBlockEdges.count();
@@ -82,8 +81,8 @@ public class PrepareRegionMergingCutBlocks
 					{
 						e.setIndex( i );
 						e.weight( func.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
-						if ( !counts.contains( e.from()  ) || !counts.contains( e.to()  ) )
-							throw new RuntimeException( "No counts for " + e.from() + " or " + e.to() + " " + counts.get( e.from() )  + " " + counts.get( e.to() ) );
+						if ( !counts.contains( e.from() ) || !counts.contains( e.to() ) )
+							throw new RuntimeException( "(" + t._1() + ") No counts for " + e.from() + " or " + e.to() + " " + counts.get( e.from() ) + " " + counts.get( e.to() ) );
 					}
 					return t;
 				} ).cache();
@@ -386,14 +385,15 @@ public class PrepareRegionMergingCutBlocks
 	{
 		final RandomAccess< LongType > labelsAccess = labels.randomAccess();
 		final Cursor< RealComposite< T > > affinitiesCursor = affinities.cursor();
+		final long[] blockMax = Arrays.stream( blockDim ).map( v -> v - 1 ).toArray();
 		while ( affinitiesCursor.hasNext() )
 		{
 			final RealComposite< T > affinity = affinitiesCursor.next();
 			labelsAccess.setPosition( affinitiesCursor );
 			final long label = labelsAccess.get().get();
 			parents.put( label, label );
-			for ( int d = 0; d < blockDim.length; ++d )
-				if ( labelsAccess.getLongPosition( d ) < blockDim[ d ] - 1 )
+			for ( int d = 0; d < blockMax.length; ++d )
+				if ( labelsAccess.getLongPosition( d ) < blockMax[ d ] - 1 )
 				{
 					final double aff = affinity.get( d ).getRealDouble();
 					if ( !Double.isNaN( aff ) )
@@ -408,7 +408,7 @@ public class PrepareRegionMergingCutBlocks
 		}
 	}
 
-	private static void addEdge(
+	private static int addEdge(
 			final long label,
 			final long otherLabel,
 			final double aff,
@@ -418,20 +418,23 @@ public class PrepareRegionMergingCutBlocks
 			final Edge dummy,
 			final EdgeMerger edgeMerger )
 	{
+
 		if ( !nodeEdgeMap.contains( label ) )
 			g.addNode( label );
 		if ( !nodeEdgeMap.contains( otherLabel ) )
 			g.addNode( otherLabel );
 		final TLongIntHashMap localEdges = nodeEdgeMap.get( label );
 		if ( !localEdges.contains( otherLabel ) )
-			g.addEdge( Double.NaN, aff, label, otherLabel, 1 );
+			return g.addEdge( Double.NaN, aff, label, otherLabel, 1 );
 		else
 		{
-			e.setIndex( localEdges.get( otherLabel ) );
+			final int index = localEdges.get( otherLabel );
+			e.setIndex( index );
 			dummy.affinity( aff );
 			dummy.from( label );
 			dummy.to( otherLabel );
 			edgeMerger.merge( dummy, e );
+			return index;
 		}
 	}
 
