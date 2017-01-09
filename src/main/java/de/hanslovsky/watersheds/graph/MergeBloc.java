@@ -415,6 +415,8 @@ public class MergeBloc
 
 			}
 
+			mergerService.finalize();
+			Thread.sleep( 3000 );
 
 //			double[] resultEdges = new double[0];
 			for ( int k = e.size() - 1; k >= 0; --k )
@@ -432,6 +434,7 @@ public class MergeBloc
 				final long nxt = k.next();
 				final long r = dj.findRoot( nxt );
 			}
+
 
 			final Out result = new Out(
 					g,
@@ -603,11 +606,24 @@ public class MergeBloc
 		final IdService idService = numIds -> currentId.getAndAdd( numIds );
 
 		final TLongArrayList merges = new TLongArrayList();
-		final MergerService mergerService = ( n1, n2, n, w ) -> {
-			merges.add( n1 );
-			merges.add( n2 );
-			merges.add( n );
-			merges.add( Double.doubleToLongBits( w ) );
+		final MergerService mergerService = new MergerService()
+		{
+
+			@Override
+			public void addMerge( final long n1, final long n2, final long n, final double w )
+			{
+				merges.add( n1 );
+				merges.add( n2 );
+				merges.add( n );
+				merges.add( Double.doubleToLongBits( w ) );
+
+			}
+
+			@Override
+			public void finalize()
+			{
+
+			}
 		};
 
 		final MergeBlocPairFunction2 mergeBloc = new MergeBlocPairFunction2( ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a ), merger, 180, idService, mergerService );

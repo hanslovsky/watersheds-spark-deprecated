@@ -156,7 +156,7 @@ public class RegionMerging
 
 			System.out.println( "CNT: " + rdd.count() + " " + hasChanged );
 
-			break;
+//			break;
 
 		}
 

@@ -28,7 +28,6 @@ import de.hanslovsky.watersheds.graph.MergeBloc;
 import de.hanslovsky.watersheds.graph.MergeBloc.In;
 import de.hanslovsky.watersheds.graph.MergerServiceZMQ;
 import de.hanslovsky.watersheds.graph.MergerServiceZMQ.MergeActionAddToList;
-import de.hanslovsky.watersheds.graph.MergerServiceZMQ.MergeActionParentMap;
 import de.hanslovsky.watersheds.graph.RegionMerging;
 import de.hanslovsky.watersheds.regionmerging.EdgeCheck;
 import de.hanslovsky.watersheds.regionmerging.PrepareRegionMergingCutBlocks;
@@ -257,7 +256,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final TLongArrayList merges = new TLongArrayList();
 		final TLongLongHashMap mergedParents = new TLongLongHashMap();
 		final MergeActionAddToList action1 = new MergerServiceZMQ.MergeActionAddToList( merges );
-		final MergeActionParentMap action2 = new MergerServiceZMQ.MergeActionParentMap( mergedParents );
 
 		for ( final TLongIterator it = counts.keySet().iterator(); it.hasNext(); )
 		{
@@ -372,7 +370,19 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final RandomAccessibleInterval< ARGBType > coloredHistory = Converters.convert( Views.stack( images ), ( s, t ) -> {
 			t.set( colorMap.get( s.get() ) );
 		}, new ARGBType() );
+
+		final DisjointSetsHashMap uf = new DisjointSetsHashMap();
+		for ( final LongType lt : labelsTarget )
+			uf.findRoot( lt.get() );
+		for ( int i = 0; i < merges.size() / 4; i += 4 )
+			uf.join( uf.findRoot( merges.get( i ) ), uf.findRoot( merges.get( i + 1 ) ) );
+
 		final BdvStackSource< ARGBType > chBdv = BdvFunctions.show( coloredHistory, "colored history", Util.bdvOptions( labelsTarget ) );
+
+		BdvFunctions.show( Converters.convert( ( RandomAccessibleInterval< LongType > ) labelsTarget, ( s, t ) -> {
+			t.set( colorMap.get( uf.findRoot( s.get() ) ) );
+		}, new ARGBType() ), "colorful result" );
+
 		ValueDisplayListener.addValueOverlay(
 				Views.interpolate( Views.extendValue( Views.stack( images ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ),
 				chBdv.getBdvHandle().getViewerPanel() );
