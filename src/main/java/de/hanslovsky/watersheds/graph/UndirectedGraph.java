@@ -71,8 +71,6 @@ public class UndirectedGraph implements Serializable
 			nodeEdgeMap.put( from, new TLongIntHashMap() );
 		if ( !nodeEdgeMap.contains( to ) )
 			nodeEdgeMap.put( to, new TLongIntHashMap() );
-//		if ( !nodeEdgeMap.contains( from ) || !nodeEdgeMap.contains( to ) )
-//			return -1;
 
 		final int newEdge = e1.add( weight, affinity, from, to, multiplicity );
 		final TLongIntHashMap n1 = nodeEdgeMap.get( from );
@@ -184,64 +182,16 @@ public class UndirectedGraph implements Serializable
 
 	}
 
-	private static void updateEdges(
-			final long oldIndex,
-			final long newIndex,
-			final int edge,
-			final long ignoreIndex,
-			final TLongIntHashMap newEdges,
-			final UndirectedGraph g )
-	{
-//		System.out.println( String.format( "old=%d new=%d ignore=%d", oldIndex, newIndex, ignoreIndex ) );
-//		System.out.println( "Removing map at " + oldIndex );
-		final TLongIntHashMap edges = g.nodeEdgeMap.remove( oldIndex );
-
-		for ( final TLongIntIterator it = edges.iterator(); it.hasNext(); )
-		{
-			it.advance();
-			final long otherIndex = it.key();
-			final int edgeIndex = it.value();
-
-			g.e2.setIndex( edgeIndex );
-
-			if ( otherIndex == ignoreIndex )
-				continue;
-
-			if ( newEdges.contains( otherIndex ) )
-			{
-				g.e3.setIndex( newEdges.get( otherIndex ) );
-				g.edgeMerger.merge( g.e2, g.e3 );
-			}
-			else {
-				final int newEdgeIndex = g.e3.add(
-						g.e2.weight(),
-						g.e2.affinity(),
-						newIndex,
-						otherIndex,
-						g.e2.multiplicity() );
-				newEdges.put( otherIndex, newEdgeIndex );
-				g.nodeEdgeMap.get( otherIndex ).put( newIndex, newEdgeIndex );
-			}
-
-			// TODO is second line also part of condition?
-			if ( oldIndex != newIndex )
-				g.nodeEdgeMap.get( otherIndex ).remove( oldIndex );
-
-			g.e2.weight( -1.0 );
-
-		}
-
-	}
-
 	public static TLongObjectHashMap< TLongIntHashMap > generateNodeEdgeMap( final TDoubleArrayList edges )
 	{
 		final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap = new TLongObjectHashMap<>();
-		final Edge e = new Edge( edges );
-		for ( int i = 0; i < e.size(); ++i )
+		final Edge e1 = new Edge( edges );
+		final Edge e2 = new Edge( edges );
+		for ( int i = 0; i < e1.size(); ++i )
 		{
-			e.setIndex( i );
-			final long from = e.from();
-			final long to = e.to();
+			e1.setIndex( i );
+			final long from = e1.from();
+			final long to = e1.to();
 			if ( !nodeEdgeMap.contains( from ) )
 				nodeEdgeMap.put( from, new TLongIntHashMap() );
 			if ( !nodeEdgeMap.contains( to ) )
@@ -249,7 +199,17 @@ public class UndirectedGraph implements Serializable
 			final TLongIntHashMap f = nodeEdgeMap.get( from );
 			final TLongIntHashMap t = nodeEdgeMap.get( to );
 			if ( f.contains( to ) && t.contains( from ) )
-				e.weight( -1.0d );
+			{
+				e2.setIndex( f.get( to ) );
+				if ( e1.weight() < e2.weight() )
+				{
+					f.put( to, i );
+					t.put( from, i );
+					e2.weight( -1.0d );
+				}
+				else
+					e1.weight( -1.0d );
+			}
 			else
 			{
 				f.put( to, i );

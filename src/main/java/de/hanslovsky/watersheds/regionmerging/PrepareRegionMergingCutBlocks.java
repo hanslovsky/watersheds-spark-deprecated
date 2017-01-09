@@ -158,7 +158,6 @@ public class PrepareRegionMergingCutBlocks
 			final long[] extendedAffinitiesBlockDim = getAffinityDims( extendedBlockDim );
 			final long[] offset = new long[ blockDim.length ];
 			Arrays.fill( offset, 1 );
-			// TODO numBlock By Dimensions is [1, 1] which is wrong. WHY?
 			final long[] numBlocksByDimension = new long[ blockDim.length ];
 			final long[] pos = t._1().getData();
 			for ( int d = 0; d < blockDim.length; ++d )
@@ -231,7 +230,6 @@ public class PrepareRegionMergingCutBlocks
 			final TLongLongHashMap nodeBlockMapping = this.nodeBlockMapping.getValue();
 
 			final TLongObjectHashMap< MergeBloc.In > regionMergingInput = new TLongObjectHashMap<>();
-//			final TLongObjectHashMap< Edge > edges = new TLongObjectHashMap<>();
 
 			for ( final long id : o.blockIds ) {
 				final In in = new MergeBloc.In(
@@ -240,7 +238,6 @@ public class PrepareRegionMergingCutBlocks
 						new TLongObjectHashMap<>(),
 						new TLongLongHashMap() );
 				regionMergingInput.put( id, in );
-//				edges.put( id, new Edge( in.edges ) );
 			}
 
 			final Edge e = new Edge( o.g.edges() );

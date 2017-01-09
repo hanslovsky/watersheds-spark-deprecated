@@ -100,23 +100,9 @@ public class RegionMerging
 				return max;
 			} ).reduce( ( d1, d2 ) -> Math.min( d1, d2 ) ).doubleValue() );
 
-			for ( final Tuple2< Long, In > a : rdd.cache().collect() )
-			{
-				final Edge e = new Edge( a._2().g.edges() );
-				for ( int i = 0; i < e.size(); ++i )
-				{
-					e.setIndex( i );
-					if ( e.from() > 9000000 || e.to() > 9000000 )
-					{
-						System.out.println( "MIST GEFUNDEN! " + e.from() + " " + e.to() );
-						System.exit( 123 );
-					}
-				}
-			}
-
 			final JavaPairRDD< Tuple2< Long, Long >, Out > mergedEdges =
 					rdd
-					.mapToPair( new MergeBloc.MergeBlocPairFunction2( f, merger, threshold, idService, mergerService ) )
+					.mapToPair( new MergeBloc.MergeBlocPairFunction2( f, merger, actualThreshold, idService, mergerService ) )
 					.cache();
 
 			hasChanged = mergedEdges.filter( t -> t._2().hasChanged ).count() > 0;

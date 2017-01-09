@@ -269,15 +269,15 @@ public class MergeBloc
 
 			final UndirectedGraph g = new UndirectedGraph( in.g.edges(), merger );
 
-//			final IntHeapPriorityQueue queue = new IntHeapPriorityQueue( new EdgeComparator( g.edges() ) );
 			final Edge e = new Edge( g.edges() );
 
 			final ChangeablePriorityQueue queue = new ChangeablePriorityQueue( e.size(), ChangeablePriorityQueue.DEFAULT_COMPARE );
 			for ( int i = 0; i < e.size(); ++i )
 			{
 				e.setIndex( i );
-				queue.push( i, e.weight() );
-//				queue.enqueue( i );
+				final double w = e.weight();
+				if ( w > 0.0d )
+					queue.push( i, e.weight() );
 			}
 
 			boolean outsideNodeIsInvolved = false;
@@ -291,8 +291,6 @@ public class MergeBloc
 			for ( final TLongIterator it = g.nodeEdgeMap().keySet().iterator(); it.hasNext(); )
 				dj.findRoot( it.next() );
 
-//			int index = 0;
-//			final String path = System.getProperty( "user.home" ) + "/git/promotion-philipp/notes/watersheds";
 			long count = 0;
 			while ( !queue.empty() )
 			{
@@ -375,10 +373,15 @@ public class MergeBloc
 							e.setIndex( id );
 							final double weight = e.weight();
 //							System.out.println( "Priority before " + queue.priority( id ) );
-							queue.changePriority( id, weight );
+//							if ( id != next && !queue.contains( id ) )
+//								throw new RuntimeException( "Does not contain " + e.weight() + " " + e.from() + " " + e.to() + " " + id );
+							if ( queue.contains( id ) )
+							{
+								queue.changePriority( id, weight );
 //							System.out.println( "Priority after " + queue.priority( id ) );
-							if ( weight < 0.0 && id != next )
-								queue.deleteItem( id );
+								if ( weight < 0.0 && id != next )
+									queue.deleteItem( id );
+							}
 						}
 						mergerService.addMerge( from, to, n, w );
 						++count;
@@ -487,7 +490,6 @@ public class MergeBloc
 			final Edge e2,
 			final EdgeMerger merger )
 	{
-		// TODO something still seems to be broken here, fix it!
 		for ( final TIntIterator it = incidentEdges.iterator(); it.hasNext(); )
 		{
 			final int k = it.next();

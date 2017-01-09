@@ -63,15 +63,15 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 	public static void main( final String[] args ) throws IOException
 	{
 
-		final int[] cellSize = new int[] { 150, 150, 100, 3 };
+		final int[] cellSize = new int[] { 300, 300, 2 };
 		final int[] cellSizeLabels = Util.dropLast( cellSize );
-		final int[] dimsIntervalInt = new int[] { 150, 150, 100, 3 };
+		final int[] dimsIntervalInt = new int[] { 300, 300, 2 };
 		final long[] dimsInterval = Arrays.stream( dimsIntervalInt ).mapToLong( i -> i ).toArray();
 		final int[] dimsIntervalIntNoChannels = Util.dropLast( dimsIntervalInt );
 		final long[] dimsIntervalNoChannels = Util.dropLast( dimsInterval );
 
 
-		final String path = Util.HOME_DIR + String.format( "/Dropbox/misc/excerpt-full-in-z.h5" );
+		final String path = Util.HOME_DIR + String.format( "/Dropbox/misc/excerpt2D-small-zws.h5" );
 
 		System.out.println( "Loading data" );
 		final CellImg< FloatType, ?, ? > data = H5Utils.loadFloat( path, "main", cellSize );
@@ -92,9 +92,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			Util.max( s, t, affs.numDimensions() );
 			t.mul( ( 1 << 16 ) * 1.0 );
 		}, new FloatType() ), "affs", Util.bdvOptions( affs ) );
-
-//		BdvFunctions.show( img, name )
-
 
 
 		final Img< LongType > labelsTargetInput = H5Utils.loadUnsignedLong( path, "zws", cellSizeLabels );
@@ -169,17 +166,10 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 				sc.parallelizePairs( blocks ).cache();
 
 
-//		final EdgeMerger merger = MergeBloc.MIN_EDGE_MERGER;
-//		final EdgeMerger merger = MergeBloc.DEFAULT_EDGE_MERGER;
 		final EdgeMerger merger = MergeBloc.MAX_AFFINITY_MERGER;
-//		final Function weightFunc = ( Function & Serializable ) ( a, c1, c2 ) -> Math.min( c1, c2 ) / ( a * a );
-//		final Function weightFunc = new RegionMerging.CountOverAffinityToFourthPower();
-//		final Function weightFunc = new RegionMerging.CountOverAffinityToPower( 8.0 );
 		final Function weightFunc = new RegionMerging.FunkyWeights();
-//		final JavaPairRDD< Long, In > graphs =
-//				blocksRdd.mapToPair( new PrepareRegionMerging.BuildBlockedGraph( dimsNoChannels, dimsIntervalNoChannels, merger, weightFunc ) ).cache();
 		final Tuple2< JavaPairRDD< Long, In >, TLongLongHashMap > graphsAndBorderNodes = PrepareRegionMergingCutBlocks.run( sc, blocksRdd, sc.broadcast( dimsNoChannels ),
-				sc.broadcast( dimsIntervalNoChannels ), merger, weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() >= 0.0, blockIdService );
+				sc.broadcast( dimsIntervalNoChannels ), merger, weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() >= 0.8, blockIdService );
 		final JavaPairRDD< Long, In > graphs = graphsAndBorderNodes._1().cache();
 
 		final List< Tuple2< Long, Long > > duplicateKeys = graphs
@@ -190,12 +180,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		System.out.println( "Duplicate keys!\n" + duplicateKeys );
 
-
-		// print to std out initial number of edges
-//		graphs.map( ( t ) -> {
-//			System.out.println( "initial: " + t._2().g.edges().size() );
-//			return null;
-//		} ).count();
 
 		{
 			final Random rng = new Random();
@@ -226,26 +210,8 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			}, new LongType() );
 			final RandomAccessibleInterval< ARGBType > coloredInitialBlocks = Converters.convert( initialBlocks, (s,t ) -> {
 				t.set( colors.get( s.get() ) ); }, new ARGBType() );
-//			final BdvStackSource< ARGBType > bdv = BdvFunctions.show( coloredInitialBlocks, "INITIAL BLOCKS " + graphs.count() );
-//			ValueDisplayListener.addValueOverlay( Views.interpolate( Views.extendValue(
-//					Views.addDimension( initialBlocks, 0, 0 ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ), bdv.getBdvHandle().getViewerPanel() );
 
 		}
-
-//		System.out.println( graphs.collect() );
-//		for ( final Tuple2< Long, In > gr : graphs.collect() ) {
-//			System.out.println( gr._1() );
-//			System.out.println( gr._2().counts );
-//			final Edge e = new Edge( gr._2().g.edges() );
-//			for ( int i = 0; i < e.size(); ++i )
-//			{
-//				e.setIndex( i );
-//				System.out.println( e.weight() + " " + e.affinity() + " " + e.from() + " " + e.to() + " " + e.multiplicity() );
-//			}
-//		}
-//		System.exit( 123 );
-
-//		System.out.println( "GRAPHS " + graphs.collect().get( 0 )._2().counts );
 
 		final String idAddr = "ipc://idService";
 		final String mergerAddr = "ipc://mergerService";
@@ -263,19 +229,8 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			mergedParents.put( k, k );
 		}
 
-//		final TLongIntHashMap colorMap = new TLongIntHashMap();
-//		final Random rngCm = new Random( 100 );
-//		for ( final LongType l : labelsTarget )
-//			if ( !colorMap.contains( l.get() ) )
-//				colorMap.put( l.get(), rngCm.nextInt() );
-
 		final Thread mergerThread = MergerServiceZMQ.createServerThread( mergerSocket, ( n1, n2, n, w ) -> {
 			action1.add( n1, n2, n, w );
-//			action2.add( n1, n2, n, w );
-//			synchronized ( colorMap )
-//			{
-//				colorMap.put( n, colorMap.contains( n1 ) ? colorMap.get( n1 ) : colorMap.get( n2 ) );
-//			}
 		} );
 
 		mergerThread.start();
@@ -291,7 +246,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		for ( final Tuple2< Long, In > g : graphs.collect() )
 		{
 			final long id = g._1();
-//			final TLongObjectHashMap< TLongHashSet > cbns = g._2().borderNodes;
 			final TLongLongHashMap cons = g._2().outsideNodes;
 			final Edge e = new Edge( g._2().g.edges() );
 			for ( int i = 0; i < e.size(); ++i )
@@ -303,15 +257,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 					labelBlockmap.put( f, id );
 				if ( !cons.contains( t ) )
 					labelBlockmap.put( t, id );
-//				if ( cbns.contains( f ) )
-//					labelBlockmap.put( f, id );
-//				else if ( cbns.contains( t ) )
-//					labelBlockmap.put( t, id );
-//				else
-//				{
-//					labelBlockmap.put( t, id );
-//					labelBlockmap.put( f, id );
-//				}
 			}
 		}
 		for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( labelsTarget, blockZero ), blockZero ) )
@@ -339,21 +284,15 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			}
 
 			for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( images.get( images.size() - 1 ), img ), img ) )
-//				p.getB().set( mergedParents.contains( p.getA().get() ) ? mergedParents.get( p.getA().get() ) : p.getA().get() );
 				p.getB().set( mergeUnionFind.findRoot( p.getA().get() ) );
 			images.add( img );
 
 			final Img< LongType > blockImg = labelsTarget.factory().create( blockImages.get( 0 ), new LongType() );
 			for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( blockImages.get( blockImages.size() - 1 ), blockImg ), blockImg ) )
-				//				if ( !parents.contains( p.getA().get() ) )
-//				{
-//					System.out.println( "parents does not contain "  + p.getA() );
-//					System.exit( 21412412 );
-//				}
 				p.getB().set( parents.contains( p.getA().get() ) ? parents.get( p.getA().get() ) : p.getA().get() );
 			blockImages.add( blockImg );
 		};
-		final double threshold = 200;// Double.POSITIVE_INFINITY;
+		final double threshold = 200;
 		final double thresholdTolerance = 1e0;
 
 		final JavaPairRDD< Long, In > graphsAfterMerging = rm.run( sc, graphs, threshold, rmVisitor, labelsTarget, thresholdTolerance );

@@ -61,14 +61,14 @@ public class InitialWatershedsSpark
 	{
 
 
-		final int[] cellSize = new int[] { 150, 150, 50, 2 };
+		final int[] cellSize = new int[] { 300, 300, 2 };
 		final int[] cellSizeLabels = Util.dropLast( cellSize );
-		final int[] dimsIntervalInt = new int[] { 150, 150, 100, 3 };
+		final int[] dimsIntervalInt = new int[] { 30, 30, 2 };
 		final long[] dimsInterval = Arrays.stream( dimsIntervalInt ).mapToLong( i -> i ).toArray();
 		final int[] dimsIntervalIntNoChannels = Util.dropLast( dimsIntervalInt );
 
 		final String HOME_DIR = System.getProperty( "user.home" );
-		final String path = HOME_DIR + String.format( "/Dropbox/misc/excerpt-full-in-z.h5" );
+		final String path = HOME_DIR + String.format( "/Dropbox/misc/excerpt2D-small-zws.h5" );
 
 		System.out.println( "Loading data" );
 		final CellImg< FloatType, ?, ? > data =
