@@ -156,6 +156,20 @@ public class RegionMerging
 
 			System.out.println( "CNT: " + rdd.count() + " " + hasChanged );
 
+			rdd.map(
+					t -> {
+						final Edge e = new Edge( t._2().g.edges() );
+						int underThreshold = 0;
+						for ( int i = 0; i < e.size(); ++i )
+						{
+							e.setIndex( i );
+							if ( e.weight() < threshold )
+								//								System.out.println( "w: " + e.weight() );
+								++underThreshold;
+						}
+						System.out.println( t._1() + " Still has " + e.size() + " edges (" + underThreshold + " under threshold)" );
+						return true;
+					} ).count();
 //			break;
 
 		}

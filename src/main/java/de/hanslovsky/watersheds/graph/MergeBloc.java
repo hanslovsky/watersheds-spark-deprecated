@@ -303,7 +303,6 @@ public class MergeBloc
 				final double w = e.weight();
 
 				if ( w < 0 )
-					//					queue.deleteItem( next );
 					continue;
 				else if ( w > threshold || outsideNodeIsInvolved && w > maxWeightBeforeMerge )
 					break;
@@ -319,8 +318,6 @@ public class MergeBloc
 						outsideNodeIsInvolved = true;
 						involvedOutsideBlock = in.outsideNodes.get( from );
 						maxWeightBeforeMerge = w;
-						if ( t._1() == 1 )
-							System.out.println( "MERGING OUTSIDE " + t._1() + " " + e.weight() + " " + e.from() + " " + e.to() + " " + involvedOutsideBlock );
 					}
 				}
 				else if ( in.outsideNodes.contains( to ) )
@@ -330,8 +327,6 @@ public class MergeBloc
 						outsideNodeIsInvolved = true;
 						involvedOutsideBlock = in.outsideNodes.get( to );
 						maxWeightBeforeMerge = w;
-						if ( t._1() == 1 )
-							System.out.println( "MERGING OUTSIDE " + t._1() + " " + e.weight() + " " + e.from() + " " + e.to() + " " + involvedOutsideBlock );
 					}
 				}
 				else
@@ -341,8 +336,6 @@ public class MergeBloc
 					if ( r1 == r2 || r1 != from || r2 != to )
 						continue;
 					final long n = dj.join( r1, r2 );
-
-					System.out.println( "MERGING " + t._1() + " " + e.affinity() + " " + e.weight() + " " + e.from() + " " + e.to() + " " + r1 + " " + r2 + " " + n + " " + next + " " + ( e.weight() == 0.0 ) + " " + in.counts.get( e.from() ) + " " + in.counts.get( e.to() ) );
 
 					if ( in.borderNodes.contains( from ) )
 					{
@@ -368,16 +361,9 @@ public class MergeBloc
 						System.exit( 123 );
 					}
 
-					final long c1 = in.counts.remove( r1 );// from );
-					final long c2 = in.counts.remove( r2 );// to );
+					final long c1 = in.counts.remove( r1 );
+					final long c2 = in.counts.remove( r2 );
 					final long cn = c1 + c2;
-					// TODO THIS CHECK MUST BE FIXED
-					if ( cn > Long.MAX_VALUE )
-					{
-						in.counts.put( r1, c1 );
-						in.counts.put( r2, c2 );
-					}
-					else
 					{
 						in.counts.put( n, cn );
 						final TLongIntHashMap edgesOfUnusedNode = g.contract( next, n, in.counts, dj, f );
@@ -388,16 +374,11 @@ public class MergeBloc
 							final int id = it.value();
 							e.setIndex( id );
 							final double weight = e.weight();
+//							System.out.println( "Priority before " + queue.priority( id ) );
+							queue.changePriority( id, weight );
+//							System.out.println( "Priority after " + queue.priority( id ) );
 							if ( weight < 0.0 && id != next )
-								//								if (!queue.contains( id ) )
-//								{
-////									System.out.println( "Queue does not contain edge " + id + " -- why ? " );
-////									System.exit( 123 );
-//								}
-//								else
 								queue.deleteItem( id );
-							else
-								queue.changePriority( id, e.weight() );
 						}
 						mergerService.addMerge( from, to, n, w );
 						++count;
@@ -405,18 +386,9 @@ public class MergeBloc
 
 				}
 
-//				System.out.println( e.size() + " edges remaining." );
-//				for ( int i = 0; i < e.size(); ++i )
-//				{
-//					e.setIndex( i );
-//					System.out.println( e.weight() + " " + queue.priority( i ) );
-//				}
-//				System.out.println( "" );
-
 			}
 
 			mergerService.finalize();
-			Thread.sleep( 3000 );
 
 //			double[] resultEdges = new double[0];
 			for ( int k = e.size() - 1; k >= 0; --k )
@@ -434,6 +406,8 @@ public class MergeBloc
 				final long nxt = k.next();
 				final long r = dj.findRoot( nxt );
 			}
+
+			System.out.println( "has changed? " + count + " " + involvedOutsideBlock );
 
 
 			final Out result = new Out(

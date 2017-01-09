@@ -63,15 +63,15 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 	public static void main( final String[] args ) throws IOException
 	{
 
-		final int[] cellSize = new int[] { 300, 300, 2 };
+		final int[] cellSize = new int[] { 150, 150, 100, 3 };
 		final int[] cellSizeLabels = Util.dropLast( cellSize );
-		final int[] dimsIntervalInt = new int[] { 300, 300, 2 };
+		final int[] dimsIntervalInt = new int[] { 150, 150, 100, 3 };
 		final long[] dimsInterval = Arrays.stream( dimsIntervalInt ).mapToLong( i -> i ).toArray();
 		final int[] dimsIntervalIntNoChannels = Util.dropLast( dimsIntervalInt );
 		final long[] dimsIntervalNoChannels = Util.dropLast( dimsInterval );
 
 
-		final String path = Util.HOME_DIR + String.format( "/Dropbox/misc/excerpt2D.h5" );
+		final String path = Util.HOME_DIR + String.format( "/Dropbox/misc/excerpt-full-in-z.h5" );
 
 		System.out.println( "Loading data" );
 		final CellImg< FloatType, ?, ? > data = H5Utils.loadFloat( path, "main", cellSize );
@@ -329,6 +329,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final RegionMerging.Visitor rmVisitor = ( parents ) -> {
 			final Img< LongType > img = labelsTarget.factory().create( images.get( 0 ), new LongType() );
 
+			System.out.println( "Merging " + merges.size() + " edges" );
 			for ( int i = 0; i < merges.size(); i += 4 )
 			{
 				final long f = mergeUnionFind.findRoot( merges.get( i ) );
@@ -371,17 +372,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			t.set( colorMap.get( s.get() ) );
 		}, new ARGBType() );
 
-		final DisjointSetsHashMap uf = new DisjointSetsHashMap();
-		for ( final LongType lt : labelsTarget )
-			uf.findRoot( lt.get() );
-		for ( int i = 0; i < merges.size() / 4; i += 4 )
-			uf.join( uf.findRoot( merges.get( i ) ), uf.findRoot( merges.get( i + 1 ) ) );
-
 		final BdvStackSource< ARGBType > chBdv = BdvFunctions.show( coloredHistory, "colored history", Util.bdvOptions( labelsTarget ) );
-
-		BdvFunctions.show( Converters.convert( ( RandomAccessibleInterval< LongType > ) labelsTarget, ( s, t ) -> {
-			t.set( colorMap.get( uf.findRoot( s.get() ) ) );
-		}, new ARGBType() ), "colorful result" );
 
 		ValueDisplayListener.addValueOverlay(
 				Views.interpolate( Views.extendValue( Views.stack( images ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ),
@@ -391,17 +382,9 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		final RandomAccessibleInterval< ARGBType > coloredBlockHistory =
 				Converters.convert( Views.stack( blockImages ), ( s, t ) -> {
-//					if ( !blockColors.contains( s.get() ) )
-//					{
-//						System.out.println( "" + s + " not contained in cmap " );
-//						System.exit( 213 );
-//					}
 					t.set( blockColors.get( s.get() ) );
 				}, new ARGBType() );
 		final BdvStackSource< ARGBType > cbhBdv = BdvFunctions.show( coloredBlockHistory, "colored block history", Util.bdvOptions( labelsTarget ) );
-//		BdvFunctions.show( Converters.convert( Views.stack( blockImages ), ( s, t ) -> {
-//			t.set( s.get() == 154 ? 255 << 8 : 255 << 16 );
-//		}, new ARGBType() ), "154" );
 		ValueDisplayListener.addValueOverlay(
 				Views.interpolate( Views.extendValue( Views.stack( blockImages ), new LongType( -1 ) ), new NearestNeighborInterpolatorFactory<>() ),
 				cbhBdv.getBdvHandle().getViewerPanel() );
@@ -431,32 +414,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final RandomAccessibleInterval< ARGBType > colored = Converters.convert( rooted, ( s, t ) -> {
 			t.set( colorsMap.get( s.get() ) );
 		}, new ARGBType() );
-
-//		final ArrayList< RandomAccessibleInterval< LongType > > everySingleMerge = new ArrayList<>();
-//		{
-//			everySingleMerge.add( images.get( 0 ) );
-//			final long[] baseDim = Intervals.dimensionsAsLongArray( images.get( 0 ) );
-//			final DisjointSetsHashMap djshm = new DisjointSetsHashMap();
-//			for ( int i = 0; i < merges.size(); i += 4 )
-//			{
-//				final long f = merges.get( i );
-//				final long t = merges.get( i + 1 );
-//				djshm.join( djshm.findRoot( f ), djshm.findRoot( t ) );
-//				final ArrayImg< LongType, LongArray > target = ArrayImgs.longs( baseDim );
-//
-//				for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( images.get( 0 ), target ), target ) )
-//					p.getB().set( djshm.findRoot( p.getA().get() ) );
-//
-//				everySingleMerge.add( target );
-//
-//			}
-//
-//		}
-//
-//		final RandomAccessibleInterval< ARGBType > everySingleMergeImg = Converters.convert( Views.stack( everySingleMerge ), ( s, t ) -> {
-//			t.set( colorMap.get( s.get() ) );
-//		}, new ARGBType() );
-//		final BdvStackSource< ARGBType > esmBdv = BdvFunctions.show( everySingleMergeImg, "every single merge", BdvOptions.options().is2D() );
 
 		sc.close();
 
