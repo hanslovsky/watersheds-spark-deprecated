@@ -1,10 +1,12 @@
 package de.hanslovsky.watersheds.rewrite.graph;
 
+import java.io.Serializable;
+
 import gnu.trove.iterator.TIntIntIterator;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TIntIntHashMap;
 
-public class UndirectedGraphArrayBased
+public class UndirectedGraphArrayBased implements Serializable
 {
 
 	private final TDoubleArrayList edges;

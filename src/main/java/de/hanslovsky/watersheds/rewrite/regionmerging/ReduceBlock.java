@@ -31,7 +31,7 @@ public class ReduceBlock implements PairFunction< Tuple2< Long, ArrayList< Remap
 		for ( final RemappedData md : mappedDatas )
 		{
 			allBorderNodesAssignments.putAll( md.borderNodeAssignments );
-			allCounts.putAll( allCounts );
+			allCounts.putAll( md.counts );
 			allOutsideNodes.putAll( md.outsideNodes );
 			allBorderNodes.putAll( md.borderNodes );
 		}

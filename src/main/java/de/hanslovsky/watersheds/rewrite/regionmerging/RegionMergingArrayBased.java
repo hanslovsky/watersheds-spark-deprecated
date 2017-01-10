@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.broadcast.Broadcast;
 
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
@@ -63,6 +64,8 @@ public class RegionMergingArrayBased
 
 			final List< Tuple2< Long, Long > > joins = mergedEdges.map( t -> new Tuple2<>( t._1(), t._2()._1() ) ).collect();
 
+			System.out.println( rdd.keys().collect() );
+
 			for ( final Tuple2< Long, Long > join : joins )
 			{
 				final int r1 = dj.findRoot( join._1().intValue() );
@@ -113,7 +116,9 @@ public class RegionMergingArrayBased
 				return new Tuple2<>( key, new RegionMergingInput( nodeIndexMapping.size(), nodeIndexMapping, data.counts, data.outsideNodes, data.edges, data.borderNodes ) );
 			} );
 
-			zeroBased = backToInput.mapToPair( new ToZeroBasedIndexing<>() );
+			zeroBased = backToInput
+					.mapToPair( new GenerateNodeIndexMapping<>() )
+					.mapToPair( new ToZeroBasedIndexing<>() );
 		}
 
 		return zeroBased;
@@ -130,6 +135,19 @@ public class RegionMergingArrayBased
 				nodeIndexMapping.put( cIt.next(), i );
 			return new Tuple2<>( t._1(), new RegionMergingInput( bd.counts.size(), nodeIndexMapping, bd.counts, bd.outsideNodes, bd.edges, bd.borderNodes ) );
 		});
+	}
+
+	public static class GenerateNodeIndexMapping< K > implements PairFunction< Tuple2< K, RegionMergingInput >, K, RegionMergingInput >
+	{
+
+		@Override
+		public Tuple2< K, RegionMergingInput > call( final Tuple2< K, RegionMergingInput > t ) throws Exception
+		{
+			final RegionMergingInput rmi = t._2();
+
+			return new Tuple2<>( t._1(), rmi );
+		}
+
 	}
 
 

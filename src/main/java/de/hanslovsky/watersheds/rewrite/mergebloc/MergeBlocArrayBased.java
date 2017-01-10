@@ -126,7 +126,7 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 		}
 
 
-		return new Tuple2<>( t._1(), new Tuple2<>( pointingOutside, new MergeBlocOut( in.g, in.counts, in.outsideNodes, queue, dj, in.borderNodes, count > 0 || pointingOutside != t._1().longValue() ) ) );
+		return new Tuple2<>( t._1(), new Tuple2<>( pointingOutside, new MergeBlocOut( in.counts, in.outsideNodes, dj, in.borderNodes, count > 0 || pointingOutside != t._1().longValue(), in.g.edges() ) ) );
 	}
 
 	private static TDoubleArrayList filterEdges( final TDoubleArrayList edges, final long[] counts, final EdgeWeight edgeWeight )

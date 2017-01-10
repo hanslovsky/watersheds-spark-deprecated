@@ -164,7 +164,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		final String blockIdAddr = "ipc://blockIdService";
 		final Socket blockIdSocket = IdServiceZMQ.createServerSocket( ctx, blockIdAddr );
-		final Thread blockIdThread = IdServiceZMQ.createServerThread( blockIdSocket, new AtomicLong( 1 ) );
+		final Thread blockIdThread = IdServiceZMQ.createServerThread( blockIdSocket, new AtomicLong( 0 ) );
 		blockIdThread.start();
 		final IdServiceZMQ blockIdService = new IdServiceZMQ( blockIdAddr );
 

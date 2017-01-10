@@ -33,7 +33,7 @@ public class RemapToOriginalIndices implements PairFunction< Tuple2< Long, Tuple
 		final long[] map = t._2()._2();
 
 		// map back edges
-		Util.remapEdges( new Edge( out.g.edges() ), out, map );
+		Util.remapEdges( new Edge( out.edges ), out, map );
 
 		// map back counts
 		final TLongLongHashMap countsInBlock = Util.remapCounts( out, map );
@@ -48,7 +48,7 @@ public class RemapToOriginalIndices implements PairFunction< Tuple2< Long, Tuple
 		final TLongLongHashMap borderNodeRoots = new TLongLongHashMap();
 		Util.remapBorderNodes( out, map, djBlock, root, borderNodes, borderNodeRoots );
 
-		return new Tuple2< Long, RemappedData >( ( long ) root, new RemappedData( out.g.edges(), countsInBlock, outsideNodes, borderNodes, borderNodeRoots ) );
+		return new Tuple2< Long, RemappedData >( ( long ) root, new RemappedData( out.edges, countsInBlock, outsideNodes, borderNodes, borderNodeRoots ) );
 	}
 
 }
