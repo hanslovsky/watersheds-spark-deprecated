@@ -14,6 +14,11 @@ public class UndirectedGraph
 
 	private final Edge e1, e2;
 
+	public UndirectedGraph()
+	{
+		this( new TDoubleArrayList() );
+	}
+
 	public UndirectedGraph( final TDoubleArrayList edges )
 	{
 		this( edges, nodeEdgeMap( edges ) );
