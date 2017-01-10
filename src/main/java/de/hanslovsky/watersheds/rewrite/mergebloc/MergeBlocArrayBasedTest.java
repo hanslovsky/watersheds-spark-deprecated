@@ -10,15 +10,15 @@ import de.hanslovsky.watersheds.Util;
 import de.hanslovsky.watersheds.rewrite.Edge;
 import de.hanslovsky.watersheds.rewrite.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.EdgeWeight;
+import de.hanslovsky.watersheds.rewrite.EdgeWeight.FunkyWeight;
 import de.hanslovsky.watersheds.rewrite.MergerService;
 import de.hanslovsky.watersheds.rewrite.UndirectedGraphArrayBased;
-import de.hanslovsky.watersheds.rewrite.EdgeMerger.MAX_AFFINITY_MERGER;
-import de.hanslovsky.watersheds.rewrite.EdgeWeight.FunkyWeight;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TIntIntHashMap;
+import gnu.trove.map.hash.TIntLongHashMap;
+import gnu.trove.map.hash.TIntObjectHashMap;
 import gnu.trove.map.hash.TLongIntHashMap;
-import gnu.trove.map.hash.TLongLongHashMap;
 import net.imglib2.Cursor;
 import net.imglib2.RandomAccess;
 import net.imglib2.RandomAccessible;
@@ -162,7 +162,7 @@ public class MergeBlocArrayBasedTest
 		final MergeBlocArrayBased mb = new MergeBlocArrayBased( new EdgeMerger.MAX_AFFINITY_MERGER(), fw, ms, 200.0 );
 		System.out.println( "Start edge merging" );
 		final long t0 = System.currentTimeMillis();
-		final MergeBlocOut out = mb.call( new Tuple2<>( 2l, new MergeBlocIn( g, counts, new TLongLongHashMap() ) ) )._2();
+		final MergeBlocOut out = mb.call( new Tuple2<>( 2l, new MergeBlocIn( g, counts, new TIntLongHashMap(), new TIntObjectHashMap<>() ) ) )._2()._2();
 		final long t1 = System.currentTimeMillis();
 		System.out.println( "Done Edge merging: " + ( t1 - t0 ) + "ms" );
 

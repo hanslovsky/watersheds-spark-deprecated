@@ -2,7 +2,9 @@ package de.hanslovsky.watersheds.rewrite.mergebloc;
 
 import de.hanslovsky.watersheds.rewrite.ChangeablePriorityQueue;
 import de.hanslovsky.watersheds.rewrite.UndirectedGraphArrayBased;
-import gnu.trove.map.hash.TLongLongHashMap;
+import gnu.trove.map.hash.TIntLongHashMap;
+import gnu.trove.map.hash.TIntObjectHashMap;
+import gnu.trove.set.hash.TLongHashSet;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 
 public class MergeBlocOut
@@ -12,13 +14,17 @@ public class MergeBlocOut
 
 	public final long[] counts;
 
-	public final TLongLongHashMap outsideNodes;
+	public final TIntLongHashMap outsideNodes;
 
 	public final ChangeablePriorityQueue queue;
 
 	public final DisjointSets dj;
 
-	public MergeBlocOut( final UndirectedGraphArrayBased g, final long[] counts, final TLongLongHashMap outsideNodes, final ChangeablePriorityQueue queue, final DisjointSets dj )
+	public final TIntObjectHashMap< TLongHashSet > borderNodes;
+
+	public final boolean hasChanged;
+
+	public MergeBlocOut( final UndirectedGraphArrayBased g, final long[] counts, final TIntLongHashMap outsideNodes, final ChangeablePriorityQueue queue, final DisjointSets dj, final TIntObjectHashMap< TLongHashSet > borderNodes, final boolean hasChanged )
 	{
 		super();
 		this.g = g;
@@ -26,6 +32,8 @@ public class MergeBlocOut
 		this.outsideNodes = outsideNodes;
 		this.queue = queue;
 		this.dj = dj;
+		this.borderNodes = borderNodes;
+		this.hasChanged = hasChanged;
 	}
 
 }

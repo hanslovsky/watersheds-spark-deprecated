@@ -12,7 +12,7 @@ import gnu.trove.map.hash.TIntIntHashMap;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import scala.Tuple2;
 
-public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlocIn >, Tuple2< Long, Long >, MergeBlocOut >
+public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlocIn >, Long, Tuple2< Long, MergeBlocOut > >
 {
 
 	private final EdgeMerger edgeMerger;
@@ -35,7 +35,7 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 
 	@Override
-	public Tuple2< Tuple2< Long, Long >, MergeBlocOut > call( final Tuple2< Long, MergeBlocIn > t ) throws Exception
+	public Tuple2< Long, Tuple2< Long, MergeBlocOut > > call( final Tuple2< Long, MergeBlocIn > t ) throws Exception
 	{
 		final MergeBlocIn in = t._2();
 		final TDoubleArrayList edges = in.g.edges();
@@ -56,6 +56,8 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 		long pointingOutside = t._1();
 
+		int count = 0;
+
 		while ( !queue.empty() )
 		{
 			final int next = queue.pop();
@@ -65,14 +67,15 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 			if ( w < 0.0 )
 				continue;
 
-			else if ( in.outsideNodes.contains( e.from() ) ) {
-				pointingOutside =  in.outsideNodes.get( e.from() );
+			else if ( in.outsideNodes.contains( ( int ) e.from() ) )
+			{
+				pointingOutside = in.outsideNodes.get( ( int ) e.from() );
 				break;
 			}
 
-			else if ( in.outsideNodes.contains( e.to() ) )
+			else if ( in.outsideNodes.contains( ( int ) e.to() ) )
 			{
-				pointingOutside = in.outsideNodes.get( e.to() );
+				pointingOutside = in.outsideNodes.get( ( int ) e.to() );
 				break;
 			}
 
@@ -103,6 +106,8 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 				continue;
 			}
 
+			++count;
+
 			final int n = dj.join( r1, r2 );
 
 			final long c1 = in.counts[ r1 ];
@@ -121,7 +126,7 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 		}
 
 
-		return new Tuple2<>( new Tuple2<>( t._1(), pointingOutside ), new MergeBlocOut( in.g, in.counts, in.outsideNodes, queue, dj ) );
+		return new Tuple2<>( t._1(), new Tuple2<>( pointingOutside, new MergeBlocOut( in.g, in.counts, in.outsideNodes, queue, dj, in.borderNodes, count > 0 || pointingOutside != t._1().longValue() ) ) );
 	}
 
 	private static TDoubleArrayList filterEdges( final TDoubleArrayList edges, final long[] counts, final EdgeWeight edgeWeight )
