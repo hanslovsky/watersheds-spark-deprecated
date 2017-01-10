@@ -25,7 +25,7 @@ public class Util
 
 		final TDoubleArrayList mappedEdges = new TDoubleArrayList();
 		final Edge e = new Edge( edges );
-		final Edge m = new Edge( edges );
+		final Edge m = new Edge( mappedEdges );
 		for ( int i = 0; i < e.size(); ++i )
 		{
 			e.setIndex( i );
