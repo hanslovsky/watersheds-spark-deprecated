@@ -93,6 +93,11 @@ public class MergeBloc implements PairFunction< Tuple2< Long, MergeBlocData >, T
 
 			final long r1 = dj.findRoot( from );
 			final long r2 = dj.findRoot( to );
+
+			// if already merged go on
+			if ( r1 == r2 )
+				continue;
+
 			final long n = dj.join( r1, r2 );
 
 			assert in.counts.contains( r1 ) && in.counts.contains( r2 ): "Counts does not contain ids!";
@@ -110,16 +115,19 @@ public class MergeBloc implements PairFunction< Tuple2< Long, MergeBlocData >, T
 				final int index = it.value();
 				e.setIndex( index );
 				if ( e.weight() < 0.0 )
-				{
-					if ( id != n )
+					// why is this test necessary? Bug? TODO
+					if ( queue.contains( index ) )
 						queue.deleteItem( index );
-				}
-				else
-				{
-					final double weight = edgeWeight.weight( e.affinity(), in.counts.get( from ), in.counts.get( to ) );
-					e.weight( weight );
-					queue.changePriority( index, weight );
-				}
+
+			}
+
+			for ( final TLongIntIterator it = in.g.nodeEdgeMap().get( n ).iterator(); it.hasNext(); )
+			{
+				it.advance();
+				final int index = it.value();
+				e.setIndex( index );
+				e.weight( edgeWeight.weight( e.affinity(), in.counts.get( e.from() ), in.counts.get( e.to() ) ) );
+//				System.out.println( in.counts.get( e.from() ) + " " + in.counts.get( e.to() ) + " " + e );
 			}
 
 			mergerService.addMerge( from, to, n, w );

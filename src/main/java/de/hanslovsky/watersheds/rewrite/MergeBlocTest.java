@@ -34,8 +34,8 @@ public class MergeBlocTest
 
 	public static void main( final String[] args ) throws Exception
 	{
-		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt.h5";
-		final int[] cellSize = new int[] { 300, 300, 100, 3 };
+		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
+		final int[] cellSize = new int[] { 300, 300, 2 };
 		final int[] cellSizeLabels = Util.dropLast( cellSize );
 		System.out.println( "Loading data" );
 		final CompositeIntervalView< FloatType, RealComposite< FloatType > > data = Views.collapseReal( H5Utils.loadFloat( path, "main", cellSize ) );
@@ -86,7 +86,7 @@ public class MergeBlocTest
 				final long from = l.get();
 				final long to = ra.get().getB().get();
 				final float aff = a.get( d ).get();
-				if ( !Float.isNaN( aff ) )
+				if ( !Float.isNaN( aff ) && from != to )
 				{
 					if ( !nodeEdgeMap.contains( from ) )
 						nodeEdgeMap.put( from, new TLongIntHashMap() );
@@ -103,7 +103,12 @@ public class MergeBlocTest
 						edge.multiplicity( edge.multiplicity() + 1 );
 					}
 					else
-						edge.add( Double.NaN, aff, from, to, 1 );
+					{
+						final int index = edge.add( Double.NaN, aff, from, to, 1 );
+						fMap.put( to, index );
+						tMap.put( from, index );
+
+					}
 				}
 
 			}
@@ -133,7 +138,7 @@ public class MergeBlocTest
 
 			}
 		};
-		final MergeBloc mb = new MergeBloc( new EdgeMerger.MAX_AFFINITY_MERGER(), fw, ms, 1 );
+		final MergeBloc mb = new MergeBloc( new EdgeMerger.MAX_AFFINITY_MERGER(), fw, ms, 10 );
 		mb.call( new Tuple2<>( 2l, new MergeBloc.MergeBlocData( g, counts ) ) );
 		System.out.println( merges.size() );
 
