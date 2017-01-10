@@ -1,4 +1,4 @@
-package de.hanslovsky.watersheds.rewrite;
+package de.hanslovsky.watersheds.rewrite.mergebloc;
 
 import java.util.Random;
 
@@ -7,6 +7,13 @@ import bdv.util.BdvFunctions;
 import bdv.util.BdvOptions;
 import bdv.util.BdvStackSource;
 import de.hanslovsky.watersheds.Util;
+import de.hanslovsky.watersheds.rewrite.DisjointSetsHashMap;
+import de.hanslovsky.watersheds.rewrite.Edge;
+import de.hanslovsky.watersheds.rewrite.EdgeMerger;
+import de.hanslovsky.watersheds.rewrite.EdgeWeight;
+import de.hanslovsky.watersheds.rewrite.MergerService;
+import de.hanslovsky.watersheds.rewrite.UndirectedGraph;
+import de.hanslovsky.watersheds.rewrite.EdgeMerger.MAX_AFFINITY_MERGER;
 import de.hanslovsky.watersheds.rewrite.EdgeWeight.FunkyWeight;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TLongArrayList;

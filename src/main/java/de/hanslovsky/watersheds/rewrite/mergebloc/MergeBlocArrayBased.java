@@ -1,32 +1,19 @@
-package de.hanslovsky.watersheds.rewrite;
+package de.hanslovsky.watersheds.rewrite.mergebloc;
 
 import org.apache.spark.api.java.function.PairFunction;
 
-import de.hanslovsky.watersheds.rewrite.MergeBlocArrayBased.MergeBlocData;
+import de.hanslovsky.watersheds.rewrite.ChangeablePriorityQueue;
+import de.hanslovsky.watersheds.rewrite.Edge;
+import de.hanslovsky.watersheds.rewrite.EdgeMerger;
+import de.hanslovsky.watersheds.rewrite.EdgeWeight;
+import de.hanslovsky.watersheds.rewrite.MergerService;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TIntIntHashMap;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import scala.Tuple2;
 
-public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlocData >, Tuple2< Long, Long >, MergeBlocData >
+public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlocIn >, Tuple2< Long, Long >, MergeBlocOut >
 {
-
-	public static class MergeBlocData
-	{
-
-		public final UndirectedGraphArrayBased g;
-
-		public final long[] counts;
-
-		public MergeBlocData( final UndirectedGraphArrayBased g, final long[] counts )
-		{
-			super();
-			this.g = g;
-			this.counts = counts;
-		}
-
-	}
-
 
 	private final EdgeMerger edgeMerger;
 
@@ -48,9 +35,9 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 
 	@Override
-	public Tuple2< Tuple2< Long, Long >, MergeBlocData > call( final Tuple2< Long, MergeBlocData > t ) throws Exception
+	public Tuple2< Tuple2< Long, Long >, MergeBlocOut > call( final Tuple2< Long, MergeBlocIn > t ) throws Exception
 	{
-		final MergeBlocData in = t._2();
+		final MergeBlocIn in = t._2();
 		final TDoubleArrayList edges = in.g.edges();
 		final Edge e = new Edge( edges );
 
@@ -67,6 +54,8 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 				queue.push( i, w );
 		}
 
+		long pointingOutside = t._1();
+
 		while ( !queue.empty() )
 		{
 			final int next = queue.pop();
@@ -75,6 +64,17 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 			if ( w < 0.0 )
 				continue;
+
+			else if ( in.outsideNodes.contains( e.from() ) ) {
+				pointingOutside =  in.outsideNodes.get( e.from() );
+				break;
+			}
+
+			else if ( in.outsideNodes.contains( e.to() ) )
+			{
+				pointingOutside = in.outsideNodes.get( e.to() );
+				break;
+			}
 
 			else if ( Double.isNaN( w ) )
 			{
@@ -113,45 +113,37 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 			in.counts[ n ] = c1 + c2;
 
-//			System.out.println( "Merging " + e + " " + r1 + " " + r2 + " " + n );
-
 			final TIntIntHashMap discardEdges = in.g.contract( e, n, this.edgeMerger );
 
-//			for ( final TIntIntIterator it = discardEdges.iterator(); it.hasNext(); )
-//			{
-//				it.advance();
-//				final int id = it.key();
-//				final int index = it.value();
-//				e.setIndex( index );
-//				if ( e.weight() < 0.0 )
-//					// why is this test necessary? Bug? TODO
-//					if ( queue.contains( index ) )
-//						queue.deleteItem( index );
-//
-//			}
-//
-//			for ( final TIntIntIterator it = in.g.nodeEdgeMap()[ n ].iterator(); it.hasNext(); )
-//			{
-//				it.advance();
-//				final int index = it.value();
-//				e.setIndex( index );
-////				e.weight( edgeWeight.weight( e.affinity(), in.counts[ ( int ) e.from() ], in.counts[ ( int ) e.to() ] ) );
-//				System.out.println( e.from() + " " + dj.findRoot( ( int ) e.from() ) + " " + e.to() + " " + dj.findRoot( ( int ) e.to() ) );
-////				e.weight( edgeWeight.weight( e.affinity(), in.counts[ dj.findRoot( ( int ) e.from() ) ], in.counts[ dj.findRoot( ( int ) e.to() ) ] ) );
-////				System.out.println( in.counts.get( e.from() ) + " " + in.counts.get( e.to() ) + " " + e );
-//			}
-//			System.out.println();
-
 			discardEdges.clear();
-
-			mergerService.addMerge( from, to, n, w );
 
 
 		}
 
-		mergerService.finalize();
 
-		return null;
+		return new Tuple2<>( new Tuple2<>( t._1(), pointingOutside ), new MergeBlocOut( in.g, in.counts, in.outsideNodes, queue, dj ) );
+	}
+
+	private static TDoubleArrayList filterEdges( final TDoubleArrayList edges, final long[] counts, final EdgeWeight edgeWeight )
+	{
+		final TDoubleArrayList filteredEdges = new TDoubleArrayList();
+		final Edge e = new Edge( edges );
+		final Edge f = new Edge( filteredEdges );
+
+		for ( int i = 0; i < e.size(); ++i )
+		{
+			e.setIndex( i );
+			final double w = e.weight();
+			if ( w < 0.0d )
+				continue;
+
+			final int from = (int) e.from();
+			final int to = (int) e.to();
+			f.add( Double.isNaN( w ) ? edgeWeight.weight( w, counts[ from ], counts[ to ] ) : w, e.affinity(), from, to, e.multiplicity() );
+
+		}
+
+		return filteredEdges;
 	}
 
 }

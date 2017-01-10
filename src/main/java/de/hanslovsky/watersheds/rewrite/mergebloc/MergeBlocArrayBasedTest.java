@@ -1,4 +1,4 @@
-package de.hanslovsky.watersheds.rewrite;
+package de.hanslovsky.watersheds.rewrite.mergebloc;
 
 import java.util.Random;
 
@@ -7,11 +7,18 @@ import bdv.util.BdvFunctions;
 import bdv.util.BdvOptions;
 import bdv.util.BdvStackSource;
 import de.hanslovsky.watersheds.Util;
+import de.hanslovsky.watersheds.rewrite.Edge;
+import de.hanslovsky.watersheds.rewrite.EdgeMerger;
+import de.hanslovsky.watersheds.rewrite.EdgeWeight;
+import de.hanslovsky.watersheds.rewrite.MergerService;
+import de.hanslovsky.watersheds.rewrite.UndirectedGraphArrayBased;
+import de.hanslovsky.watersheds.rewrite.EdgeMerger.MAX_AFFINITY_MERGER;
 import de.hanslovsky.watersheds.rewrite.EdgeWeight.FunkyWeight;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TIntIntHashMap;
 import gnu.trove.map.hash.TLongIntHashMap;
+import gnu.trove.map.hash.TLongLongHashMap;
 import net.imglib2.Cursor;
 import net.imglib2.RandomAccess;
 import net.imglib2.RandomAccessible;
@@ -35,10 +42,11 @@ public class MergeBlocArrayBasedTest
 
 	public static void main( final String[] args ) throws Exception
 	{
-		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
+		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt-no-blocks.h5";
+//		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
 //		final int[] cellSize = new int[] { 150, 150, 50, 3 };
-		final int[] cellSize = new int[] { 300, 300, 2 };
-//		final int[] cellSize = new int[] { 300, 300, 150, 3 };
+//		final int[] cellSize = new int[] { 300, 300, 2 };
+		final int[] cellSize = new int[] { 300, 300, 150, 3 };
 		final int[] cellSizeLabels = Util.dropLast( cellSize );
 		System.out.println( "Loading data" );
 		final CompositeIntervalView< FloatType, RealComposite< FloatType > > data = Views.collapseReal( H5Utils.loadFloat( path, "main", cellSize ) );
@@ -150,40 +158,18 @@ public class MergeBlocArrayBasedTest
 			}
 		};
 
-		final Edge edg = new Edge( g.edges() );
-		for ( int i = 0; i < edg.size(); ++i )
-		{
-			edg.setIndex( i );
-			if ( edg.to() == 4456 || edg.from() == 4456 )
-				System.out.println( edg );
-		}
-		System.out.println();
-//		for ( int i = 0; i < g.nodeEdgeMap().length; ++i )
-//			for ( final TIntIntIterator it = g.nodeEdgeMap()[ i ].iterator(); it.hasNext(); )
-//			{
-//				it.advance();
-//				edg.setIndex( it.value() );
-//				if ( edg.from() == i || edg.to() == i )
-//				{
-//
-//				}
-//			}
 
-		final MergeBlocArrayBased mb = new MergeBlocArrayBased( new EdgeMerger.MAX_AFFINITY_MERGER(), fw, ms, 100.0 );
+		final MergeBlocArrayBased mb = new MergeBlocArrayBased( new EdgeMerger.MAX_AFFINITY_MERGER(), fw, ms, 200.0 );
 		System.out.println( "Start edge merging" );
 		final long t0 = System.currentTimeMillis();
-		mb.call( new Tuple2<>( 2l, new MergeBlocArrayBased.MergeBlocData( g, counts ) ) );
+		final MergeBlocOut out = mb.call( new Tuple2<>( 2l, new MergeBlocIn( g, counts, new TLongLongHashMap() ) ) )._2();
 		final long t1 = System.currentTimeMillis();
 		System.out.println( "Done Edge merging: " + ( t1 - t0 ) + "ms" );
-		System.out.println( merges.size() );
-
-		for ( int i = 0; i < merges.size(); i += 2 )
-			dj.join( dj.findRoot( ( int ) merges.get( i ) ), dj.findRoot( ( int ) merges.get( i + 1 ) ) );
 
 		final RandomAccessibleInterval< ARGBType > coloredStart = toColor( labels, cmap );
 
 		final RandomAccessibleInterval< LongType > mapped = Converters.convert( ( RandomAccessibleInterval< LongType > ) labels, ( s, t ) -> {
-			t.set( indexNodeMapping[ dj.findRoot( nodeIndexMapping.get( s.get() ) ) ] );
+			t.set( indexNodeMapping[ out.dj.findRoot( nodeIndexMapping.get( s.get() ) ) ] );
 		}, new LongType() );
 
 		final RandomAccessibleInterval< ARGBType > coloredMapped = toColor( mapped, cmap );
