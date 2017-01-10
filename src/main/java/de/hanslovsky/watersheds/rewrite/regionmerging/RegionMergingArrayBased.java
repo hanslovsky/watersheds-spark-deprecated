@@ -174,46 +174,6 @@ public class RegionMergingArrayBased
 							} );
 
 			final JavaPairRDD< Long, OriginalLabelData > reduced = aggregated.mapToPair( new ReduceBlock() );
-//					t -> {
-//				final long key = t._1();
-//				final ArrayList< RemappedData > mappedDatas = t._2();
-//
-//				final TDoubleArrayList allEdges = new TDoubleArrayList();
-//				final Edge ae = new Edge( allEdges );
-//
-//				final TLongLongHashMap allCounts = new TLongLongHashMap();
-//				final TLongLongHashMap allBorderNodesAssignments = new TLongLongHashMap();
-//				final TLongLongHashMap allOutsideNodes = new TLongLongHashMap();
-//				final TLongObjectHashMap< TLongHashSet > allBorderNodes = new TLongObjectHashMap<>();
-//
-//				for ( final RemappedData md : mappedDatas ) {
-//					allBorderNodesAssignments.putAll( md.borderNodeAssignments );
-//					allCounts.putAll( allCounts );
-//					allOutsideNodes.putAll( md.outsideNodes );
-//					allBorderNodes.putAll( md.borderNodes );
-//				}
-//
-//				for ( final RemappedData md : mappedDatas )
-//				{
-//					final Edge e = new Edge( md.edges );
-//					for ( int i = 0; i < e.size(); ++i )
-//					{
-//						e.setIndex( i );
-//						long from = e.from();
-//						long to = e.to();
-//						if ( allBorderNodesAssignments.contains( from ) && allBorderNodesAssignments.contains( to ) )
-//						{
-//							from = allBorderNodesAssignments.get( from );
-//							to = allBorderNodesAssignments.get( to );
-//							e.weight( Double.NaN );
-//						}
-//
-//						ae.add( e.weight(), e.affinity(), from, to, e.multiplicity() );
-//					}
-//				}
-//
-//				return new Tuple2<>( key, new OriginalLabelData( allEdges, allCounts, allOutsideNodes, allBorderNodes ) );
-//			} );
 
 			final JavaPairRDD< Long, RegionMergingInput > backToInput = reduced.mapToPair( t -> {
 				final Long key = t._1();
