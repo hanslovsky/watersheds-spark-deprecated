@@ -10,16 +10,17 @@ import de.hanslovsky.watersheds.Util;
 import de.hanslovsky.watersheds.rewrite.EdgeWeight.FunkyWeight;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TLongArrayList;
+import gnu.trove.map.hash.TIntIntHashMap;
 import gnu.trove.map.hash.TLongIntHashMap;
-import gnu.trove.map.hash.TLongLongHashMap;
-import gnu.trove.map.hash.TLongObjectHashMap;
 import net.imglib2.Cursor;
 import net.imglib2.RandomAccess;
 import net.imglib2.RandomAccessible;
 import net.imglib2.RandomAccessibleInterval;
+import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import net.imglib2.converter.Converters;
 import net.imglib2.img.Img;
 import net.imglib2.type.numeric.ARGBType;
+import net.imglib2.type.numeric.integer.IntType;
 import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.Pair;
@@ -29,42 +30,56 @@ import net.imglib2.view.composite.CompositeIntervalView;
 import net.imglib2.view.composite.RealComposite;
 import scala.Tuple2;
 
-public class MergeBlocTest
+public class MergeBlocArrayBasedTest
 {
 
 	public static void main( final String[] args ) throws Exception
 	{
-		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt.h5";
-		final int[] cellSize = new int[] { 300, 300, 100, 3 };
+		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
+//		final int[] cellSize = new int[] { 150, 150, 50, 3 };
+		final int[] cellSize = new int[] { 300, 300, 2 };
+//		final int[] cellSize = new int[] { 300, 300, 150, 3 };
 		final int[] cellSizeLabels = Util.dropLast( cellSize );
 		System.out.println( "Loading data" );
 		final CompositeIntervalView< FloatType, RealComposite< FloatType > > data = Views.collapseReal( H5Utils.loadFloat( path, "main", cellSize ) );
 		final Img< LongType > labels = H5Utils.loadUnsignedLong( path, "zws", cellSizeLabels );
 
-		final UndirectedGraph g = new UndirectedGraph();
-		final TDoubleArrayList edges = g.edges();
-		final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap = g.nodeEdgeMap();
-		final Edge edge = new Edge( edges );
+		final TLongArrayList indexNodeMappingList = new TLongArrayList();
+		final TLongIntHashMap nodeIndexMapping = new TLongIntHashMap();
+		for ( final LongType l : labels )
+		{
+			final long lb = l.get();
+			if ( !nodeIndexMapping.contains( lb ) )
+			{
+				nodeIndexMapping.put( lb, indexNodeMappingList.size() );
+				indexNodeMappingList.add( lb );
+			}
+		}
+		final long[] indexNodeMapping = indexNodeMappingList.toArray();
+		final int nNodes = indexNodeMapping.length;
 
-		final TLongLongHashMap counts = new TLongLongHashMap();
+
+		final long[] counts = new long[ nNodes ];
 
 
-		final DisjointSetsHashMap dj = new DisjointSetsHashMap();
+		final DisjointSets dj = new DisjointSets( nNodes );
 		final TLongIntHashMap cmap = new TLongIntHashMap();
 		final Random rng = new Random( 100 );
 
 		for ( final LongType l : labels )
 		{
 			final long lb = l.get();
-			if ( !counts.contains( lb ) )
-				counts.put( lb, 1 );
-			else
-				counts.put( lb, counts.get( lb ) + 1 );
+			final int idx = nodeIndexMapping.get( lb );
+			++counts[ idx ];
 
 			if ( !cmap.contains( lb ) )
 				cmap.put( lb, rng.nextInt() );
-
 		}
+
+		final UndirectedGraphArrayBased g = new UndirectedGraphArrayBased( nNodes );
+		final TDoubleArrayList edges = g.edges();
+		final TIntIntHashMap[] nodeEdgeMap = g.nodeEdgeMap();
+		final Edge edge = new Edge( edges );
 
 		final RandomAccessible< Pair< RealComposite< FloatType >, LongType > > paired = Views.pair( data, labels );
 
@@ -83,22 +98,18 @@ public class MergeBlocTest
 				final RealComposite< FloatType > a = p.getA();
 				final LongType l = p.getB();
 
-				final long from = l.get();
-				final long to = ra.get().getB().get();
+				final int from = nodeIndexMapping.get( l.get() );
+				final int to = nodeIndexMapping.get( ra.get().getB().get() );
 				final float aff = a.get( d ).get();
 				if ( !Float.isNaN( aff ) && from != to )
 				{
-					if ( !nodeEdgeMap.contains( from ) )
-						nodeEdgeMap.put( from, new TLongIntHashMap() );
-					if ( !nodeEdgeMap.contains( to ) )
-						nodeEdgeMap.put( to, new TLongIntHashMap() );
 
-					final TLongIntHashMap fMap = nodeEdgeMap.get( from );
-					final TLongIntHashMap tMap = nodeEdgeMap.get( to );
+					final TIntIntHashMap fMap = nodeEdgeMap[ from ];
+					final TIntIntHashMap tMap = nodeEdgeMap[ to ];
 
-					if ( fMap.contains( from ) && tMap.contains( to ) )
+					if ( fMap.contains( to ) && tMap.contains( from ) )
 					{
-						edge.setIndex( fMap.get( from ) );
+						edge.setIndex( fMap.get( to ) );
 						edge.affinity( Math.max( edge.affinity(), aff ) );
 						edge.multiplicity( edge.multiplicity() + 1 );
 					}
@@ -118,7 +129,7 @@ public class MergeBlocTest
 		for ( int i = 0; i < edge.size(); ++i )
 		{
 			edge.setIndex( i );
-			edge.weight( fw.weight( edge.affinity(), counts.get( edge.from() ), edge.to() ) );
+			edge.weight( fw.weight( edge.affinity(), counts[ ( int ) edge.from() ], counts[ ( int ) edge.to() ] ) );
 		}
 
 		final TLongArrayList merges = new TLongArrayList();
@@ -138,21 +149,41 @@ public class MergeBlocTest
 
 			}
 		};
-		final MergeBloc mb = new MergeBloc( new EdgeMerger.MAX_AFFINITY_MERGER(), fw, ms, 3 );
+
+		final Edge edg = new Edge( g.edges() );
+		for ( int i = 0; i < edg.size(); ++i )
+		{
+			edg.setIndex( i );
+			if ( edg.to() == 4456 || edg.from() == 4456 )
+				System.out.println( edg );
+		}
+		System.out.println();
+//		for ( int i = 0; i < g.nodeEdgeMap().length; ++i )
+//			for ( final TIntIntIterator it = g.nodeEdgeMap()[ i ].iterator(); it.hasNext(); )
+//			{
+//				it.advance();
+//				edg.setIndex( it.value() );
+//				if ( edg.from() == i || edg.to() == i )
+//				{
+//
+//				}
+//			}
+
+		final MergeBlocArrayBased mb = new MergeBlocArrayBased( new EdgeMerger.MAX_AFFINITY_MERGER(), fw, ms, 100.0 );
 		System.out.println( "Start edge merging" );
 		final long t0 = System.currentTimeMillis();
-		mb.call( new Tuple2<>( 2l, new MergeBloc.MergeBlocData( g, counts ) ) );
+		mb.call( new Tuple2<>( 2l, new MergeBlocArrayBased.MergeBlocData( g, counts ) ) );
 		final long t1 = System.currentTimeMillis();
 		System.out.println( "Done Edge merging: " + ( t1 - t0 ) + "ms" );
 		System.out.println( merges.size() );
 
 		for ( int i = 0; i < merges.size(); i += 2 )
-			dj.join( dj.findRoot( merges.get(i ) ), dj.findRoot( merges.get( i+1 ) ) );
+			dj.join( dj.findRoot( ( int ) merges.get( i ) ), dj.findRoot( ( int ) merges.get( i + 1 ) ) );
 
 		final RandomAccessibleInterval< ARGBType > coloredStart = toColor( labels, cmap );
 
 		final RandomAccessibleInterval< LongType > mapped = Converters.convert( ( RandomAccessibleInterval< LongType > ) labels, ( s, t ) -> {
-			t.set( dj.findRoot( s.get() ) );
+			t.set( indexNodeMapping[ dj.findRoot( nodeIndexMapping.get( s.get() ) ) ] );
 		}, new LongType() );
 
 		final RandomAccessibleInterval< ARGBType > coloredMapped = toColor( mapped, cmap );
@@ -168,6 +199,13 @@ public class MergeBlocTest
 		return Converters.convert( rai, ( s, t ) -> {
 			t.set( cmap.get( s.get() ) );
 		}, new ARGBType() );
+	}
+
+	public static RandomAccessibleInterval< IntType > indexBased( final RandomAccessibleInterval< LongType > rai, final TLongIntHashMap nodeIndexMapping )
+	{
+		return Converters.convert( rai, ( s, t ) -> {
+			t.set( nodeIndexMapping.get( s.get() ) );
+		}, new IntType() );
 	}
 
 

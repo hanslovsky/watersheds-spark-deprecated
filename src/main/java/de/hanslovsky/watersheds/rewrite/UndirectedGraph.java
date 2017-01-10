@@ -91,6 +91,8 @@ public class UndirectedGraph
 			otherMap.remove( from );
 			otherMap.remove( to );
 			otherMap.put( newNode, edgeId );
+			this.e1.setIndex( edgeId );
+			this.e1.weight( Double.NaN );
 		}
 
 		return discardEdges;

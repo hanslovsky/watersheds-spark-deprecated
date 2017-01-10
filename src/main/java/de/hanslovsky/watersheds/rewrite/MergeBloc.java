@@ -82,7 +82,15 @@ public class MergeBloc implements PairFunction< Tuple2< Long, MergeBlocData >, T
 			if ( w < 0.0 )
 				continue;
 
-			if ( w > threshold )
+			else if ( Double.isNaN( e.weight() ) )
+			{
+				final double weight = edgeWeight.weight( e.affinity(), in.counts.get( e.from() ), in.counts.get( e.to() ) );
+				e.weight( weight );
+				queue.push( next, weight );
+				continue;
+			}
+
+			else if ( w > threshold )
 			{
 				queue.push( next, w );
 				break;
@@ -121,14 +129,14 @@ public class MergeBloc implements PairFunction< Tuple2< Long, MergeBlocData >, T
 
 			}
 
-			for ( final TLongIntIterator it = in.g.nodeEdgeMap().get( n ).iterator(); it.hasNext(); )
-			{
-				it.advance();
-				final int index = it.value();
-				e.setIndex( index );
-				e.weight( edgeWeight.weight( e.affinity(), in.counts.get( e.from() ), in.counts.get( e.to() ) ) );
-//				System.out.println( in.counts.get( e.from() ) + " " + in.counts.get( e.to() ) + " " + e );
-			}
+//			for ( final TLongIntIterator it = in.g.nodeEdgeMap().get( n ).iterator(); it.hasNext(); )
+//			{
+//				it.advance();
+//				final int index = it.value();
+//				e.setIndex( index );
+//				e.weight( edgeWeight.weight( e.affinity(), in.counts.get( e.from() ), in.counts.get( e.to() ) ) );
+////				System.out.println( in.counts.get( e.from() ) + " " + in.counts.get( e.to() ) + " " + e );
+//			}
 
 			mergerService.addMerge( from, to, n, w );
 
