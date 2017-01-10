@@ -10,6 +10,7 @@ import bdv.util.BdvFunctions;
 import bdv.util.BdvOptions;
 import bdv.util.BdvStackSource;
 import gnu.trove.map.hash.TLongIntHashMap;
+import gnu.trove.map.hash.TLongLongHashMap;
 import net.imglib2.Dimensions;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.converter.Converter;
@@ -234,6 +235,23 @@ public class Util
 		},
 				new ARGBType() ), "seg-200" );
 
+	}
+
+	public static long findRoot( final TLongLongHashMap assignments, final long index )
+	{
+		long i1 = index, i2 = index;
+
+		while ( i1 != assignments.get( i1 ) )
+			i1 = assignments.get( i1 );
+
+		while ( i2 != assignments.get( i2 ) )
+		{
+			final long tmp = assignments.get( i2 );
+			assignments.put( i2, i1 );
+			i2 = tmp;
+
+		}
+		return i1;
 	}
 
 }

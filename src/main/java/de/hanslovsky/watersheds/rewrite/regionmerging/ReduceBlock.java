@@ -5,8 +5,6 @@ import java.util.ArrayList;
 import org.apache.spark.api.java.function.PairFunction;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
-import de.hanslovsky.watersheds.rewrite.regionmerging.RegionMergingArrayBased.OriginalLabelData;
-import de.hanslovsky.watersheds.rewrite.regionmerging.RegionMergingArrayBased.RemappedData;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TLongLongHashMap;
 import gnu.trove.map.hash.TLongObjectHashMap;

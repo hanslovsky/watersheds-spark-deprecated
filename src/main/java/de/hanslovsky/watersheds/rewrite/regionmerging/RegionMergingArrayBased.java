@@ -1,6 +1,5 @@
 package de.hanslovsky.watersheds.rewrite.regionmerging;
 
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,94 +12,16 @@ import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocArrayBased;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocIn;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocOut;
+import de.hanslovsky.watersheds.rewrite.preparation.PrepareRegionMergingCutBlocks.BlockDivision;
 import de.hanslovsky.watersheds.rewrite.util.MergerService;
+import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;
-import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
-import gnu.trove.map.hash.TLongLongHashMap;
-import gnu.trove.map.hash.TLongObjectHashMap;
-import gnu.trove.set.hash.TLongHashSet;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import scala.Tuple2;
 
 public class RegionMergingArrayBased
 {
-
-	public static class OriginalLabelData
-	{
-
-		public final TDoubleArrayList edges;
-
-		public final TLongLongHashMap counts;
-
-		public final TLongLongHashMap outsideNodes;
-
-		public final TLongObjectHashMap< TLongHashSet > borderNodes;
-
-		public OriginalLabelData( final TDoubleArrayList edges, final TLongLongHashMap counts, final TLongLongHashMap outsideNodes, final TLongObjectHashMap< TLongHashSet > borderNodes )
-		{
-			super();
-			this.edges = edges;
-			this.counts = counts;
-			this.outsideNodes = outsideNodes;
-			this.borderNodes = borderNodes;
-		}
-
-	}
-
-	public static class RegionMergingInput implements Serializable
-	{
-
-		public final int nNodes;
-
-		public final TLongIntHashMap nodeIndexMapping;
-
-		public final TLongLongHashMap counts;
-
-		public final TLongLongHashMap outsideNodes;
-
-		public final TDoubleArrayList edges;
-
-		public final TLongObjectHashMap< TLongHashSet > borderNodes;
-
-		public RegionMergingInput( final int nNodes, final TLongIntHashMap nodeIndexMapping, final TLongLongHashMap counts, final TLongLongHashMap outsideNodes, final TDoubleArrayList edges, final TLongObjectHashMap< TLongHashSet > borderNodes )
-		{
-			super();
-			this.nNodes = nNodes;
-			this.nodeIndexMapping = nodeIndexMapping;
-			this.counts = counts;
-			this.outsideNodes = outsideNodes;
-			this.edges = edges;
-			this.borderNodes = borderNodes;
-		}
-
-
-	}
-
-	public static class RemappedData implements Serializable
-	{
-
-		public final TDoubleArrayList edges;
-
-		public final TLongLongHashMap counts;
-
-		public final TLongLongHashMap outsideNodes;
-
-		public final TLongObjectHashMap< TLongHashSet > borderNodes;
-
-		public final TLongLongHashMap borderNodeAssignments;
-
-		public RemappedData( final TDoubleArrayList edges, final TLongLongHashMap counts, final TLongLongHashMap outsideNodes, final TLongObjectHashMap< TLongHashSet > borderNodes, final TLongLongHashMap borderNodeAssignments )
-		{
-			super();
-			this.edges = edges;
-			this.counts = counts;
-			this.outsideNodes = outsideNodes;
-			this.borderNodes = borderNodes;
-			this.borderNodeAssignments = borderNodeAssignments;
-		}
-
-	}
 
 	private final EdgeMerger edgeMerger;
 
@@ -116,7 +37,7 @@ public class RegionMergingArrayBased
 		this.mergerService = mergerService;
 	}
 
-	public void run( final JavaSparkContext sc, final JavaPairRDD< Long, RegionMergingInput > rdd, final double threshold )
+	public JavaPairRDD< Long, MergeBlocIn > run( final JavaSparkContext sc, final JavaPairRDD< Long, RegionMergingInput > rdd, final double threshold )
 	{
 
 		JavaPairRDD< Long, MergeBlocIn > zeroBased = rdd.mapToPair( new ToZeroBasedIndexing<>() );
@@ -195,7 +116,20 @@ public class RegionMergingArrayBased
 			zeroBased = backToInput.mapToPair( new ToZeroBasedIndexing<>() );
 		}
 
+		return zeroBased;
 
+
+	}
+
+	public static JavaPairRDD< Long, RegionMergingInput > fromBlockDivision( final JavaPairRDD< Long, BlockDivision > rdd ) {
+		return rdd.mapToPair( t -> {
+			final BlockDivision bd = t._2();
+			final TLongIntHashMap nodeIndexMapping = new TLongIntHashMap();
+			final TLongIterator cIt = bd.counts.keySet().iterator();
+			for ( int i = 0; cIt.hasNext(); ++i )
+				nodeIndexMapping.put( cIt.next(), i );
+			return new Tuple2<>( t._1(), new RegionMergingInput( bd.counts.size(), nodeIndexMapping, bd.counts, bd.outsideNodes, bd.edges, bd.borderNodes ) );
+		});
 	}
 
 

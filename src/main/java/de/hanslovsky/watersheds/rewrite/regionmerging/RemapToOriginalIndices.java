@@ -5,7 +5,6 @@ import org.apache.spark.broadcast.Broadcast;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocOut;
-import de.hanslovsky.watersheds.rewrite.regionmerging.RegionMergingArrayBased.RemappedData;
 import gnu.trove.map.hash.TLongLongHashMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import gnu.trove.set.hash.TLongHashSet;
