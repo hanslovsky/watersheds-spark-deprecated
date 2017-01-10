@@ -130,7 +130,9 @@ public class RegionMergingArrayBased
 		for ( boolean hasChanged = true; hasChanged; )
 		{
 
-			final JavaPairRDD< Long, Tuple2< Long, MergeBlocOut > > mergedEdges = zeroBased.mapToPair( new MergeBlocArrayBased( edgeMerger, edgeWeight, mergerService, threshold ) ).cache();
+			final JavaPairRDD< Long, Tuple2< Long, MergeBlocOut > > mergedEdges = zeroBased
+					.mapToPair( new EnsureWeights( edgeWeight ) )
+					.mapToPair( new MergeBlocArrayBased( edgeMerger, edgeWeight, mergerService, threshold ) ).cache();
 
 			hasChanged = mergedEdges.values().filter( t -> t._2().hasChanged ).count() > 0;
 
@@ -191,11 +193,6 @@ public class RegionMergingArrayBased
 			} );
 
 			zeroBased = backToInput.mapToPair( new ToZeroBasedIndexing<>() );
-
-
-
-
-			break;
 		}
 
 
