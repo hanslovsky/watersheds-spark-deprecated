@@ -2,11 +2,11 @@ package de.hanslovsky.watersheds.rewrite.mergebloc;
 
 import org.apache.spark.api.java.function.PairFunction;
 
-import de.hanslovsky.watersheds.rewrite.ChangeablePriorityQueue;
-import de.hanslovsky.watersheds.rewrite.Edge;
-import de.hanslovsky.watersheds.rewrite.EdgeMerger;
-import de.hanslovsky.watersheds.rewrite.EdgeWeight;
-import de.hanslovsky.watersheds.rewrite.MergerService;
+import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
+import de.hanslovsky.watersheds.rewrite.util.ChangeablePriorityQueue;
+import de.hanslovsky.watersheds.rewrite.util.MergerService;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TIntIntHashMap;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;

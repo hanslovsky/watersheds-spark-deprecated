@@ -1,5 +1,6 @@
-package de.hanslovsky.watersheds.rewrite;
+package de.hanslovsky.watersheds.rewrite.graph;
 
+import de.hanslovsky.watersheds.rewrite.util.DisjointSetsHashMap;
 import gnu.trove.iterator.TLongObjectIterator;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;

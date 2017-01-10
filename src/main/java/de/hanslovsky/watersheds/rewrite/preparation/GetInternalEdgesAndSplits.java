@@ -1,4 +1,4 @@
-package de.hanslovsky.watersheds.rewrite;
+package de.hanslovsky.watersheds.rewrite.preparation;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -8,6 +8,13 @@ import org.apache.spark.api.java.function.PairFunction;
 
 import bdv.util.BdvFunctions;
 import de.hanslovsky.watersheds.DisjointSetsHashMap;
+import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger.MAX_AFFINITY_MERGER;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight.FunkyWeight;
+import de.hanslovsky.watersheds.rewrite.util.EdgeCheck;
+import de.hanslovsky.watersheds.rewrite.util.IdService;
 import gnu.trove.iterator.TIntIterator;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;

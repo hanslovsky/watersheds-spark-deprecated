@@ -2,8 +2,8 @@ package de.hanslovsky.watersheds.rewrite.regionmerging;
 
 import org.apache.spark.api.java.function.PairFunction;
 
-import de.hanslovsky.watersheds.rewrite.Edge;
-import de.hanslovsky.watersheds.rewrite.EdgeWeight;
+import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocIn;
 import scala.Tuple2;
 

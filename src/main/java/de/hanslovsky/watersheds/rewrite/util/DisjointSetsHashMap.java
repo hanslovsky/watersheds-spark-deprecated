@@ -1,4 +1,4 @@
-package de.hanslovsky.watersheds.rewrite;
+package de.hanslovsky.watersheds.rewrite.util;
 
 import gnu.trove.map.hash.TLongLongHashMap;
 

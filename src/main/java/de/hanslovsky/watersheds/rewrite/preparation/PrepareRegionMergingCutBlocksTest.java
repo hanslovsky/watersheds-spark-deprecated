@@ -1,4 +1,4 @@
-package de.hanslovsky.watersheds.rewrite;
+package de.hanslovsky.watersheds.rewrite.preparation;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -31,17 +31,19 @@ import com.google.gson.JsonObject;
 import bdv.img.h5.H5Utils;
 import bdv.util.BdvFunctions;
 import bdv.util.BdvStackSource;
-import de.hanslovsky.watersheds.HashableLongArray;
-import de.hanslovsky.watersheds.InitialWatershedBlock;
-import de.hanslovsky.watersheds.NumElements;
-import de.hanslovsky.watersheds.OffsetLabels;
-import de.hanslovsky.watersheds.Util;
 import de.hanslovsky.watersheds.ValueDisplayListener;
-import de.hanslovsky.watersheds.io.AffinitiesChunkLoader;
-import de.hanslovsky.watersheds.io.LabelsChunkWriter;
-import de.hanslovsky.watersheds.io.ZMQFileOpenerFloatType;
-import de.hanslovsky.watersheds.io.ZMQFileWriterLongType;
-import de.hanslovsky.watersheds.rewrite.PrepareRegionMergingCutBlocks.BlockDivision;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
+import de.hanslovsky.watersheds.rewrite.io.AffinitiesChunkLoader;
+import de.hanslovsky.watersheds.rewrite.io.LabelsChunkWriter;
+import de.hanslovsky.watersheds.rewrite.io.ZMQFileOpenerFloatType;
+import de.hanslovsky.watersheds.rewrite.io.ZMQFileWriterLongType;
+import de.hanslovsky.watersheds.rewrite.preparation.PrepareRegionMergingCutBlocks.BlockDivision;
+import de.hanslovsky.watersheds.rewrite.util.EdgeCheck;
+import de.hanslovsky.watersheds.rewrite.util.HashableLongArray;
+import de.hanslovsky.watersheds.rewrite.util.IdServiceZMQ;
+import de.hanslovsky.watersheds.rewrite.util.NumElements;
+import de.hanslovsky.watersheds.rewrite.util.Util;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongObjectIterator;
 import gnu.trove.map.hash.TLongIntHashMap;
@@ -278,16 +280,7 @@ public class PrepareRegionMergingCutBlocksTest
 				.cache();
 
 		final TLongLongHashMap counts = new TLongLongHashMap();
-//		offsetLabelsWithCounts.map( t -> {
-////			System.out.println( t );
-//			if ( t == null )
-//				throw new RuntimeException( t + " is null!" );
-//			else if ( t._1() == null )
-//				throw new RuntimeException( "t._1() is null!" );
-//			else if ( t._2() == null )
-//				throw new RuntimeException( "t._2() is null!" );
-//			return true;
-//		} ).count();
+
 		for ( final TLongLongHashMap m : offsetLabelsWithCounts.values().mapToPair( t -> t ).values().collect() )
 			counts.putAll( m );
 

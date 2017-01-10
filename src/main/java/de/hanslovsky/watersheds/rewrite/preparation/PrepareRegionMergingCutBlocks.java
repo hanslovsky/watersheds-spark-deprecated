@@ -1,4 +1,4 @@
-package de.hanslovsky.watersheds.rewrite;
+package de.hanslovsky.watersheds.rewrite.preparation;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -11,7 +11,12 @@ import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.broadcast.Broadcast;
 
-import de.hanslovsky.watersheds.HashableLongArray;
+import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
+import de.hanslovsky.watersheds.rewrite.util.EdgeCheck;
+import de.hanslovsky.watersheds.rewrite.util.HashableLongArray;
+import de.hanslovsky.watersheds.rewrite.util.IdService;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongObjectIterator;
 import gnu.trove.list.array.TDoubleArrayList;

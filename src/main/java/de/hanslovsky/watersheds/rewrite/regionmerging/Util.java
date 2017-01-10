@@ -1,6 +1,6 @@
 package de.hanslovsky.watersheds.rewrite.regionmerging;
 
-import de.hanslovsky.watersheds.rewrite.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocOut;
 import gnu.trove.iterator.TIntLongIterator;
 import gnu.trove.iterator.TIntObjectIterator;
@@ -22,7 +22,7 @@ public class Util
 
 	public static TDoubleArrayList mapEdges( final TDoubleArrayList edges, final TLongIntHashMap nodeIndexMapping )
 	{
-	
+
 		final TDoubleArrayList mappedEdges = new TDoubleArrayList();
 		final Edge e = new Edge( edges );
 		final Edge m = new Edge( edges );
@@ -31,21 +31,21 @@ public class Util
 			e.setIndex( i );
 			m.add( e.weight(), e.affinity(), nodeIndexMapping.get( e.from() ), nodeIndexMapping.get( e.to() ), e.multiplicity() );
 		}
-	
+
 		return mappedEdges;
 	}
 
 	public static long[] mapCounts( final TLongLongHashMap counts, final TLongIntHashMap nodeIndexMapping )
 	{
 		final long[] mappedCounts = new long[ counts.size() ];
-	
+
 		for ( final TLongLongIterator it = counts.iterator(); it.hasNext(); )
 		{
 			it.advance();
 			assert nodeIndexMapping.contains( it.key() );
 			mappedCounts[ nodeIndexMapping.get( it.key() ) ] = it.value();
 		}
-	
+
 		return mappedCounts;
 	}
 
@@ -127,10 +127,10 @@ public class Util
 		{
 			it.advance();
 			final TLongHashSet neighboringBlocks = it.value();
-	
+
 			final long r = map[ out.dj.findRoot( it.key() ) ];
 			borderNodeRoots.put( map[ it.key() ], r );
-	
+
 			if ( !borderNodes.contains( r ) )
 				borderNodes.put( r, new TLongHashSet() );
 			final TLongHashSet hs = borderNodes.get( r );
@@ -140,7 +140,7 @@ public class Util
 				if ( br != blockRoot )
 					hs.add( br );
 			}
-	
+
 		}
 	}
 

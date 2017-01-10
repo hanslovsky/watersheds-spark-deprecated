@@ -1,6 +1,6 @@
 package de.hanslovsky.watersheds.rewrite.mergebloc;
 
-import de.hanslovsky.watersheds.rewrite.UndirectedGraphArrayBased;
+import de.hanslovsky.watersheds.rewrite.graph.UndirectedGraphArrayBased;
 import gnu.trove.map.hash.TIntLongHashMap;
 import gnu.trove.map.hash.TIntObjectHashMap;
 import gnu.trove.set.hash.TLongHashSet;

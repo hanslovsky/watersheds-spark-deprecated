@@ -1,4 +1,4 @@
-package de.hanslovsky.watersheds.rewrite;
+package de.hanslovsky.watersheds.rewrite.graph;
 
 import gnu.trove.iterator.TLongIntIterator;
 import gnu.trove.list.array.TDoubleArrayList;

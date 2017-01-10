@@ -1,4 +1,4 @@
-package de.hanslovsky.watersheds.rewrite;
+package de.hanslovsky.watersheds.rewrite.util;
 
 import java.io.Serializable;
 import java.nio.ByteBuffer;

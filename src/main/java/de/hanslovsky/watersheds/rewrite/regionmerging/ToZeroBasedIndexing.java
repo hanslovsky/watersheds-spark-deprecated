@@ -2,7 +2,7 @@ package de.hanslovsky.watersheds.rewrite.regionmerging;
 
 import org.apache.spark.api.java.function.PairFunction;
 
-import de.hanslovsky.watersheds.rewrite.UndirectedGraphArrayBased;
+import de.hanslovsky.watersheds.rewrite.graph.UndirectedGraphArrayBased;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocIn;
 import de.hanslovsky.watersheds.rewrite.regionmerging.RegionMergingArrayBased.RegionMergingInput;
 import scala.Tuple2;
