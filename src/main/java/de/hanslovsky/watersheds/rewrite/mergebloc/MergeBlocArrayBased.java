@@ -8,6 +8,7 @@ import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.util.ChangeablePriorityQueue;
 import de.hanslovsky.watersheds.rewrite.util.MergerService;
 import gnu.trove.list.array.TDoubleArrayList;
+import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TIntIntHashMap;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import scala.Tuple2;
@@ -56,7 +57,7 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 		long pointingOutside = t._1();
 
-		int count = 0;
+		final TLongArrayList merges = new TLongArrayList();
 
 		while ( !queue.empty() )
 		{
@@ -106,12 +107,15 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 				continue;
 			}
 
-			++count;
-
 			final int n = dj.join( r1, r2 );
 
 			final long c1 = in.counts[ r1 ];
 			final long c2 = in.counts[ r2 ];
+
+			merges.add( r1 );
+			merges.add( r2 );
+			merges.add( n );
+			merges.add( Double.doubleToLongBits( w ) );
 
 
 			assert c1 > 0 && c2 > 0: "Counts does not contain ids!";
@@ -121,15 +125,15 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 			final TIntIntHashMap discardEdges = in.g.contract( e, n, this.edgeMerger );
 			discardEdges.clear();
 
-			mergerService.addMerge( r1, r2, n, w );
+//			mergerService.addMerge( r1, r2, n, w );
 
 
 		}
 
-		mergerService.finalize();
+//		mergerService.finalize();
 
 
-		return new Tuple2<>( t._1(), new Tuple2<>( pointingOutside, new MergeBlocOut( in.counts, in.outsideNodes, dj, in.borderNodes, count > 0 || pointingOutside != t._1().longValue(), in.g.edges() ) ) );
+		return new Tuple2<>( t._1(), new Tuple2<>( pointingOutside, new MergeBlocOut( in.counts, in.outsideNodes, dj, in.borderNodes, merges.size() > 0 || pointingOutside != t._1().longValue(), in.g.edges(), merges ) ) );
 	}
 
 	private static TDoubleArrayList filterEdges( final TDoubleArrayList edges, final long[] counts, final EdgeWeight edgeWeight )

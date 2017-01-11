@@ -3,6 +3,7 @@ package de.hanslovsky.watersheds.rewrite.mergebloc;
 import java.io.Serializable;
 
 import gnu.trove.list.array.TDoubleArrayList;
+import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TIntLongHashMap;
 import gnu.trove.map.hash.TIntObjectHashMap;
 import gnu.trove.set.hash.TLongHashSet;
@@ -23,7 +24,9 @@ public class MergeBlocOut implements Serializable
 
 	public final TDoubleArrayList edges;
 
-	public MergeBlocOut( final long[] counts, final TIntLongHashMap outsideNodes, final DisjointSets dj, final TIntObjectHashMap< TLongHashSet > borderNodes, final boolean hasChanged, final TDoubleArrayList edges )
+	public final TLongArrayList merges;
+
+	public MergeBlocOut( final long[] counts, final TIntLongHashMap outsideNodes, final DisjointSets dj, final TIntObjectHashMap< TLongHashSet > borderNodes, final boolean hasChanged, final TDoubleArrayList edges, final TLongArrayList merges )
 	{
 		super();
 		this.counts = counts;
@@ -32,6 +35,7 @@ public class MergeBlocOut implements Serializable
 		this.borderNodes = borderNodes;
 		this.hasChanged = hasChanged;
 		this.edges = edges;
+		this.merges = merges;
 	}
 
 }

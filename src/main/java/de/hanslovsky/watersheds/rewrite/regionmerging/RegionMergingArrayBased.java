@@ -17,6 +17,7 @@ import de.hanslovsky.watersheds.rewrite.preparation.PrepareRegionMergingCutBlock
 import de.hanslovsky.watersheds.rewrite.util.MergerService;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;
+import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import scala.Tuple2;
@@ -57,6 +58,17 @@ public class RegionMergingArrayBased
 					.mapToPair( new MergeBlocArrayBased( edgeMerger, edgeWeight, mergerService, threshold ) ).cache();
 
 			hasChanged = mergedEdges.values().filter( t -> t._2().hasChanged ).count() > 0;
+
+			mergedEdges.join( mapping ).mapToPair( t -> {
+				final long[] map = t._2()._2();
+
+				final TLongArrayList merges = t._2()._1()._2().merges;
+
+				for ( int i = 0; i < merges.size(); i += 4 )
+					mergerService.addMerge( map[ (int)merges.get( i ) ], map[(int)merges.get( i+1 )], map[(int)merges.get( i+2)], Double.longBitsToDouble( merges.get( i+3 ) ) );
+
+				return null;
+			} );
 
 			final int[] parents = new int[ nBlocks ];
 			final DisjointSets dj = new DisjointSets( parents, new int[ nBlocks ], nBlocks );
