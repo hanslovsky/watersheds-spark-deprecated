@@ -119,11 +119,14 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 			in.counts[ n ] = c1 + c2;
 
 			final TIntIntHashMap discardEdges = in.g.contract( e, n, this.edgeMerger );
-
 			discardEdges.clear();
+
+			mergerService.addMerge( r1, r2, n, w );
 
 
 		}
+
+		mergerService.finalize();
 
 
 		return new Tuple2<>( t._1(), new Tuple2<>( pointingOutside, new MergeBlocOut( in.counts, in.outsideNodes, dj, in.borderNodes, count > 0 || pointingOutside != t._1().longValue(), in.g.edges() ) ) );
