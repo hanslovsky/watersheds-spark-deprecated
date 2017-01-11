@@ -14,7 +14,6 @@ import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocArrayBased;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocIn;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocOut;
 import de.hanslovsky.watersheds.rewrite.preparation.PrepareRegionMergingCutBlocks.BlockDivision;
-import de.hanslovsky.watersheds.rewrite.util.MergerService;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.map.hash.TLongIntHashMap;
@@ -34,20 +33,19 @@ public class RegionMergingArrayBased
 
 	private final EdgeWeight edgeWeight;
 
-	private final MergerService mergerService;
 
-	public RegionMergingArrayBased( final EdgeMerger edgeMerger, final EdgeWeight edgeWeight, final MergerService mergerService )
+	public RegionMergingArrayBased( final EdgeMerger edgeMerger, final EdgeWeight edgeWeight )
 	{
 		super();
 		this.edgeMerger = edgeMerger;
 		this.edgeWeight = edgeWeight;
-		this.mergerService = mergerService;
 	}
 
 	public JavaPairRDD< Long, MergeBlocIn > run( final JavaSparkContext sc, final JavaPairRDD< Long, RegionMergingInput > rdd, final double threshold, final Visitor visitor )
 	{
 
 		JavaPairRDD< Long, MergeBlocIn > zeroBased = rdd.mapToPair( new ToZeroBasedIndexing<>( sc.broadcast( edgeMerger ) ) );
+		System.out.println( "Starting with " + zeroBased.count() + " blocks." );
 
 		final JavaPairRDD< Long, long[] > mapping = rdd.mapToPair( t -> {
 			return new Tuple2<>( t._1(), Util.inverse( t._2().nodeIndexMapping ) );
@@ -65,7 +63,7 @@ public class RegionMergingArrayBased
 
 			final JavaPairRDD< Long, Tuple2< Long, MergeBlocOut > > mergedEdges = zeroBased
 					.mapToPair( new EnsureWeights( edgeWeight ) )
-					.mapToPair( new MergeBlocArrayBased( edgeMerger, edgeWeight, mergerService, threshold ) ).cache();
+					.mapToPair( new MergeBlocArrayBased( edgeMerger, edgeWeight, threshold ) ).cache();
 
 			System.out.println( "Visiting" );
 			visitor.visit( mergedEdges, parents );

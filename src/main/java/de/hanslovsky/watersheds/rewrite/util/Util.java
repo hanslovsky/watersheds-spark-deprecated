@@ -19,6 +19,7 @@ import net.imglib2.img.Img;
 import net.imglib2.img.ImgFactory;
 import net.imglib2.img.cell.CellImg;
 import net.imglib2.type.numeric.ARGBType;
+import net.imglib2.type.numeric.IntegerType;
 import net.imglib2.type.numeric.NumericType;
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.integer.LongType;
@@ -252,6 +253,24 @@ public class Util
 
 		}
 		return i1;
+	}
+
+	public static RandomAccessibleInterval< ARGBType > toColor( final RandomAccessibleInterval< LongType > rai, final TLongIntHashMap cmap )
+	{
+		return Converters.convert( rai, ( s, t ) -> {
+			t.set( cmap.get( s.get() ) );
+		}, new ARGBType() );
+	}
+
+	public static < T extends IntegerType< T > > TLongLongHashMap countLabels( final RandomAccessibleInterval< T > labels )
+	{
+		final TLongLongHashMap counts = new TLongLongHashMap();
+		for ( final T l : Views.flatIterable( labels ) )
+		{
+			final long ll = l.getIntegerLong();
+			counts.put( ll, counts.contains( ll ) ? counts.get( ll ) + 1 : 1 );
+		}
+		return counts;
 	}
 
 }

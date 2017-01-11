@@ -12,7 +12,6 @@ import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight.FunkyWeight;
 import de.hanslovsky.watersheds.rewrite.graph.UndirectedGraphArrayBased;
-import de.hanslovsky.watersheds.rewrite.util.MergerService;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TIntIntHashMap;
@@ -139,26 +138,8 @@ public class MergeBlocArrayBasedTest
 			edge.weight( fw.weight( edge.affinity(), counts[ ( int ) edge.from() ], counts[ ( int ) edge.to() ] ) );
 		}
 
-		final TLongArrayList merges = new TLongArrayList();
-		final MergerService ms = new MergerService()
-		{
 
-			@Override
-			public void addMerge( final long n1, final long n2, final long n, final double w )
-			{
-				merges.add( n1 );
-				merges.add( n2 );
-			}
-
-			@Override
-			public void finalize()
-			{
-
-			}
-		};
-
-
-		final MergeBlocArrayBased mb = new MergeBlocArrayBased( new EdgeMerger.MAX_AFFINITY_MERGER(), fw, ms, 200.0 );
+		final MergeBlocArrayBased mb = new MergeBlocArrayBased( new EdgeMerger.MAX_AFFINITY_MERGER(), fw, 200.0 );
 		System.out.println( "Start edge merging" );
 		final long t0 = System.currentTimeMillis();
 		final MergeBlocOut out = mb.call(

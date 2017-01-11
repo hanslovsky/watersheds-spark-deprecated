@@ -6,7 +6,6 @@ import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.util.ChangeablePriorityQueue;
-import de.hanslovsky.watersheds.rewrite.util.MergerService;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TIntIntHashMap;
@@ -20,16 +19,13 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 	private final EdgeWeight edgeWeight;
 
-	private final MergerService mergerService;
-
 	private final double threshold;
 
-	public MergeBlocArrayBased( final EdgeMerger edgeMerger, final EdgeWeight edgeWeight, final MergerService mergerService, final double threshold )
+	public MergeBlocArrayBased( final EdgeMerger edgeMerger, final EdgeWeight edgeWeight, final double threshold )
 	{
 		super();
 		this.edgeMerger = edgeMerger;
 		this.edgeWeight = edgeWeight;
-		this.mergerService = mergerService;
 		this.threshold = threshold;
 	}
 
