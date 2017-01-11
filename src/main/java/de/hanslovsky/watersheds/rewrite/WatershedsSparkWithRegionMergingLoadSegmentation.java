@@ -190,7 +190,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		final Tuple2< JavaPairRDD< Long, BlockDivision >, JavaPairRDD< HashableLongArray, long[] > > graphsAndBorderNodes =
 				PrepareRegionMergingCutBlocks.run( sc, blocksRdd, sc.broadcast( dimsNoChannels ),
-						sc.broadcast( dimsIntervalNoChannels ), merger, weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() >= 0.0, blockIdService );
+						sc.broadcast( dimsIntervalNoChannels ), merger, weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() >= 0.5, blockIdService );
 		final JavaPairRDD< Long, BlockDivision > graphs = graphsAndBorderNodes._1().cache();
 		final Map< Long, HashableLongArray > blockToInitialBlockMap =
 				graphsAndBorderNodes._2().flatMapToPair( t -> new IterableWithConstant<>( Arrays.asList( ArrayUtils.toObject( t._2() ) ), t._1() ) ).collectAsMap();
@@ -402,19 +402,12 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 //					System.out.println( p.getA() );
 			}
 			images.add( img );
-//			final TLongIntHashMap cm = new TLongIntHashMap();
-//			final Random rand = new Random( 100 );
-//			BdvFunctions.show( Converters.convert( ( RandomAccessibleInterval< LongType > ) img, ( s, t ) -> {
-//				final long ss = s.get();
-//				if ( !cm.contains( ss ) )
-//					cm.put( ss, rand.nextInt() );
-//				t.set( cm.get( ss ) );
-//			}, new ARGBType() ), "blub" );
 
-//			final Img< LongType > blockImg = labelsTarget.factory().create( blockImages.get( 0 ), new LongType() );
-//			for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( blockImages.get( blockImages.size() - 1 ), blockImg ), blockImg ) )
+			final Img< LongType > blockImg = labelsTarget.factory().create( blockImages.get( 0 ), new LongType() );
+			for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( blockImages.get( blockImages.size() - 1 ), blockImg ), blockImg ) )
+				p.getB().set( dj.findRoot( p.getA().getInteger() ) );
 //				p.getB().set( parents.contains( p.getA().get() ) ? parents.get( p.getA().get() ) : p.getA().get() );
-//			blockImages.add( blockImg );
+			blockImages.add( blockImg );
 		};
 		final double threshold = 200;
 		final double thresholdTolerance = 1e0;
