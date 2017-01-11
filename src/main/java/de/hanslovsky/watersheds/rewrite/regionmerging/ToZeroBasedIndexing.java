@@ -22,7 +22,8 @@ public class ToZeroBasedIndexing< K > implements PairFunction< Tuple2< K, Region
 				g,
 				Util.mapCounts( input.counts, input.nodeIndexMapping ),
 				Util.mapOutsideNodes( input.outsideNodes, input.nodeIndexMapping ),
-				Util.mapBorderNodes( input.borderNodes, input.nodeIndexMapping ) ) );
+				Util.mapBorderNodes( input.borderNodes, input.nodeIndexMapping ),
+				Util.inverse( input.nodeIndexMapping ) ) );
 	}
 
 }

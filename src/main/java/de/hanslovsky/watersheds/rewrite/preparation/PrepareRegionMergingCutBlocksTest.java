@@ -367,7 +367,7 @@ public class PrepareRegionMergingCutBlocksTest
 				sc.parallelizePairs( blocks ).cache();
 		final EdgeMerger merger = new EdgeMerger.MAX_AFFINITY_MERGER();
 		final EdgeWeight weightFunc = new EdgeWeight.FunkyWeight();
-		final Tuple2< JavaPairRDD< Long, BlockDivision >, TLongLongHashMap > graphsAndBorderNodes =
+		final Tuple2< JavaPairRDD< Long, BlockDivision >, JavaPairRDD< HashableLongArray, long[] > > graphsAndBorderNodes =
 				PrepareRegionMergingCutBlocks.run(
 						sc,
 						blocksRdd,

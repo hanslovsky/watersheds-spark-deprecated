@@ -73,7 +73,7 @@ public class PrepareRegionMergingCutBlocks
 
 	}
 
-	public static Tuple2< JavaPairRDD< Long, BlockDivision >, TLongLongHashMap > run(
+	public static Tuple2< JavaPairRDD< Long, BlockDivision >, JavaPairRDD< HashableLongArray, long[] > > run(
 			final JavaSparkContext sc,
 			final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksWithLabelsAffinitiesAndCounts,
 			final Broadcast< long[] > dim,
@@ -84,7 +84,15 @@ public class PrepareRegionMergingCutBlocks
 			final IdService idService )
 	{
 		final JavaPairRDD< HashableLongArray, GetInternalEdgesAndSplits.IntraBlockOutput > allEdges =
-				blocksWithLabelsAffinitiesAndCounts.mapToPair( new GetInternalEdgesAndSplits<>( blockDim.getValue(), edgeMerger, edgeWeight, edgeCheck, idService ) );
+				blocksWithLabelsAffinitiesAndCounts.mapToPair( new GetInternalEdgesAndSplits<>( blockDim.getValue(), edgeMerger, edgeWeight, edgeCheck, idService ) ).cache();
+
+		final JavaPairRDD< HashableLongArray, long[] > initialBlockContains = allEdges
+				.mapToPair( t -> {
+					final TLongLongHashMap nba = t._2().nodeBlockAssignment;
+					final TLongHashSet blocks = new TLongHashSet( nba.valueCollection() );
+					return new Tuple2<>( t._1(), blocks.toArray() );
+				} );
+
 
 		final JavaPairRDD< HashableLongArray, GetExternalEdges.BlockOutput > interBlockEdges =
 				allEdges.mapToPair( new GetExternalEdges( blockDim, dim, edgeMerger ) ).cache();
@@ -114,7 +122,7 @@ public class PrepareRegionMergingCutBlocks
 					return t;
 				} ).cache();
 
-		return new Tuple2<>( mergeBlocs, filteredNodeBlockAssignments );
+		return new Tuple2<>( mergeBlocs, initialBlockContains );
 	}
 
 	public static class GetExternalEdges implements PairFunction< Tuple2< HashableLongArray, GetInternalEdgesAndSplits.IntraBlockOutput >, HashableLongArray, GetExternalEdges.BlockOutput >

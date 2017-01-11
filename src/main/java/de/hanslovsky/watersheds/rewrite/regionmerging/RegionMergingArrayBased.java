@@ -17,7 +17,6 @@ import de.hanslovsky.watersheds.rewrite.preparation.PrepareRegionMergingCutBlock
 import de.hanslovsky.watersheds.rewrite.util.MergerService;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;
-import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import scala.Tuple2;
@@ -27,7 +26,7 @@ public class RegionMergingArrayBased
 	public static interface Visitor
 	{
 
-		void visit( int[] parents );
+		void visit( final JavaPairRDD< Long, Tuple2< Long, MergeBlocOut > > mergedEdges, int[] parents );
 
 	}
 
@@ -56,6 +55,9 @@ public class RegionMergingArrayBased
 
 		final int nBlocks = ( int ) rdd.count();
 
+		final int[] parents = new int[ nBlocks ];
+		final DisjointSets dj = new DisjointSets( parents, new int[ nBlocks ], nBlocks );
+
 		for ( boolean hasChanged = true; hasChanged; )
 		{
 
@@ -63,28 +65,30 @@ public class RegionMergingArrayBased
 					.mapToPair( new EnsureWeights( edgeWeight ) )
 					.mapToPair( new MergeBlocArrayBased( edgeMerger, edgeWeight, mergerService, threshold ) ).cache();
 
+			System.out.println( "Visiting" );
+			visitor.visit( mergedEdges, parents );
+			System.out.println( "Done visiting" );
+
 			hasChanged = mergedEdges.values().filter( t -> t._2().hasChanged ).count() > 0;
 
-			System.out.println( "Sending back merges" );
-			final Broadcast< MergerService > mergeServiceBC = sc.broadcast( mergerService );
-			mergedEdges.join( mapping ).map( t -> {
-				final long[] map = t._2()._2();
+//			System.out.println( "Sending back merges" );
+//			final Broadcast< MergerService > mergeServiceBC = sc.broadcast( mergerService );
+//			mergedEdges.join( mapping ).map( t -> {
+//				final long[] map = t._2()._2();
+//
+//				final TLongArrayList merges = t._2()._1()._2().merges;
+//
+//				final MergerService mergerService = mergeServiceBC.getValue();
+//
+//				System.out.println( t._1() + ": Sending " + merges.size() / 4 + " merges." );
+//				for ( int i = 0; i < merges.size(); i += 4 )
+//					mergerService.addMerge( map[ (int)merges.get( i ) ], map[(int)merges.get( i+1 )], map[(int)merges.get( i+2)], Double.longBitsToDouble( merges.get( i+3 ) ) );
+//
+//				mergerService.finalize();
+//
+//				return true;
+//			} ).count();
 
-				final TLongArrayList merges = t._2()._1()._2().merges;
-
-				final MergerService mergerService = mergeServiceBC.getValue();
-
-				System.out.println( t._1() + ": Sending " + merges.size() / 4 + " merges." );
-				for ( int i = 0; i < merges.size(); i += 4 )
-					mergerService.addMerge( map[ (int)merges.get( i ) ], map[(int)merges.get( i+1 )], map[(int)merges.get( i+2)], Double.longBitsToDouble( merges.get( i+3 ) ) );
-
-				mergerService.finalize();
-
-				return true;
-			} ).count();
-
-			final int[] parents = new int[ nBlocks ];
-			final DisjointSets dj = new DisjointSets( parents, new int[ nBlocks ], nBlocks );
 			final long[] counts = new long[ nBlocks ];
 
 			final List< Tuple2< Long, Long > > joins = mergedEdges.map( t -> new Tuple2<>( t._1(), t._2()._1() ) ).collect();
@@ -104,15 +108,10 @@ public class RegionMergingArrayBased
 
 			final int setCount = dj.setCount();
 
-			System.out.println( "Visiting" );
-			visitor.visit( parents );
-			System.out.println( "Done visiting" );
-
 			final Broadcast< int[] > parentsBC = sc.broadcast( parents );
 
 			final JavaPairRDD< Long, RemappedData > remappedData = mergedEdges
 					.mapToPair( new FindRootBlock( parentsBC, setCount ) )
-					.join( mapping )
 					.mapToPair( new RemapToOriginalIndices( parentsBC, setCount ) );
 
 

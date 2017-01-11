@@ -162,7 +162,8 @@ public class MergeBlocArrayBasedTest
 		final MergeBlocArrayBased mb = new MergeBlocArrayBased( new EdgeMerger.MAX_AFFINITY_MERGER(), fw, ms, 200.0 );
 		System.out.println( "Start edge merging" );
 		final long t0 = System.currentTimeMillis();
-		final MergeBlocOut out = mb.call( new Tuple2<>( 2l, new MergeBlocIn( g, counts, new TIntLongHashMap(), new TIntObjectHashMap<>() ) ) )._2()._2();
+		final MergeBlocOut out = mb.call(
+				new Tuple2<>( 2l, new MergeBlocIn( g, counts, new TIntLongHashMap(), new TIntObjectHashMap<>(), new long[ 0 ] ) ) )._2()._2();
 		final long t1 = System.currentTimeMillis();
 		System.out.println( "Done Edge merging: " + ( t1 - t0 ) + "ms" );
 

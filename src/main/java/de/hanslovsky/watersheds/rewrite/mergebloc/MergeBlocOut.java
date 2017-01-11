@@ -26,7 +26,17 @@ public class MergeBlocOut implements Serializable
 
 	public final TLongArrayList merges;
 
-	public MergeBlocOut( final long[] counts, final TIntLongHashMap outsideNodes, final DisjointSets dj, final TIntObjectHashMap< TLongHashSet > borderNodes, final boolean hasChanged, final TDoubleArrayList edges, final TLongArrayList merges )
+	public final long[] indexNodeMapping;
+
+	public MergeBlocOut(
+			final long[] counts,
+			final TIntLongHashMap outsideNodes,
+			final DisjointSets dj,
+			final TIntObjectHashMap< TLongHashSet > borderNodes,
+			final boolean hasChanged,
+			final TDoubleArrayList edges,
+			final TLongArrayList merges,
+			final long[] indexNodeMapping )
 	{
 		super();
 		this.counts = counts;
@@ -36,6 +46,7 @@ public class MergeBlocOut implements Serializable
 		this.hasChanged = hasChanged;
 		this.edges = edges;
 		this.merges = merges;
+		this.indexNodeMapping = indexNodeMapping;
 	}
 
 }

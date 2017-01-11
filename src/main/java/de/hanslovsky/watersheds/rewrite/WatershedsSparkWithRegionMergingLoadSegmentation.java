@@ -5,14 +5,17 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.broadcast.Broadcast;
 import org.zeromq.ZMQ;
 import org.zeromq.ZMQ.Context;
 import org.zeromq.ZMQ.Socket;
@@ -30,8 +33,10 @@ import de.hanslovsky.watersheds.rewrite.preparation.PrepareRegionMergingCutBlock
 import de.hanslovsky.watersheds.rewrite.regionmerging.RegionMergingArrayBased;
 import de.hanslovsky.watersheds.rewrite.util.DisjointSetsHashMap;
 import de.hanslovsky.watersheds.rewrite.util.EdgeCheck;
+import de.hanslovsky.watersheds.rewrite.util.ExtractLabelsOnly;
 import de.hanslovsky.watersheds.rewrite.util.HashableLongArray;
 import de.hanslovsky.watersheds.rewrite.util.IdServiceZMQ;
+import de.hanslovsky.watersheds.rewrite.util.IterableWithConstant;
 import de.hanslovsky.watersheds.rewrite.util.MergerServiceZMQ;
 import de.hanslovsky.watersheds.rewrite.util.MergerServiceZMQ.MergeActionAddToList;
 import de.hanslovsky.watersheds.rewrite.util.Util;
@@ -41,8 +46,10 @@ import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
+import gnu.trove.map.hash.TLongObjectHashMap;
 import net.imglib2.Cursor;
 import net.imglib2.RandomAccessibleInterval;
+import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import net.imglib2.converter.Converters;
 import net.imglib2.img.Img;
 import net.imglib2.img.array.ArrayImg;
@@ -173,9 +180,26 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		final EdgeMerger merger = new EdgeMerger.MAX_AFFINITY_MERGER();
 		final FunkyWeight weightFunc = new EdgeWeight.FunkyWeight();
-		final Tuple2< JavaPairRDD< Long, BlockDivision >, TLongLongHashMap > graphsAndBorderNodes = PrepareRegionMergingCutBlocks.run( sc, blocksRdd, sc.broadcast( dimsNoChannels ),
-				sc.broadcast( dimsIntervalNoChannels ), merger, weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() >= 0.0, blockIdService );
+
+		final Broadcast< long[] > dimsIntervalBC = sc.broadcast( dimsInterval );
+
+		final ArrayList< JavaPairRDD< HashableLongArray, long[] > > labelBlocks = new ArrayList<>();
+		labelBlocks.add( blocksRdd.mapToPair( new ExtractLabelsOnly<>( dimsIntervalBC ) ) );
+
+		final Tuple2< JavaPairRDD< Long, BlockDivision >, JavaPairRDD< HashableLongArray, long[] > > graphsAndBorderNodes =
+				PrepareRegionMergingCutBlocks.run( sc, blocksRdd, sc.broadcast( dimsNoChannels ),
+						sc.broadcast( dimsIntervalNoChannels ), merger, weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() >= 0.0, blockIdService );
 		final JavaPairRDD< Long, BlockDivision > graphs = graphsAndBorderNodes._1().cache();
+		final Map< Long, HashableLongArray > blockToInitialBlockMap =
+				graphsAndBorderNodes._2().flatMapToPair( t -> new IterableWithConstant<>( Arrays.asList( ArrayUtils.toObject( t._2() ) ), t._1() ) ).collectAsMap();
+		final Broadcast< Map< Long, HashableLongArray > > blockToInitialBlockMapBC = sc.broadcast( blockToInitialBlockMap );
+
+		// make sure we know which original block everything points to.
+		final List< Tuple2< HashableLongArray, long[] > > blockContainsList = graphsAndBorderNodes._2().collect();
+		final TLongObjectHashMap< HashableLongArray > blockContains = new TLongObjectHashMap<>();
+		for ( final Tuple2< HashableLongArray, long[] > bcl : blockContainsList )
+			for ( final long l : bcl._2() )
+				blockContains.put( l, bcl._1() );
 
 		final List< Tuple2< Long, Long > > duplicateKeys = graphs
 				.mapToPair( t -> new Tuple2<>( t._1(), 1l ) )
@@ -276,7 +300,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final DisjointSetsHashMap mergeUnionFind = new DisjointSetsHashMap();
 
 		images.add( labelsTarget );
-		final RegionMergingArrayBased.Visitor rmVisitor = ( parents ) -> {
+		final RegionMergingArrayBased.Visitor rmVisitor = ( mergedEdges, parents ) -> {
 			final Img< LongType > img = labelsTarget.factory().create( images.get( 0 ), new LongType() );
 
 			System.out.println( "Merging " + merges.size() + " edges" );
@@ -287,6 +311,73 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 				if ( f != t )
 					mergeUnionFind.join( f, t );
 			}
+
+			final DisjointSets dj = new DisjointSets( parents, new int[ parents.length ], parents.length );
+			final TLongObjectHashMap< TLongArrayList >rootChildMap = new TLongObjectHashMap<>();
+
+			for ( int i = 0; i < parents.length; ++i ) {
+				final long root = dj.findRoot( i );
+				if (!rootChildMap.contains( root  ) )
+					rootChildMap.put( root, new TLongArrayList() );
+				rootChildMap.get( root ).add( i );
+			}
+
+			final Broadcast< TLongObjectHashMap< TLongArrayList > > rcmBC = sc.broadcast( rootChildMap );
+
+			final JavaPairRDD< Long, Tuple2< TLongArrayList, long[] > > mergesAndMapping = mergedEdges.mapToPair( t -> {
+				final TLongArrayList m = t._2()._2().merges;
+				final long[] map = t._2()._2().indexNodeMapping;
+				return new Tuple2<>( t._1(), new Tuple2<>( m, map ) );
+			} );
+			final JavaPairRDD< HashableLongArray, Tuple2< TLongArrayList, long[] > > mergesForEachBlock = mergesAndMapping
+					.flatMapToPair( t -> {
+						final TLongArrayList affectedChildren = rcmBC.value().get( t._1() );
+						final IterableWithConstant< Long, Tuple2< TLongArrayList, long[] > > iterable =
+								new IterableWithConstant<>( Arrays.asList( ArrayUtils.toObject( affectedChildren.toArray() ) ), t._2() );
+						return iterable;
+					} )
+					.mapToPair( t -> new Tuple2<>( blockToInitialBlockMapBC.value().get( t._1() ), t._2() ) )
+					;
+
+			final JavaPairRDD< HashableLongArray, ArrayList< Tuple2< TLongArrayList, long[] > > > mergesForEachBlockAggregated = mergesForEachBlock
+					.aggregateByKey(
+							new ArrayList<>(),
+							( al, v ) -> {
+								al.add( v );
+								return al;
+							},
+							( al1, al2 ) -> {
+								al1.addAll( al2 );
+								return al1;
+							} );
+			final JavaPairRDD< HashableLongArray, long[] > previous = labelBlocks.get( labelBlocks.size() - 1 );
+			final JavaPairRDD< HashableLongArray, long[] > current = previous
+					.join( mergesForEachBlockAggregated )
+					.mapToPair( t -> {
+						final long[] dataArray = t._2()._1();
+						final ArrayList< Tuple2< TLongArrayList, long[] > > mapping = t._2()._2();
+
+						final DisjointSetsHashMap djBlock = new DisjointSetsHashMap();
+						for ( final Tuple2< TLongArrayList, long[] > m : mapping ) {
+							final TLongArrayList m1 = m._1();
+							final long[] m2 = m._2();
+							for ( int i = 0; i < m1.size(); i += 2 )
+							{
+								final long r1 = djBlock.findRoot( m2[ ( int ) m1.get( i ) ] );
+								final long r2 = djBlock.findRoot( m2[ ( int ) m1.get( i + 1 ) ] );
+								if ( r1 != r2 )
+									djBlock.join( r1, r2 );
+							}
+						}
+
+						for ( int i = 0; i < dataArray.length; ++i )
+							dataArray[ i ] = djBlock.findRoot( dataArray[ i ] );
+
+						return new Tuple2<>( t._1(), dataArray );
+					} );
+			labelBlocks.add( current.cache() );
+
+			current.count();
 
 			for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( images.get( images.size() - 1 ), img ), img ) )
 				p.getB().set( mergeUnionFind.findRoot( p.getA().get() ) );
