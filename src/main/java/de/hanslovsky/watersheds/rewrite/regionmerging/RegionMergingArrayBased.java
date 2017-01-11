@@ -24,6 +24,12 @@ import scala.Tuple2;
 
 public class RegionMergingArrayBased
 {
+	public static interface Visitor
+	{
+
+		void visit( int[] parents );
+
+	}
 
 	private final EdgeMerger edgeMerger;
 
@@ -39,7 +45,7 @@ public class RegionMergingArrayBased
 		this.mergerService = mergerService;
 	}
 
-	public JavaPairRDD< Long, MergeBlocIn > run( final JavaSparkContext sc, final JavaPairRDD< Long, RegionMergingInput > rdd, final double threshold )
+	public JavaPairRDD< Long, MergeBlocIn > run( final JavaSparkContext sc, final JavaPairRDD< Long, RegionMergingInput > rdd, final double threshold, final Visitor visitor )
 	{
 
 		JavaPairRDD< Long, MergeBlocIn > zeroBased = rdd.mapToPair( new ToZeroBasedIndexing<>() );
@@ -59,16 +65,23 @@ public class RegionMergingArrayBased
 
 			hasChanged = mergedEdges.values().filter( t -> t._2().hasChanged ).count() > 0;
 
-			mergedEdges.join( mapping ).mapToPair( t -> {
+			System.out.println( "Sending back merges" );
+			final Broadcast< MergerService > mergeServiceBC = sc.broadcast( mergerService );
+			mergedEdges.join( mapping ).map( t -> {
 				final long[] map = t._2()._2();
 
 				final TLongArrayList merges = t._2()._1()._2().merges;
 
+				final MergerService mergerService = mergeServiceBC.getValue();
+
+				System.out.println( t._1() + ": Sending " + merges.size() / 4 + " merges." );
 				for ( int i = 0; i < merges.size(); i += 4 )
 					mergerService.addMerge( map[ (int)merges.get( i ) ], map[(int)merges.get( i+1 )], map[(int)merges.get( i+2)], Double.longBitsToDouble( merges.get( i+3 ) ) );
 
-				return null;
-			} );
+				mergerService.finalize();
+
+				return true;
+			} ).count();
 
 			final int[] parents = new int[ nBlocks ];
 			final DisjointSets dj = new DisjointSets( parents, new int[ nBlocks ], nBlocks );
@@ -90,6 +103,10 @@ public class RegionMergingArrayBased
 				++counts[ dj.findRoot( i ) ];
 
 			final int setCount = dj.setCount();
+
+			System.out.println( "Visiting" );
+			visitor.visit( parents );
+			System.out.println( "Done visiting" );
 
 			final Broadcast< int[] > parentsBC = sc.broadcast( parents );
 

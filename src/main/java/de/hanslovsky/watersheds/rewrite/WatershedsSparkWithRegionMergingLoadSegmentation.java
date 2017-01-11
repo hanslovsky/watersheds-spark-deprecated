@@ -20,7 +20,6 @@ import org.zeromq.ZMQ.Socket;
 import bdv.img.h5.H5Utils;
 import bdv.util.BdvFunctions;
 import bdv.util.BdvStackSource;
-import de.hanslovsky.watersheds.graph.RegionMerging;
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
@@ -277,7 +276,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final DisjointSetsHashMap mergeUnionFind = new DisjointSetsHashMap();
 
 		images.add( labelsTarget );
-		final RegionMerging.Visitor rmVisitor = ( parents ) -> {
+		final RegionMergingArrayBased.Visitor rmVisitor = ( parents ) -> {
 			final Img< LongType > img = labelsTarget.factory().create( images.get( 0 ), new LongType() );
 
 			System.out.println( "Merging " + merges.size() + " edges" );
@@ -293,15 +292,15 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 				p.getB().set( mergeUnionFind.findRoot( p.getA().get() ) );
 			images.add( img );
 
-			final Img< LongType > blockImg = labelsTarget.factory().create( blockImages.get( 0 ), new LongType() );
-			for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( blockImages.get( blockImages.size() - 1 ), blockImg ), blockImg ) )
-				p.getB().set( parents.contains( p.getA().get() ) ? parents.get( p.getA().get() ) : p.getA().get() );
-			blockImages.add( blockImg );
+//			final Img< LongType > blockImg = labelsTarget.factory().create( blockImages.get( 0 ), new LongType() );
+//			for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( blockImages.get( blockImages.size() - 1 ), blockImg ), blockImg ) )
+//				p.getB().set( parents.contains( p.getA().get() ) ? parents.get( p.getA().get() ) : p.getA().get() );
+//			blockImages.add( blockImg );
 		};
 		final double threshold = 200;
 		final double thresholdTolerance = 1e0;
 
-		final JavaPairRDD< Long, MergeBlocIn > graphsAfterMerging = rm.run( sc, RegionMergingArrayBased.fromBlockDivision( graphs ), threshold );
+		final JavaPairRDD< Long, MergeBlocIn > graphsAfterMerging = rm.run( sc, RegionMergingArrayBased.fromBlockDivision( graphs ), threshold, rmVisitor );
 
 		final TLongIntHashMap colorMap = new TLongIntHashMap();
 		{

@@ -10,8 +10,8 @@ import de.hanslovsky.watersheds.Util;
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
-import de.hanslovsky.watersheds.rewrite.graph.UndirectedGraphArrayBased;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight.FunkyWeight;
+import de.hanslovsky.watersheds.rewrite.graph.UndirectedGraphArrayBased;
 import de.hanslovsky.watersheds.rewrite.util.MergerService;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TLongArrayList;
@@ -42,7 +42,7 @@ public class MergeBlocArrayBasedTest
 
 	public static void main( final String[] args ) throws Exception
 	{
-		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt-no-blocks.h5";
+		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt.h5";
 //		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
 //		final int[] cellSize = new int[] { 150, 150, 50, 3 };
 //		final int[] cellSize = new int[] { 300, 300, 2 };
