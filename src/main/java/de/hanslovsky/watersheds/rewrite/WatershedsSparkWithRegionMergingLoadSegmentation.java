@@ -77,15 +77,17 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 	public static void main( final String[] args ) throws IOException
 	{
 
-		final int[] cellSize = new int[] { 300, 300, 2 };
+		final int[] cellSize = new int[] { 300, 300, 100, 3 };
 		final int[] cellSizeLabels = Util.dropLast( cellSize );
-		final int[] dimsIntervalInt = new int[] { 100, 100, 2 };
+		final int[] dimsIntervalInt = new int[] { 60, 60, 20, 3 };
+//		final int[] dimsIntervalInt = new int[] { 100, 100, 2 };
 		final long[] dimsInterval = Arrays.stream( dimsIntervalInt ).mapToLong( i -> i ).toArray();
 		final int[] dimsIntervalIntNoChannels = Util.dropLast( dimsIntervalInt );
 		final long[] dimsIntervalNoChannels = Util.dropLast( dimsInterval );
 
 
-		final String path = Util.HOME_DIR + String.format( "/Dropbox/misc/excerpt2D.h5" );
+//		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
+		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt-60x60x20-blocks.h5";
 
 		System.out.println( "Loading data" );
 		final CellImg< FloatType, ?, ? > data = H5Utils.loadFloat( path, "main", cellSize );
@@ -138,7 +140,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final long[] offset = new long[ dimsNoChannels.length ];
 		for ( int d = 0; d < dimsNoChannels.length; )
 		{
-			System.out.println( Arrays.toString( offset ) );
 			final long[] labelData = new long[ extendedBlockElements ];
 			final long[] lower = Arrays.stream( offset ).map( val -> val - 1 ).toArray();
 			final Cursor< LongType > l = Views.offsetInterval( labelsExtend, lower, extendedBlockSize ).cursor();
@@ -164,7 +165,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			}
 		}
 
-		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[1]" ).set( "spark.driver.maxResultSize", "4g" );
+		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[*]" ).set( "spark.driver.maxResultSize", "4g" );
 		final JavaSparkContext sc = new JavaSparkContext( conf );
 		Logger.getRootLogger().setLevel( Level.ERROR );
 
@@ -303,17 +304,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		images.add( labelsTarget );
 
-		{
-			final TLongIntHashMap cm = new TLongIntHashMap();
-			final Random rand = new Random( 100 );
-//			BdvFunctions.show( Converters.convert( ( RandomAccessibleInterval< LongType > ) labelsTarget, ( s, t ) -> {
-//				final long ss = s.get();
-//				if ( !cm.contains( ss ) )
-//					cm.put( ss, rand.nextInt() );
-//				t.set( cm.get( ss ) );
-//			}, new ARGBType() ), "blub0" );
-		}
-
 		final RegionMergingArrayBased.Visitor rmVisitor = ( mergedEdges, parents ) -> {
 
 			final DisjointSets dj = new DisjointSets( parents, new int[ parents.length ], parents.length );
@@ -336,7 +326,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			final JavaPairRDD< HashableLongArray, Tuple2< TLongArrayList, long[] > > mergesForEachBlock = mergesAndMapping
 					.flatMapToPair( t -> {
 						final TLongArrayList affectedChildren = rcmBC.value().get( t._1() );
-						System.out.println( t._1() + " " + affectedChildren + " " + rcmBC.value() );
 						final IterableWithConstant< Long, Tuple2< TLongArrayList, long[] > > iterable =
 								new IterableWithConstant<>( Arrays.asList( ArrayUtils.toObject( affectedChildren.toArray() ) ), t._2() );
 						return iterable;
@@ -356,11 +345,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 								return al1;
 							} );
 			final JavaPairRDD< HashableLongArray, long[] > previous = labelBlocks.get( labelBlocks.size() - 1 );
-//			previous.values().map( d -> {
-//				for ( int i = 0; i < d.length; ++i )
-//					System.out.println( "DATA? " + d[ i ] );
-//				return true;
-//			} ).count();
 			final JavaPairRDD< HashableLongArray, long[] > current = previous
 					.join( mergesForEachBlockAggregated )
 					.mapToPair( t -> {
@@ -373,7 +357,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 							final long[] m2 = m._2();
 							for ( int i = 0; i < m1.size(); i += 4 )
 							{
-//								System.out.println( m1.get( i ) + " " + m1.get( i + 1 ) );
 								final long r1 = djBlock.findRoot( m2[ ( int ) m1.get( i ) ] );
 								final long r2 = djBlock.findRoot( m2[ ( int ) m1.get( i + 1 ) ] );
 								if ( r1 != r2 )
@@ -396,17 +379,14 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 				final long[] min = currentData._1().getData();
 				final ArrayImg< LongType, LongArray > src = ArrayImgs.longs( currentData._2(), dimsIntervalNoChannels );
 				final IntervalView< LongType > tgt = Views.offsetInterval( img, min, dimsIntervalNoChannels );
-				System.out.println( Arrays.toString( dimsIntervalNoChannels ) + " " + Arrays.toString( min ) + " " + currentData._2().length + " " + Arrays.toString( Intervals.dimensionsAsLongArray( img ) ) );
 				for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( src, tgt ), new FinalInterval( dimsIntervalNoChannels ) ) )
 					p.getB().set( p.getA() );
-//					System.out.println( p.getA() );
 			}
 			images.add( img );
 
 			final Img< LongType > blockImg = labelsTarget.factory().create( blockImages.get( 0 ), new LongType() );
 			for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( blockImages.get( blockImages.size() - 1 ), blockImg ), blockImg ) )
 				p.getB().set( dj.findRoot( p.getA().getInteger() ) );
-//				p.getB().set( parents.contains( p.getA().get() ) ? parents.get( p.getA().get() ) : p.getA().get() );
 			blockImages.add( blockImg );
 		};
 		final double threshold = 200;

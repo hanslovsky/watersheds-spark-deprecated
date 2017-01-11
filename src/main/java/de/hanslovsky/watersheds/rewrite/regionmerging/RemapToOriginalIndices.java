@@ -39,10 +39,6 @@ public class RemapToOriginalIndices implements PairFunction< Tuple2< Long, Tuple
 
 		// map back counts
 		final TLongLongHashMap countsInBlock = Util.remapCounts( out, map, djBlock, root );
-//		if ( countsInBlock.contains( 5668 ) )
-		for ( int i = 0; i < map.length; ++i )
-			if ( map[ i ] == 5668 )
-				System.out.println( "Block " + root + " (" + t._1() + ") contains " + 5668 + " " + countsInBlock.contains( 5668 ) + " " + out.counts[ i ] );
 
 		// map back outsideNodes
 		final TLongLongHashMap outsideNodes = Util.remapOutsideNodes( out, djBlock, root, map );
@@ -54,7 +50,6 @@ public class RemapToOriginalIndices implements PairFunction< Tuple2< Long, Tuple
 			merges.add( map[ ( int ) out.merges.get( i + 1 ) ] );
 		}
 
-		System.out.println( "Remapping at root: " + root );
 		return new Tuple2< Long, RemappedData >( ( long ) root, new RemappedData( out.edges, countsInBlock, outsideNodes, merges ) );
 	}
 

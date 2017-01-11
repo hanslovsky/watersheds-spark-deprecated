@@ -26,7 +26,6 @@ public class FindRootBlock implements PairFunction< Tuple2< Long, Tuple2< Long, 
 	{
 		final int[] p = parentsBC.getValue();
 		final int otherKey = new DisjointSets( p, new int[ p.length ], setCount ).findRoot( t._2()._1().intValue() );
-		System.out.println( t._1() + " is rooted at " + otherKey );
 		return new Tuple2<>( t._1(), new Tuple2<>( ( long ) otherKey, t._2()._2() ) );
 	}
 

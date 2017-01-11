@@ -94,11 +94,8 @@ public class UndirectedGraphArrayBased implements Serializable
 		}
 
 
-//		System.out.println( "keepEdges size: " + keepEdges.size() );
-		final int count = 0;
 		for ( final TIntIntIterator keepIt = keepEdges.iterator(); keepIt.hasNext(); )
 		{
-//			System.out.println( "count: " + count++ );
 			keepIt.advance();
 			final int nodeId = keepIt.key();
 			final int edgeId = keepIt.value();
@@ -111,7 +108,6 @@ public class UndirectedGraphArrayBased implements Serializable
 			this.e1.weight( Double.NaN );
 			this.e1.from( nodeId );
 			this.e1.to( newNode );
-//			System.out.println( "Still iterating" + " " + ( keepEdges == otherMap ) + " " + nodeId + " " + from + " " + to + " " + newNode );
 		}
 
 		return discardEdges;
@@ -134,11 +130,7 @@ public class UndirectedGraphArrayBased implements Serializable
 			final int from = ( int ) e1.from();
 			final int to = ( int ) e1.to();
 
-			if ( from == to )
-			{
-				System.out.println( "FROM IS TO AGAIN!" + e1 );
-				System.exit( 42 );
-			}
+			assert from != to: e1;
 
 			final TIntIntHashMap fromMap = nodeEdgeMap[ from ];
 			final TIntIntHashMap toMap = nodeEdgeMap[ to ];

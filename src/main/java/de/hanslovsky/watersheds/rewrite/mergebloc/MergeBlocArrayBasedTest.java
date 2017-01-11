@@ -41,7 +41,7 @@ public class MergeBlocArrayBasedTest
 
 	public static void main( final String[] args ) throws Exception
 	{
-		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt.h5";
+		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt-60x60x20-blocks.h5";
 //		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
 //		final int[] cellSize = new int[] { 150, 150, 50, 3 };
 //		final int[] cellSize = new int[] { 300, 300, 2 };

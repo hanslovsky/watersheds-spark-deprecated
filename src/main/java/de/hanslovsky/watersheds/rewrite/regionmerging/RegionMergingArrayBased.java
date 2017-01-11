@@ -1,7 +1,6 @@
 package de.hanslovsky.watersheds.rewrite.regionmerging;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import org.apache.spark.api.java.JavaPairRDD;
@@ -69,7 +68,6 @@ public class RegionMergingArrayBased
 					.mapToPair( new MergeBlocArrayBased( edgeMerger, edgeWeight, mergerService, threshold ) ).cache();
 
 			System.out.println( "Visiting" );
-			System.out.println( Arrays.toString( parents ) );
 			visitor.visit( mergedEdges, parents );
 			System.out.println( "Done visiting" );
 
@@ -78,8 +76,6 @@ public class RegionMergingArrayBased
 			final long[] counts = new long[ nBlocks ];
 
 			final List< Tuple2< Long, Long > > joins = mergedEdges.map( t -> new Tuple2<>( t._1(), t._2()._1() ) ).collect();
-
-			System.out.println( "Keys: " + mergedEdges.keys().collect() );
 
 			for ( final Tuple2< Long, Long > join : joins )
 			{
@@ -124,7 +120,6 @@ public class RegionMergingArrayBased
 				for ( int i = 0; it.hasNext(); ++i )
 				{
 					it.advance();
-//					System.out.println( it.key() + " " + i + " " + it.value() );
 					nodeIndexMapping.put( it.key(), i );
 				}
 
@@ -134,6 +129,8 @@ public class RegionMergingArrayBased
 			zeroBased = backToInput
 //					.mapToPair( new GenerateNodeIndexMapping<>() )
 					.mapToPair( new ToZeroBasedIndexing<>( sc.broadcast( edgeMerger ) ) );
+
+			System.out.println( zeroBased.count() + " blocks" );
 //			if ( zeroBased.count() == 1 )
 //				break;
 		}

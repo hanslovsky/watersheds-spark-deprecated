@@ -91,8 +91,6 @@ public class Util
 				e.weight( Double.NaN );
 			e.from( map[ out.dj.findRoot( ( int ) e.from() ) ] );
 			e.to( map[ out.dj.findRoot( ( int ) e.to() ) ] );
-			if ( e.from() == 5668 || e.to() == 5668 )
-				System.out.println( "Found 5668! " + e );
 		}
 	}
 

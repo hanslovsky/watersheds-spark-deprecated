@@ -33,10 +33,8 @@ PairFunction< Tuple2< HashableLongArray, Tuple2< long[], long[] > >, HashableLon
 		final long offset = offsets.getValue().get( id );
 		final TLongLongHashMap counts = new TLongLongHashMap();
 		final long[] data = t._2()._1().clone();
-//		System.out.println( offsets.getValue() + " " + id + " " + offset );
 		if ( offset != offsets.getValue().getNoEntryValue() )
 		{
-//			System.out.println( "Offseting for " + t._1() + " " + offsets.getValue() );
 			for ( int i = 0; i < data.length; ++i )
 				if ( data[ i ] != 0 )
 					data[ i ] += offset;
