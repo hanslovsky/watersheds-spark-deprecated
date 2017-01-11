@@ -48,6 +48,7 @@ import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import net.imglib2.Cursor;
+import net.imglib2.FinalInterval;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import net.imglib2.converter.Converters;
@@ -63,6 +64,7 @@ import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.Intervals;
 import net.imglib2.util.Pair;
 import net.imglib2.view.ExtendedRandomAccessibleInterval;
+import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
 import net.imglib2.view.composite.CompositeIntervalView;
 import net.imglib2.view.composite.RealComposite;
@@ -181,10 +183,10 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final EdgeMerger merger = new EdgeMerger.MAX_AFFINITY_MERGER();
 		final FunkyWeight weightFunc = new EdgeWeight.FunkyWeight();
 
-		final Broadcast< long[] > dimsIntervalBC = sc.broadcast( dimsInterval );
+		final Broadcast< long[] > dimsIntervalNoChannelsBC = sc.broadcast( dimsIntervalNoChannels );
 
 		final ArrayList< JavaPairRDD< HashableLongArray, long[] > > labelBlocks = new ArrayList<>();
-		labelBlocks.add( blocksRdd.mapToPair( new ExtractLabelsOnly<>( dimsIntervalBC ) ) );
+		labelBlocks.add( blocksRdd.mapToPair( new ExtractLabelsOnly<>( dimsIntervalNoChannelsBC ) ) );
 
 		final Tuple2< JavaPairRDD< Long, BlockDivision >, JavaPairRDD< HashableLongArray, long[] > > graphsAndBorderNodes =
 				PrepareRegionMergingCutBlocks.run( sc, blocksRdd, sc.broadcast( dimsNoChannels ),
@@ -301,16 +303,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		images.add( labelsTarget );
 		final RegionMergingArrayBased.Visitor rmVisitor = ( mergedEdges, parents ) -> {
-			final Img< LongType > img = labelsTarget.factory().create( images.get( 0 ), new LongType() );
-
-			System.out.println( "Merging " + merges.size() + " edges" );
-			for ( int i = 0; i < merges.size(); i += 4 )
-			{
-				final long f = mergeUnionFind.findRoot( merges.get( i ) );
-				final long t = mergeUnionFind.findRoot( merges.get( i + 1 ) );
-				if ( f != t )
-					mergeUnionFind.join( f, t );
-			}
 
 			final DisjointSets dj = new DisjointSets( parents, new int[ parents.length ], parents.length );
 			final TLongObjectHashMap< TLongArrayList >rootChildMap = new TLongObjectHashMap<>();
@@ -351,6 +343,11 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 								return al1;
 							} );
 			final JavaPairRDD< HashableLongArray, long[] > previous = labelBlocks.get( labelBlocks.size() - 1 );
+//			previous.values().map( d -> {
+//				for ( int i = 0; i < d.length; ++i )
+//					System.out.println( "DATA? " + d[ i ] );
+//				return true;
+//			} ).count();
 			final JavaPairRDD< HashableLongArray, long[] > current = previous
 					.join( mergesForEachBlockAggregated )
 					.mapToPair( t -> {
@@ -361,8 +358,9 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 						for ( final Tuple2< TLongArrayList, long[] > m : mapping ) {
 							final TLongArrayList m1 = m._1();
 							final long[] m2 = m._2();
-							for ( int i = 0; i < m1.size(); i += 2 )
+							for ( int i = 0; i < m1.size(); i += 4 )
 							{
+//								System.out.println( m1.get( i ) + " " + m1.get( i + 1 ) );
 								final long r1 = djBlock.findRoot( m2[ ( int ) m1.get( i ) ] );
 								final long r2 = djBlock.findRoot( m2[ ( int ) m1.get( i + 1 ) ] );
 								if ( r1 != r2 )
@@ -371,7 +369,11 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 						}
 
 						for ( int i = 0; i < dataArray.length; ++i )
+						{
+							final long bef = dataArray[ i ];
 							dataArray[ i ] = djBlock.findRoot( dataArray[ i ] );
+//							System.out.println( bef + " " + dataArray[ i ] );
+						}
 
 						return new Tuple2<>( t._1(), dataArray );
 					} );
@@ -379,8 +381,17 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 			current.count();
 
-			for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( images.get( images.size() - 1 ), img ), img ) )
-				p.getB().set( mergeUnionFind.findRoot( p.getA().get() ) );
+			final Img< LongType > img = labelsTarget.factory().create( images.get( 0 ), new LongType() );
+			for ( final Tuple2< HashableLongArray, long[] > currentData : current.collect() )
+			{
+				final long[] min = currentData._1().getData();
+				final ArrayImg< LongType, LongArray > src = ArrayImgs.longs( currentData._2(), dimsIntervalNoChannels );
+				final IntervalView< LongType > tgt = Views.offsetInterval( img, min, dimsIntervalNoChannels );
+				System.out.println( Arrays.toString( dimsIntervalNoChannels ) + " " + Arrays.toString( min ) + " " + currentData._2().length + " " + Arrays.toString( Intervals.dimensionsAsLongArray( img ) ) );
+				for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( src, tgt ), new FinalInterval( dimsIntervalNoChannels ) ) )
+					p.getB().set( p.getA() );
+//					System.out.println( p.getA() );
+			}
 			images.add( img );
 
 //			final Img< LongType > blockImg = labelsTarget.factory().create( blockImages.get( 0 ), new LongType() );
