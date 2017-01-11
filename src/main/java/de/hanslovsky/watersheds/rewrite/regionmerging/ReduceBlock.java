@@ -5,10 +5,9 @@ import java.util.ArrayList;
 import org.apache.spark.api.java.function.PairFunction;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.util.DisjointSetsHashMap;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TLongLongHashMap;
-import gnu.trove.map.hash.TLongObjectHashMap;
-import gnu.trove.set.hash.TLongHashSet;
 import scala.Tuple2;
 
 public class ReduceBlock implements PairFunction< Tuple2< Long, ArrayList< RemappedData > >, Long, OriginalLabelData >
@@ -24,16 +23,16 @@ public class ReduceBlock implements PairFunction< Tuple2< Long, ArrayList< Remap
 		final Edge ae = new Edge( allEdges );
 
 		final TLongLongHashMap allCounts = new TLongLongHashMap();
-		final TLongLongHashMap allBorderNodesAssignments = new TLongLongHashMap();
 		final TLongLongHashMap allOutsideNodes = new TLongLongHashMap();
-		final TLongObjectHashMap< TLongHashSet > allBorderNodes = new TLongObjectHashMap<>();
+
+		final DisjointSetsHashMap dj = new DisjointSetsHashMap();
 
 		for ( final RemappedData md : mappedDatas )
 		{
-			allBorderNodesAssignments.putAll( md.borderNodeAssignments );
 			allCounts.putAll( md.counts );
 			allOutsideNodes.putAll( md.outsideNodes );
-			allBorderNodes.putAll( md.borderNodes );
+			for ( int i = 0, k = 1; i < md.merges.size(); i += 2, k += 2 )
+				dj.join( dj.findRoot( md.merges.get( i ) ), dj.findRoot( md.merges.get( k ) ) );
 		}
 
 		for ( final RemappedData md : mappedDatas )
@@ -42,20 +41,13 @@ public class ReduceBlock implements PairFunction< Tuple2< Long, ArrayList< Remap
 			for ( int i = 0; i < e.size(); ++i )
 			{
 				e.setIndex( i );
-				long from = e.from();
-				long to = e.to();
-				if ( allBorderNodesAssignments.contains( from ) && allBorderNodesAssignments.contains( to ) )
-				{
-					from = allBorderNodesAssignments.get( from );
-					to = allBorderNodesAssignments.get( to );
-					e.weight( Double.NaN );
-				}
-
+				final long from = dj.findRoot( e.from() );
+				final long to = dj.findRoot( e.to() );
 				ae.add( e.weight(), e.affinity(), from, to, e.multiplicity() );
 			}
 		}
 
-		return new Tuple2<>( key, new OriginalLabelData( allEdges, allCounts, allOutsideNodes, allBorderNodes ) );
+		return new Tuple2<>( key, new OriginalLabelData( allEdges, allCounts, allOutsideNodes ) );
 	}
 
 }

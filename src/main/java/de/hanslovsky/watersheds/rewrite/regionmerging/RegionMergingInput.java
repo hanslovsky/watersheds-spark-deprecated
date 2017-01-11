@@ -5,8 +5,6 @@ import java.io.Serializable;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
-import gnu.trove.map.hash.TLongObjectHashMap;
-import gnu.trove.set.hash.TLongHashSet;
 
 public class RegionMergingInput implements Serializable
 {
@@ -21,9 +19,7 @@ public class RegionMergingInput implements Serializable
 
 	public final TDoubleArrayList edges;
 
-	public final TLongObjectHashMap< TLongHashSet > borderNodes;
-
-	public RegionMergingInput( final int nNodes, final TLongIntHashMap nodeIndexMapping, final TLongLongHashMap counts, final TLongLongHashMap outsideNodes, final TDoubleArrayList edges, final TLongObjectHashMap< TLongHashSet > borderNodes )
+	public RegionMergingInput( final int nNodes, final TLongIntHashMap nodeIndexMapping, final TLongLongHashMap counts, final TLongLongHashMap outsideNodes, final TDoubleArrayList edges )
 	{
 		super();
 		this.nNodes = nNodes;
@@ -31,7 +27,6 @@ public class RegionMergingInput implements Serializable
 		this.counts = counts;
 		this.outsideNodes = outsideNodes;
 		this.edges = edges;
-		this.borderNodes = borderNodes;
 	}
 
 

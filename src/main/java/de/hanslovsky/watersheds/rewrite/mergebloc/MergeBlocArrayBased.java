@@ -45,6 +45,20 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 		final int nNodes = in.g.nNodes();
 		final DisjointSets dj = new DisjointSets( nNodes );
 
+		for ( int i = 0; i < e.size(); ++i )
+			if ( e.from() == e.to() && e.weight() != -1.0d )
+			{
+				System.out.println( "WHY IS FROM EQUAL TO TO? " + e );
+				System.exit( 451 );
+			}
+
+		for ( int i = 0; i < in.g.nodeEdgeMap().length; ++i )
+			if ( in.g.nodeEdgeMap()[i].contains( i ) )
+			{
+				System.out.println( "WHY DOES NODE HAVE EDGE TO ITSELF? " + i + " " + in.g.nodeEdgeMap()[i] );
+				System.exit( 123 );
+			}
+
 		final ChangeablePriorityQueue queue = new ChangeablePriorityQueue( e.size() );
 
 		for ( int i = 0; i < e.size(); ++i )
@@ -109,6 +123,34 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 			final int n = dj.join( r1, r2 );
 
+//			if ( in.borderNodes.contains( from ) )
+//			{
+//				if ( !in.borderNodes.contains( n ) )
+//					in.borderNodes.put( n, new TLongHashSet() );
+//				in.borderNodes.get( n ).addAll( in.borderNodes.get( from ) );
+//			}
+//
+//			if ( in.borderNodes.contains( to ) )
+//			{
+//				if ( !in.borderNodes.contains( n ) )
+//					in.borderNodes.put( n, new TLongHashSet() );
+//				in.borderNodes.get( n ).addAll( in.borderNodes.get( to ) );
+//			}
+//
+//			if ( in.borderNodes.contains( r1 ) )
+//			{
+//				if ( !in.borderNodes.contains( n ) )
+//					in.borderNodes.put( n, new TLongHashSet() );
+//				in.borderNodes.get( n ).addAll( in.borderNodes.get( r1 ) );
+//			}
+//
+//			if ( in.borderNodes.contains( r2 ) )
+//			{
+//				if ( !in.borderNodes.contains( n ) )
+//					in.borderNodes.put( n, new TLongHashSet() );
+//				in.borderNodes.get( n ).addAll( in.borderNodes.get( r2 ) );
+//			}
+
 			final long c1 = in.counts[ r1 ];
 			final long c2 = in.counts[ r2 ];
 
@@ -120,8 +162,16 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 			assert c1 > 0 && c2 > 0: "Counts does not contain ids!";
 
+			if ( from == 3583 || to == 3583 || r1 == 3583 || r2 == 3583 )
+			{
+				System.out.println( "Merging " + e + " " + queue.size() + " " + r1 + " " + r2 + " " + n + " " + in.counts[ r1 ] + " " + in.counts[ r2 ] );
+				System.out.println( in.g.nodeEdgeMap()[ 3583 ] );
+			}
+
+			in.counts[ n == r1 ? r2 : r1 ] = 0;
 			in.counts[ n ] = c1 + c2;
 
+//			System.out.println( "Contracting " + e + " " + n );
 			final TIntIntHashMap discardEdges = in.g.contract( e, n, this.edgeMerger );
 			discardEdges.clear();
 
@@ -138,7 +188,6 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 						in.counts,
 						in.outsideNodes,
 						dj,
-						in.borderNodes,
 						merges.size() > 0 || pointingOutside != t._1().longValue(),
 						in.g.edges(),
 						merges,

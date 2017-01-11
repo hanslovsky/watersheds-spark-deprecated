@@ -15,14 +15,14 @@ public class UndirectedGraphArrayBased implements Serializable
 
 	private final Edge e1, e2;
 
-	public UndirectedGraphArrayBased( final int nNodes )
+	public UndirectedGraphArrayBased( final int nNodes, final EdgeMerger edgeMerger )
 	{
-		this( nNodes, new TDoubleArrayList() );
+		this( nNodes, new TDoubleArrayList(), edgeMerger );
 	}
 
-	public UndirectedGraphArrayBased( final int nNodes, final TDoubleArrayList edges )
+	public UndirectedGraphArrayBased( final int nNodes, final TDoubleArrayList edges, final EdgeMerger edgeMerger )
 	{
-		this( edges, nodeEdgeMap( edges, nNodes ) );
+		this( edges, nodeEdgeMap( edges, nNodes, edgeMerger ) );
 	}
 
 	private UndirectedGraphArrayBased( final TDoubleArrayList edges, final TIntIntHashMap[] nodeEdgeMap )
@@ -94,8 +94,11 @@ public class UndirectedGraphArrayBased implements Serializable
 		}
 
 
+//		System.out.println( "keepEdges size: " + keepEdges.size() );
+		final int count = 0;
 		for ( final TIntIntIterator keepIt = keepEdges.iterator(); keepIt.hasNext(); )
 		{
+//			System.out.println( "count: " + count++ );
 			keepIt.advance();
 			final int nodeId = keepIt.key();
 			final int edgeId = keepIt.value();
@@ -108,13 +111,14 @@ public class UndirectedGraphArrayBased implements Serializable
 			this.e1.weight( Double.NaN );
 			this.e1.from( nodeId );
 			this.e1.to( newNode );
+//			System.out.println( "Still iterating" + " " + ( keepEdges == otherMap ) + " " + nodeId + " " + from + " " + to + " " + newNode );
 		}
 
 		return discardEdges;
 
 	}
 
-	private static TIntIntHashMap[] nodeEdgeMap( final TDoubleArrayList edges, final int nNodes )
+	private static TIntIntHashMap[] nodeEdgeMap( final TDoubleArrayList edges, final int nNodes, final EdgeMerger edgeMerger )
 	{
 		final TIntIntHashMap[] nodeEdgeMap = new TIntIntHashMap[ nNodes ];
 		for ( int i = 0; i < nNodes; ++i )
@@ -125,8 +129,16 @@ public class UndirectedGraphArrayBased implements Serializable
 		for ( int i = 0; i < nEdges; ++i )
 		{
 			e1.setIndex( i );
+			if ( e1.weight() == -1.0 )
+				continue;
 			final int from = ( int ) e1.from();
 			final int to = ( int ) e1.to();
+
+			if ( from == to )
+			{
+				System.out.println( "FROM IS TO AGAIN!" + e1 );
+				System.exit( 42 );
+			}
 
 			final TIntIntHashMap fromMap = nodeEdgeMap[ from ];
 			final TIntIntHashMap toMap = nodeEdgeMap[ to ];
@@ -135,14 +147,18 @@ public class UndirectedGraphArrayBased implements Serializable
 			{
 				assert fromMap.get( to ) == toMap.get( from ): "Edges are inconsistent!";
 				e2.setIndex( fromMap.get( to ) );
-				if ( e1.weight() < e2.weight() )
-				{
-					fromMap.put( to, i );
-					toMap.put( from, i );
-					e2.weight( -1.0d );
-				}
-				else
-					e1.weight( -1.0d );
+				edgeMerger.merge( e1, e2 );
+				e2.weight( Double.NaN );
+				e1.weight( -1.0 );
+//
+//				if ( e1.weight() < e2.weight() )
+//				{
+//					fromMap.put( to, i );
+//					toMap.put( from, i );
+//					e2.weight( -1.0d );
+//				}
+//				else
+//					e1.weight( -1.0d );
 			}
 			else
 			{

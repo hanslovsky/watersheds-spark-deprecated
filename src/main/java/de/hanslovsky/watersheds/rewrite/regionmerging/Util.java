@@ -3,9 +3,7 @@ package de.hanslovsky.watersheds.rewrite.regionmerging;
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocOut;
 import gnu.trove.iterator.TIntLongIterator;
-import gnu.trove.iterator.TIntObjectIterator;
 import gnu.trove.iterator.TLongIntIterator;
-import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.iterator.TLongObjectIterator;
 import gnu.trove.list.array.TDoubleArrayList;
@@ -93,17 +91,21 @@ public class Util
 				e.weight( Double.NaN );
 			e.from( map[ out.dj.findRoot( ( int ) e.from() ) ] );
 			e.to( map[ out.dj.findRoot( ( int ) e.to() ) ] );
+			if ( e.from() == 5668 || e.to() == 5668 )
+				System.out.println( "Found 5668! " + e );
 		}
 	}
 
-	public static TLongLongHashMap remapCounts( final MergeBlocOut out, final long[] map )
+	public static TLongLongHashMap remapCounts( final MergeBlocOut out, final long[] map, final DisjointSets djBlock, final long root )
 	{
 		final TLongLongHashMap countsInBlock = new TLongLongHashMap();
 		for ( int i = 0; i < out.counts.length; ++i )
 		{
 			final int r = out.dj.findRoot( i );
-			if ( r == i && !out.outsideNodes.contains( i ) )
-				countsInBlock.put( map[ r ], out.counts[ r ] );
+			if ( r == i )
+				if ( !out.outsideNodes.contains( i ) || djBlock.findRoot( (int)out.outsideNodes.get( i ) ) != root )
+					countsInBlock.put( map[ r ], out.counts[ r ] );
+
 		}
 		return countsInBlock;
 	}
@@ -115,33 +117,34 @@ public class Util
 		{
 			it.advance();
 			final int r = djBlock.findRoot( ( int ) it.value() );
-			if ( r != root )
+			// TODO is second check right?
+			if ( r != root && out.dj.findRoot( it.key() ) == it.key() )
 				outsideNodes.put( map[ it.key() ], r );
 		}
 		return outsideNodes;
 	}
 
-	public static void remapBorderNodes( final MergeBlocOut out, final long[] map, final DisjointSets djBlock, final long blockRoot, final TLongObjectHashMap< TLongHashSet > borderNodes, final TLongLongHashMap borderNodeRoots )
-	{
-		for ( final TIntObjectIterator< TLongHashSet > it = out.borderNodes.iterator(); it.hasNext(); )
-		{
-			it.advance();
-			final TLongHashSet neighboringBlocks = it.value();
-
-			final long r = map[ out.dj.findRoot( it.key() ) ];
-			borderNodeRoots.put( map[ it.key() ], r );
-
-			if ( !borderNodes.contains( r ) )
-				borderNodes.put( r, new TLongHashSet() );
-			final TLongHashSet hs = borderNodes.get( r );
-			for ( final TLongIterator neighborIt = neighboringBlocks.iterator(); neighborIt.hasNext(); )
-			{
-				final int br = djBlock.findRoot( ( int ) neighborIt.next() );
-				if ( br != blockRoot )
-					hs.add( br );
-			}
-
-		}
-	}
+//	public static void remapBorderNodes( final MergeBlocOut out, final long[] map, final DisjointSets djBlock, final long blockRoot, final TLongObjectHashMap< TLongHashSet > borderNodes, final TLongLongHashMap borderNodeRoots )
+//	{
+//		for ( final TIntObjectIterator< TLongHashSet > it = out.borderNodes.iterator(); it.hasNext(); )
+//		{
+//			it.advance();
+//			final TLongHashSet neighboringBlocks = it.value();
+//
+//			final long r = map[ out.dj.findRoot( it.key() ) ];
+//			borderNodeRoots.put( map[ it.key() ], r );
+//
+//			if ( !borderNodes.contains( r ) )
+//				borderNodes.put( r, new TLongHashSet() );
+//			final TLongHashSet hs = borderNodes.get( r );
+//			for ( final TLongIterator neighborIt = neighboringBlocks.iterator(); neighborIt.hasNext(); )
+//			{
+//				final int br = djBlock.findRoot( ( int ) neighborIt.next() );
+//				if ( br != blockRoot )
+//					hs.add( br );
+//			}
+//
+//		}
+//	}
 
 }

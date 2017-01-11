@@ -79,7 +79,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		final int[] cellSize = new int[] { 300, 300, 2 };
 		final int[] cellSizeLabels = Util.dropLast( cellSize );
-		final int[] dimsIntervalInt = new int[] { 300, 300, 2 };
+		final int[] dimsIntervalInt = new int[] { 100, 100, 2 };
 		final long[] dimsInterval = Arrays.stream( dimsIntervalInt ).mapToLong( i -> i ).toArray();
 		final int[] dimsIntervalIntNoChannels = Util.dropLast( dimsIntervalInt );
 		final long[] dimsIntervalNoChannels = Util.dropLast( dimsInterval );
@@ -164,7 +164,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			}
 		}
 
-		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[*]" ).set( "spark.driver.maxResultSize", "4g" );
+		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[1]" ).set( "spark.driver.maxResultSize", "4g" );
 		final JavaSparkContext sc = new JavaSparkContext( conf );
 		Logger.getRootLogger().setLevel( Level.ERROR );
 
@@ -302,6 +302,18 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final DisjointSetsHashMap mergeUnionFind = new DisjointSetsHashMap();
 
 		images.add( labelsTarget );
+
+		{
+			final TLongIntHashMap cm = new TLongIntHashMap();
+			final Random rand = new Random( 100 );
+//			BdvFunctions.show( Converters.convert( ( RandomAccessibleInterval< LongType > ) labelsTarget, ( s, t ) -> {
+//				final long ss = s.get();
+//				if ( !cm.contains( ss ) )
+//					cm.put( ss, rand.nextInt() );
+//				t.set( cm.get( ss ) );
+//			}, new ARGBType() ), "blub0" );
+		}
+
 		final RegionMergingArrayBased.Visitor rmVisitor = ( mergedEdges, parents ) -> {
 
 			final DisjointSets dj = new DisjointSets( parents, new int[ parents.length ], parents.length );
@@ -324,6 +336,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			final JavaPairRDD< HashableLongArray, Tuple2< TLongArrayList, long[] > > mergesForEachBlock = mergesAndMapping
 					.flatMapToPair( t -> {
 						final TLongArrayList affectedChildren = rcmBC.value().get( t._1() );
+						System.out.println( t._1() + " " + affectedChildren + " " + rcmBC.value() );
 						final IterableWithConstant< Long, Tuple2< TLongArrayList, long[] > > iterable =
 								new IterableWithConstant<>( Arrays.asList( ArrayUtils.toObject( affectedChildren.toArray() ) ), t._2() );
 						return iterable;
@@ -369,11 +382,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 						}
 
 						for ( int i = 0; i < dataArray.length; ++i )
-						{
-							final long bef = dataArray[ i ];
 							dataArray[ i ] = djBlock.findRoot( dataArray[ i ] );
-//							System.out.println( bef + " " + dataArray[ i ] );
-						}
 
 						return new Tuple2<>( t._1(), dataArray );
 					} );
@@ -393,6 +402,14 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 //					System.out.println( p.getA() );
 			}
 			images.add( img );
+//			final TLongIntHashMap cm = new TLongIntHashMap();
+//			final Random rand = new Random( 100 );
+//			BdvFunctions.show( Converters.convert( ( RandomAccessibleInterval< LongType > ) img, ( s, t ) -> {
+//				final long ss = s.get();
+//				if ( !cm.contains( ss ) )
+//					cm.put( ss, rand.nextInt() );
+//				t.set( cm.get( ss ) );
+//			}, new ARGBType() ), "blub" );
 
 //			final Img< LongType > blockImg = labelsTarget.factory().create( blockImages.get( 0 ), new LongType() );
 //			for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( blockImages.get( blockImages.size() - 1 ), blockImg ), blockImg ) )

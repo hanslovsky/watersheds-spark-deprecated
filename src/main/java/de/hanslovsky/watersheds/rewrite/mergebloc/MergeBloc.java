@@ -76,9 +76,13 @@ public class MergeBloc implements PairFunction< Tuple2< Long, MergeBlocData >, T
 		{
 			e.setIndex( i );
 			final double w = e.weight();
+			if ( e.from() == e.to() )
+				System.out.println( "WARUM SIND FROM UND TO GLEICH? " + e );
 			if ( w > 0.0 )
 				queue.push( i, w );
 		}
+
+		System.out.println( e.size() + " edges" );
 
 		while ( !queue.empty() )
 		{

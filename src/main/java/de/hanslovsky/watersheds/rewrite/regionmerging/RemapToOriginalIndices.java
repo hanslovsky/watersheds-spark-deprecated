@@ -5,9 +5,8 @@ import org.apache.spark.broadcast.Broadcast;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocOut;
+import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TLongLongHashMap;
-import gnu.trove.map.hash.TLongObjectHashMap;
-import gnu.trove.set.hash.TLongHashSet;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import scala.Tuple2;
 
@@ -32,23 +31,31 @@ public class RemapToOriginalIndices implements PairFunction< Tuple2< Long, Tuple
 		final int root = t._2()._1().intValue();
 		final long[] map = out.indexNodeMapping;
 
+		final int[] p = parentsBC.getValue();
+		final DisjointSets djBlock = new DisjointSets( p, new int[ p.length ], setCount );
+
 		// map back edges
 		Util.remapEdges( new Edge( out.edges ), out, map );
 
 		// map back counts
-		final TLongLongHashMap countsInBlock = Util.remapCounts( out, map );
+		final TLongLongHashMap countsInBlock = Util.remapCounts( out, map, djBlock, root );
+//		if ( countsInBlock.contains( 5668 ) )
+		for ( int i = 0; i < map.length; ++i )
+			if ( map[ i ] == 5668 )
+				System.out.println( "Block " + root + " (" + t._1() + ") contains " + 5668 + " " + countsInBlock.contains( 5668 ) + " " + out.counts[ i ] );
 
-		final int[] p = parentsBC.getValue();
-		final DisjointSets djBlock = new DisjointSets( p, new int[ p.length ], setCount );
 		// map back outsideNodes
 		final TLongLongHashMap outsideNodes = Util.remapOutsideNodes( out, djBlock, root, map );
 
-		// map back borderNodes
-		final TLongObjectHashMap< TLongHashSet > borderNodes = new TLongObjectHashMap<>();
-		final TLongLongHashMap borderNodeRoots = new TLongLongHashMap();
-		Util.remapBorderNodes( out, map, djBlock, root, borderNodes, borderNodeRoots );
+		final TLongArrayList merges = new TLongArrayList();
+		for ( int i = 0; i < out.merges.size(); i += 4 )
+		{
+			merges.add( map[ ( int ) out.merges.get( i ) ] );
+			merges.add( map[ ( int ) out.merges.get( i + 1 ) ] );
+		}
 
-		return new Tuple2< Long, RemappedData >( ( long ) root, new RemappedData( out.edges, countsInBlock, outsideNodes, borderNodes, borderNodeRoots ) );
+		System.out.println( "Remapping at root: " + root );
+		return new Tuple2< Long, RemappedData >( ( long ) root, new RemappedData( out.edges, countsInBlock, outsideNodes, merges ) );
 	}
 
 }

@@ -1,6 +1,7 @@
 package de.hanslovsky.watersheds.rewrite.regionmerging;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.apache.spark.api.java.JavaPairRDD;
@@ -47,7 +48,7 @@ public class RegionMergingArrayBased
 	public JavaPairRDD< Long, MergeBlocIn > run( final JavaSparkContext sc, final JavaPairRDD< Long, RegionMergingInput > rdd, final double threshold, final Visitor visitor )
 	{
 
-		JavaPairRDD< Long, MergeBlocIn > zeroBased = rdd.mapToPair( new ToZeroBasedIndexing<>() );
+		JavaPairRDD< Long, MergeBlocIn > zeroBased = rdd.mapToPair( new ToZeroBasedIndexing<>( sc.broadcast( edgeMerger ) ) );
 
 		final JavaPairRDD< Long, long[] > mapping = rdd.mapToPair( t -> {
 			return new Tuple2<>( t._1(), Util.inverse( t._2().nodeIndexMapping ) );
@@ -56,6 +57,8 @@ public class RegionMergingArrayBased
 		final int nBlocks = ( int ) rdd.count();
 
 		final int[] parents = new int[ nBlocks ];
+		for ( int i = 0; i < parents.length; ++i )
+			parents[i] = i;
 		final DisjointSets dj = new DisjointSets( parents, new int[ nBlocks ], nBlocks );
 
 		for ( boolean hasChanged = true; hasChanged; )
@@ -66,34 +69,17 @@ public class RegionMergingArrayBased
 					.mapToPair( new MergeBlocArrayBased( edgeMerger, edgeWeight, mergerService, threshold ) ).cache();
 
 			System.out.println( "Visiting" );
+			System.out.println( Arrays.toString( parents ) );
 			visitor.visit( mergedEdges, parents );
 			System.out.println( "Done visiting" );
 
 			hasChanged = mergedEdges.values().filter( t -> t._2().hasChanged ).count() > 0;
 
-//			System.out.println( "Sending back merges" );
-//			final Broadcast< MergerService > mergeServiceBC = sc.broadcast( mergerService );
-//			mergedEdges.join( mapping ).map( t -> {
-//				final long[] map = t._2()._2();
-//
-//				final TLongArrayList merges = t._2()._1()._2().merges;
-//
-//				final MergerService mergerService = mergeServiceBC.getValue();
-//
-//				System.out.println( t._1() + ": Sending " + merges.size() / 4 + " merges." );
-//				for ( int i = 0; i < merges.size(); i += 4 )
-//					mergerService.addMerge( map[ (int)merges.get( i ) ], map[(int)merges.get( i+1 )], map[(int)merges.get( i+2)], Double.longBitsToDouble( merges.get( i+3 ) ) );
-//
-//				mergerService.finalize();
-//
-//				return true;
-//			} ).count();
-
 			final long[] counts = new long[ nBlocks ];
 
 			final List< Tuple2< Long, Long > > joins = mergedEdges.map( t -> new Tuple2<>( t._1(), t._2()._1() ) ).collect();
 
-			System.out.println( rdd.keys().collect() );
+			System.out.println( "Keys: " + mergedEdges.keys().collect() );
 
 			for ( final Tuple2< Long, Long > join : joins )
 			{
@@ -138,15 +124,18 @@ public class RegionMergingArrayBased
 				for ( int i = 0; it.hasNext(); ++i )
 				{
 					it.advance();
+//					System.out.println( it.key() + " " + i + " " + it.value() );
 					nodeIndexMapping.put( it.key(), i );
 				}
 
-				return new Tuple2<>( key, new RegionMergingInput( nodeIndexMapping.size(), nodeIndexMapping, data.counts, data.outsideNodes, data.edges, data.borderNodes ) );
+				return new Tuple2<>( key, new RegionMergingInput( nodeIndexMapping.size(), nodeIndexMapping, data.counts, data.outsideNodes, data.edges) );
 			} );
 
 			zeroBased = backToInput
-					.mapToPair( new GenerateNodeIndexMapping<>() )
-					.mapToPair( new ToZeroBasedIndexing<>() );
+//					.mapToPair( new GenerateNodeIndexMapping<>() )
+					.mapToPair( new ToZeroBasedIndexing<>( sc.broadcast( edgeMerger ) ) );
+//			if ( zeroBased.count() == 1 )
+//				break;
 		}
 
 		return zeroBased;
@@ -161,7 +150,7 @@ public class RegionMergingArrayBased
 			final TLongIterator cIt = bd.counts.keySet().iterator();
 			for ( int i = 0; cIt.hasNext(); ++i )
 				nodeIndexMapping.put( cIt.next(), i );
-			return new Tuple2<>( t._1(), new RegionMergingInput( bd.counts.size(), nodeIndexMapping, bd.counts, bd.outsideNodes, bd.edges, bd.borderNodes ) );
+			return new Tuple2<>( t._1(), new RegionMergingInput( bd.counts.size(), nodeIndexMapping, bd.counts, bd.outsideNodes, bd.edges ) );
 		});
 	}
 

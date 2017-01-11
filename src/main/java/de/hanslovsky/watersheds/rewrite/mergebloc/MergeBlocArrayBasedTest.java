@@ -17,7 +17,6 @@ import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TIntIntHashMap;
 import gnu.trove.map.hash.TIntLongHashMap;
-import gnu.trove.map.hash.TIntObjectHashMap;
 import gnu.trove.map.hash.TLongIntHashMap;
 import net.imglib2.Cursor;
 import net.imglib2.RandomAccess;
@@ -84,7 +83,7 @@ public class MergeBlocArrayBasedTest
 				cmap.put( lb, rng.nextInt() );
 		}
 
-		final UndirectedGraphArrayBased g = new UndirectedGraphArrayBased( nNodes );
+		final UndirectedGraphArrayBased g = new UndirectedGraphArrayBased( nNodes, new EdgeMerger.MAX_AFFINITY_MERGER() );
 		final TDoubleArrayList edges = g.edges();
 		final TIntIntHashMap[] nodeEdgeMap = g.nodeEdgeMap();
 		final Edge edge = new Edge( edges );
@@ -163,7 +162,7 @@ public class MergeBlocArrayBasedTest
 		System.out.println( "Start edge merging" );
 		final long t0 = System.currentTimeMillis();
 		final MergeBlocOut out = mb.call(
-				new Tuple2<>( 2l, new MergeBlocIn( g, counts, new TIntLongHashMap(), new TIntObjectHashMap<>(), new long[ 0 ] ) ) )._2()._2();
+				new Tuple2<>( 2l, new MergeBlocIn( g, counts, new TIntLongHashMap(), new long[ 0 ] ) ) )._2()._2();
 		final long t1 = System.currentTimeMillis();
 		System.out.println( "Done Edge merging: " + ( t1 - t0 ) + "ms" );
 

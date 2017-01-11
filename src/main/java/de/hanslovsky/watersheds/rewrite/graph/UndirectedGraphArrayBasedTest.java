@@ -35,7 +35,7 @@ public class UndirectedGraphArrayBasedTest
 			mappedE.add( e.weight(), e.affinity(), nodeIndexMapping.get( e.from() ), nodeIndexMapping.get( e.to() ), e.multiplicity() );
 		}
 
-		final UndirectedGraphArrayBased g = new UndirectedGraphArrayBased( indexNodeMapping.length, mappedEdges );
+		final UndirectedGraphArrayBased g = new UndirectedGraphArrayBased( indexNodeMapping.length, mappedEdges, new EdgeMerger.MAX_AFFINITY_MERGER() );
 
 		for ( int i = 0; i < e.size(); ++i )
 		{

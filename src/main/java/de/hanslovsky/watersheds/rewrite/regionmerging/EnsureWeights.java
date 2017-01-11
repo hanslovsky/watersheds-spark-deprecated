@@ -26,7 +26,9 @@ public class EnsureWeights implements PairFunction< Tuple2< Long, MergeBlocIn >,
 		for ( int i = 0; i < e.size(); ++i )
 		{
 			e.setIndex( i );
-			if ( Double.isNaN( e.weight() ) )
+			if ( e.from() == e.to() )
+				e.weight( -1.0d );
+			else if ( Double.isNaN( e.weight() ) )
 				e.weight( edgeWeight.weight( e.affinity(), counts[ ( int ) e.from() ], counts[ ( int ) e.to() ] ) );
 		}
 		return new Tuple2<>( t._1(), t._2() );
