@@ -490,13 +490,17 @@ public class PrepareRegionMergingCutBlocks
 		final TLongIntHashMap localEdges = nodeEdgeMap.get( label );
 		if ( !localEdges.contains( otherLabel ) )
 		{
+			assert !nodeEdgeMap.get( otherLabel ).contains( label );
 			final int index = e.add( Double.NaN, aff, label, otherLabel, 1 );
+			localEdges.put( otherLabel, index );
+			nodeEdgeMap.get( otherLabel ).put( label, index );
 			return index;
 		}
 //			return g.addEdge( Double.NaN, aff, label, otherLabel, 1 );
 		else
 		{
 			final int index = localEdges.get( otherLabel );
+			assert nodeEdgeMap.get( otherLabel ).contains( label ) &&nodeEdgeMap.get( otherLabel ).get( label ) == index;
 			e.setIndex( index );
 			dummy.affinity( aff );
 			dummy.from( label );
