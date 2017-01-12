@@ -176,7 +176,7 @@ public class VisualizationVisitor implements Visitor
 		for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( blockImages.get( blockImages.size() - 1 ), blockImg ), blockImg ) )
 			p.getB().set( dj.findRoot( p.getA().getInteger() ) );
 		blockImages.add( blockImg );
-		coloredBlockHistoryBdv = Util.replaceSourceAndReuseConverter( coloredHistoryBdv, Views.stack( blockImg ), blockConv, Util.bdvOptions( blockImg ) );
+		coloredBlockHistoryBdv = Util.replaceSourceAndReuseConverter( coloredBlockHistoryBdv, Views.stack( blockImages ), blockConv, Util.bdvOptions( blockImg ) );
 	}
 
 }

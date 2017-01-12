@@ -90,6 +90,11 @@ public class Edge implements Serializable
 		return index;
 	}
 
+	public int add( final Edge e )
+	{
+		return add( e.weight(), e.affinity(), e.from(), e.to(), e.multiplicity() );
+	}
+
 	public int remove()
 	{
 		data.remove( k, SIZE );

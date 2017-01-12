@@ -47,6 +47,9 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 		{
 			e.setIndex( i );
 			final double w = e.weight();
+			final long from = in.indexNodeMapping[ ( int ) e.from() ], to = in.indexNodeMapping[ ( int ) e.to() ];
+			if ( from == 7085 || to == 7085 )
+				System.out.println( "MergeBloc: " + e + " " + from + " " + to );
 			if ( w > 0.0 )
 				queue.push( i, w );
 		}
@@ -78,7 +81,12 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 			else if ( Double.isNaN( w ) )
 			{
-				final double weight = edgeWeight.weight( e.affinity(), in.counts[ dj.findRoot( ( int ) e.from() ) ], in.counts[ dj.findRoot( ( int ) e.to() ) ] );
+				final int f = dj.findRoot( ( int ) e.from() );
+				final int to = dj.findRoot( ( int ) e.to() );
+				final double weight = edgeWeight.weight( e.affinity(), in.counts[ f ], in.counts[ to ] );
+				// TODO need only weight update?
+				e.from( f );
+				e.to( to );
 				e.weight( weight );
 				queue.push( next, weight );
 				continue;
@@ -126,13 +134,32 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 		}
 
+		final TDoubleArrayList returnEdges = new TDoubleArrayList();
+		final Edge rE = new Edge( returnEdges );
+		for ( int i = 0; i < e.size(); ++i )
+		{
+			e.setIndex( i );
+			if ( Double.isNaN( e.weight() ) || e.weight() >= 0.0 )
+			{
+				e.from( dj.findRoot( (int ) e.from() ) );
+				e.to( dj.findRoot( (int ) e.to() ) );
+				rE.add( e );
+			}
+			else
+				continue;
+			final long from = in.indexNodeMapping[ ( int ) e.from() ], to = in.indexNodeMapping[ ( int ) e.to() ];
+			if ( from == 7085 || to == 7085 )
+				System.out.println( "MergeBlocOut: " + e + " " + from + " " + to );
+
+		}
+
 		return new Tuple2<>( t._1(), new Tuple2<>(
 				pointingOutside, new MergeBlocOut(
 						in.counts,
 						in.outsideNodes,
 						dj,
 						merges.size() > 0 || pointingOutside != t._1().longValue(),
-						in.g.edges(),
+						returnEdges,
 						merges,
 						in.indexNodeMapping ) ) );
 	}

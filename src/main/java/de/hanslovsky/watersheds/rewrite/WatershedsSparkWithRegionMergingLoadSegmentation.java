@@ -55,11 +55,12 @@ import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.converter.Converters;
 import net.imglib2.img.Img;
 import net.imglib2.img.cell.CellImg;
-import net.imglib2.type.numeric.integer.ByteType;
+import net.imglib2.type.numeric.ARGBType;
 import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.Intervals;
 import net.imglib2.util.Pair;
+import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
 import net.imglib2.view.composite.CompositeIntervalView;
 import net.imglib2.view.composite.RealComposite;
@@ -94,6 +95,14 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final RandomAccessibleInterval< FloatType > input = Views.permuteCoordinates( data, perm, data.numDimensions() - 1 );
 		final CompositeIntervalView< FloatType, RealComposite< FloatType > > affs = Views.collapseReal( input );
 		final long[] dimsNoChannels = Intervals.dimensionsAsLongArray( affs );
+
+		// anything that points outside must be nan
+		for ( int d = 0; d < affs.numDimensions(); ++d )
+		{
+			final IntervalView< RealComposite< FloatType > > hs = Views.hyperSlice( affs, d, affs.max( d ) );
+			for ( final RealComposite< FloatType > a : hs )
+				a.get( d ).set( Float.NaN );
+		}
 
 		assert Arrays.equals( Util.dropLast( dims ), dimsNoChannels ): Arrays.toString( dims ) + " " + Arrays.toString( dimsNoChannels );
 
@@ -242,8 +251,8 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 //		BdvFunctions.show( Util.toColor( Views.stack( blockImages ), blockColors ), "colored block history 2", Util.bdvOptions( labelsTarget ) );
 
 		BdvFunctions.show( Converters.convert( Views.stack( images ), ( s, t ) -> {
-			t.set( ( byte ) ( s.get() == 6598 ? 127 : 0 ) );
-		}, new ByteType() ), "6598" );
+			t.set( s.get() == 6535 || s.get() == 388 ? 255 << 8 : 255 << 16 );
+		}, new ARGBType() ), "7181", Util.bdvOptions( images.get( 0 ) ) );
 
 		sc.close();
 

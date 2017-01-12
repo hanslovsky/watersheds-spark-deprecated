@@ -1,9 +1,11 @@
 package de.hanslovsky.watersheds.rewrite.regionmerging;
 
+import java.io.Serializable;
+
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TLongLongHashMap;
 
-public class OriginalLabelData
+public class OriginalLabelData implements Serializable
 {
 
 	public final TDoubleArrayList edges;

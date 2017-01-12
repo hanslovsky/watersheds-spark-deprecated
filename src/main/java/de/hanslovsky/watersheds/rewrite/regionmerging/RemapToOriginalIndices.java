@@ -5,6 +5,7 @@ import org.apache.spark.broadcast.Broadcast;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocOut;
+import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TLongLongHashMap;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
@@ -34,8 +35,19 @@ public class RemapToOriginalIndices implements PairFunction< Tuple2< Long, Tuple
 		final int[] p = parentsBC.getValue();
 		final DisjointSets djBlock = new DisjointSets( p, new int[ p.length ], setCount );
 
+		final TDoubleArrayList edges = new TDoubleArrayList( out.edges );
+
 		// map back edges
-		Util.remapEdges( new Edge( out.edges ), out, map );
+		Util.remapEdges( new Edge( edges ), out, map );
+		{
+			final Edge e = new Edge( edges );
+			for ( int i = 0; i < e.size(); ++i )
+			{
+				e.setIndex( i );
+				if ( e.from() == 7085 || e.to() == 7085 )
+					System.out.println( "Remap: " + t._1() + " " + e );
+			}
+		}
 
 		// map back counts
 		final TLongLongHashMap countsInBlock = Util.remapCounts( out, map, djBlock, root );
@@ -50,7 +62,7 @@ public class RemapToOriginalIndices implements PairFunction< Tuple2< Long, Tuple
 			merges.add( map[ ( int ) out.merges.get( i + 1 ) ] );
 		}
 
-		return new Tuple2< Long, RemappedData >( ( long ) root, new RemappedData( out.edges, countsInBlock, outsideNodes, merges ) );
+		return new Tuple2< Long, RemappedData >( ( long ) root, new RemappedData( edges, countsInBlock, outsideNodes, merges ) );
 	}
 
 }
