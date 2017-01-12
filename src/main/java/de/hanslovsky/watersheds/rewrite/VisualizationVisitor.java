@@ -10,9 +10,7 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.broadcast.Broadcast;
 
-import bdv.util.Bdv;
-import bdv.util.BdvFunctions;
-import bdv.util.BdvOptions;
+import bdv.util.BdvStackSource;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocOut;
 import de.hanslovsky.watersheds.rewrite.regionmerging.RegionMergingArrayBased.Visitor;
 import de.hanslovsky.watersheds.rewrite.util.DisjointSetsHashMap;
@@ -20,16 +18,17 @@ import de.hanslovsky.watersheds.rewrite.util.HashableLongArray;
 import de.hanslovsky.watersheds.rewrite.util.IterableWithConstant;
 import de.hanslovsky.watersheds.rewrite.util.Util;
 import gnu.trove.list.array.TLongArrayList;
-import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import net.imglib2.FinalInterval;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
+import net.imglib2.converter.Converter;
 import net.imglib2.img.Img;
 import net.imglib2.img.ImgFactory;
 import net.imglib2.img.array.ArrayImg;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.basictypeaccess.array.LongArray;
+import net.imglib2.type.numeric.ARGBType;
 import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.util.Pair;
 import net.imglib2.view.IntervalView;
@@ -51,15 +50,15 @@ public class VisualizationVisitor implements Visitor
 
 	private final List< RandomAccessibleInterval< LongType > > blockImages;
 
-	private final TLongIntHashMap colorMap;
+	private BdvStackSource< LongType > coloredHistoryBdv;
 
-	private final TLongIntHashMap blockColors;
-
-	private final Bdv coloredHistoryBdv;
-
-	private final Bdv coloredBlockHistoryBdv;
+	private BdvStackSource< LongType > coloredBlockHistoryBdv;
 
 	private final ImgFactory< LongType > factory;
+
+	private final Converter< LongType, ARGBType > conv;
+
+	private final Converter< LongType, ARGBType > blockConv;
 
 	public VisualizationVisitor(
 			final JavaSparkContext sc,
@@ -68,10 +67,8 @@ public class VisualizationVisitor implements Visitor
 			final ArrayList< JavaPairRDD< HashableLongArray, long[] > > labelBlocks,
 			final List< RandomAccessibleInterval< LongType > > images,
 			final List< RandomAccessibleInterval< LongType > > blockImages,
-			final TLongIntHashMap colorMap,
-			final TLongIntHashMap blockColors,
-			final Bdv coloredHistoryBdv,
-			final Bdv coloredBlockHistoryBdv,
+			final BdvStackSource< LongType > coloredHistoryBdv,
+			final BdvStackSource< LongType > coloredBlockHistoryBdv,
 			final ImgFactory< LongType > factory )
 	{
 		super();
@@ -81,11 +78,11 @@ public class VisualizationVisitor implements Visitor
 		this.labelBlocks = labelBlocks;
 		this.images = images;
 		this.blockImages = blockImages;
-		this.colorMap = colorMap;
-		this.blockColors = blockColors;
 		this.coloredHistoryBdv = coloredHistoryBdv;
 		this.coloredBlockHistoryBdv = coloredBlockHistoryBdv;
 		this.factory = factory;
+		this.conv = ( Converter< LongType, ARGBType > ) coloredHistoryBdv.getBdvHandle().getViewerPanel().getState().getSources().get( 0 ).getConverter();
+		this.blockConv = ( Converter< LongType, ARGBType > ) coloredBlockHistoryBdv.getBdvHandle().getViewerPanel().getState().getSources().get( 0 ).getConverter();
 	}
 
 	@Override public void visit( final JavaPairRDD< Long, Tuple2< Long, MergeBlocOut > > mergedEdges, final int[] parents )
@@ -161,6 +158,8 @@ public class VisualizationVisitor implements Visitor
 
 		current.count();
 
+		labelBlocks.remove( 0 ).unpersist();
+
 		final Img< LongType > img = factory.create( images.get( 0 ), new LongType() );
 		for ( final Tuple2< HashableLongArray, long[] > currentData : current.collect() )
 		{
@@ -171,13 +170,13 @@ public class VisualizationVisitor implements Visitor
 				p.getB().set( p.getA() );
 		}
 		images.add( img );
-		BdvFunctions.show( Util.toColor( img, colorMap ), "colored history", BdvOptions.options().addTo( coloredHistoryBdv ) );
+		coloredHistoryBdv = Util.replaceSourceAndReuseConverter( coloredHistoryBdv, Views.stack( images ), conv, Util.bdvOptions( img ) );
 
 		final Img< LongType > blockImg = factory.create( blockImages.get( 0 ), new LongType() );
 		for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( blockImages.get( blockImages.size() - 1 ), blockImg ), blockImg ) )
 			p.getB().set( dj.findRoot( p.getA().getInteger() ) );
 		blockImages.add( blockImg );
-		BdvFunctions.show( Util.toColor( blockImg, blockColors ), "colored block history", BdvOptions.options().addTo( coloredBlockHistoryBdv ) );
+		coloredBlockHistoryBdv = Util.replaceSourceAndReuseConverter( coloredHistoryBdv, Views.stack( blockImg ), blockConv, Util.bdvOptions( blockImg ) );
 	}
 
 }

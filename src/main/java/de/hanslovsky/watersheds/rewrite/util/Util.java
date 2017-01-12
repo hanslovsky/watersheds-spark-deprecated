@@ -9,6 +9,9 @@ import bdv.img.h5.H5Utils;
 import bdv.util.BdvFunctions;
 import bdv.util.BdvOptions;
 import bdv.util.BdvStackSource;
+import bdv.viewer.Source;
+import bdv.viewer.SourceAndConverter;
+import bdv.viewer.ViewerPanel;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
 import net.imglib2.Dimensions;
@@ -271,6 +274,27 @@ public class Util
 			counts.put( ll, counts.contains( ll ) ? counts.get( ll ) + 1 : 1 );
 		}
 		return counts;
+	}
+
+	public static < T > void replaceConverter( final BdvStackSource< T > bdv, final int sourceIndex, final Converter< T, ARGBType > converter )
+	{
+		replaceConverter( bdv.getBdvHandle().getViewerPanel(), bdv.getSources().get( sourceIndex ).getSpimSource(), converter );
+	}
+
+	public static < T > void replaceConverter( final ViewerPanel viewer, final Source< T > source, final Converter< T, ARGBType > converter )
+	{
+		viewer.removeSource( source );
+		viewer.addSource( new SourceAndConverter<>( source, converter ) );
+	}
+
+	// only makes sense for single source?
+	public static < T > BdvStackSource< T > replaceSourceAndReuseConverter( BdvStackSource< T > bdv, final RandomAccessibleInterval< T > replacement, final Converter< T, ARGBType > conv, final BdvOptions options )
+	{
+		final ViewerPanel viewer = bdv.getBdvHandle().getViewerPanel();
+		viewer.removeSource( bdv.getSources().get( 0 ).getSpimSource() );
+		bdv = BdvFunctions.show( replacement, "colored history", options.addTo( bdv ) );
+		Util.replaceConverter( bdv, 0, conv );
+		return bdv;
 	}
 
 }

@@ -1,8 +1,10 @@
 package de.hanslovsky.watersheds.rewrite.util;
 
+import java.io.Serializable;
+
 import gnu.trove.map.hash.TLongLongHashMap;
 
-public class DisjointSetsHashMap
+public class DisjointSetsHashMap implements Serializable
 {
 	private final TLongLongHashMap parents;
 

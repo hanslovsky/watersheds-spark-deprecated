@@ -41,7 +41,7 @@ public class RegionMergingArrayBased
 		this.edgeWeight = edgeWeight;
 	}
 
-	public JavaPairRDD< Long, MergeBlocIn > run( final JavaSparkContext sc, final JavaPairRDD< Long, RegionMergingInput > rdd, final double threshold, final Visitor visitor )
+	public JavaPairRDD< Long, MergeBlocIn > run( final JavaSparkContext sc, final JavaPairRDD< Long, RegionMergingInput > rdd, final double maxThreshold, final Visitor visitor, final long nOriginalBlocks, final double tolerance )
 	{
 
 		JavaPairRDD< Long, MergeBlocIn > zeroBased = rdd.mapToPair( new ToZeroBasedIndexing<>( sc.broadcast( edgeMerger ) ) );
@@ -51,7 +51,7 @@ public class RegionMergingArrayBased
 			return new Tuple2<>( t._1(), Util.inverse( t._2().nodeIndexMapping ) );
 		});
 
-		final int nBlocks = ( int ) rdd.count();
+		final int nBlocks = ( int ) nOriginalBlocks;// rdd.count();
 
 		final int[] parents = new int[ nBlocks ];
 		for ( int i = 0; i < parents.length; ++i )
@@ -61,8 +61,19 @@ public class RegionMergingArrayBased
 		for ( boolean hasChanged = true; hasChanged; )
 		{
 
-			final JavaPairRDD< Long, Tuple2< Long, MergeBlocOut > > mergedEdges = zeroBased
-					.mapToPair( new EnsureWeights( edgeWeight ) )
+			final JavaPairRDD< Long, Tuple2< MergeBlocIn, Double > > ensuredWeights = zeroBased.mapToPair( new EnsureWeights( edgeWeight ) ).cache();
+
+			final long remainingBlocks = ensuredWeights.count();
+
+			// why is filter necessary?
+			final double minimalMaximumWeight = ensuredWeights.map( t -> t._2()._2() ).filter( d -> d > 0 ).treeReduce( ( d1, d2 ) -> Math.min( d1, d2 ) );
+
+			final double threshold = remainingBlocks == 1 ? maxThreshold : Math.min( maxThreshold, tolerance * minimalMaximumWeight );
+
+			System.out.println( "Merging everything up to " + threshold + " (" + maxThreshold + ")" );
+
+			final JavaPairRDD< Long, Tuple2< Long, MergeBlocOut > > mergedEdges = ensuredWeights
+					.mapToPair( t -> new Tuple2<>( t._1(), t._2()._1() ) )
 					.mapToPair( new MergeBlocArrayBased( edgeMerger, edgeWeight, threshold ) ).cache();
 
 			System.out.println( "Visiting" );
