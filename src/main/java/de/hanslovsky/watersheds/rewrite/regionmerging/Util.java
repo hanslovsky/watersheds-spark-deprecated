@@ -27,7 +27,13 @@ public class Util
 		for ( int i = 0; i < e.size(); ++i )
 		{
 			e.setIndex( i );
-			m.add( e.weight(), e.affinity(), nodeIndexMapping.get( e.from() ), nodeIndexMapping.get( e.to() ), e.multiplicity() );
+			final long f = e.from();
+			final long t = e.to();
+			// TODO Why is this necessary?
+			if ( !nodeIndexMapping.contains( f ) || !nodeIndexMapping.contains( t ) )
+				e.weight( -1.0d );
+			else
+				m.add( e.weight(), e.affinity(), nodeIndexMapping.get( e.from() ), nodeIndexMapping.get( e.to() ), e.multiplicity() );
 		}
 
 		return mappedEdges;

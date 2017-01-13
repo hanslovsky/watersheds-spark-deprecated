@@ -39,15 +39,6 @@ public class RemapToOriginalIndices implements PairFunction< Tuple2< Long, Tuple
 
 		// map back edges
 		Util.remapEdges( new Edge( edges ), out, map );
-		{
-			final Edge e = new Edge( edges );
-			for ( int i = 0; i < e.size(); ++i )
-			{
-				e.setIndex( i );
-				if ( e.from() == 7085 || e.to() == 7085 )
-					System.out.println( "Remap: " + t._1() + " " + e );
-			}
-		}
 
 		// map back counts
 		final TLongLongHashMap countsInBlock = Util.remapCounts( out, map, djBlock, root );

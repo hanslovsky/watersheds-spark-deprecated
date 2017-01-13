@@ -48,8 +48,6 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 			e.setIndex( i );
 			final double w = e.weight();
 			final long from = in.indexNodeMapping[ ( int ) e.from() ], to = in.indexNodeMapping[ ( int ) e.to() ];
-			if ( from == 7085 || to == 7085 )
-				System.out.println( "MergeBloc: " + e + " " + from + " " + to );
 			if ( w > 0.0 )
 				queue.push( i, w );
 		}
@@ -121,7 +119,6 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 			merges.add( n );
 			merges.add( Double.doubleToLongBits( w ) );
 
-
 			assert c1 > 0 && c2 > 0: "Counts does not contain ids!";
 
 			in.counts[ n == r1 ? r2 : r1 ] = 0;
@@ -147,9 +144,6 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 			}
 			else
 				continue;
-			final long from = in.indexNodeMapping[ ( int ) e.from() ], to = in.indexNodeMapping[ ( int ) e.to() ];
-			if ( from == 7085 || to == 7085 )
-				System.out.println( "MergeBlocOut: " + e + " " + from + " " + to );
 
 		}
 

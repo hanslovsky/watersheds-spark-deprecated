@@ -44,18 +44,6 @@ public class ReduceBlock implements PairFunction< Tuple2< Long, ArrayList< Remap
 				final long from = dj.findRoot( e.from() );
 				final long to = dj.findRoot( e.to() );
 				ae.add( e.weight(), e.affinity(), from, to, e.multiplicity() );
-				if ( e.from() == 7085 || e.to() == 7085 )
-					System.out.println( "Reducing and rooting: " + key + " " + e + " " + from + " " + to  );
-			}
-		}
-
-		{
-			final Edge e = new Edge( allEdges );
-			for ( int i = 0; i < e.size(); ++i )
-			{
-				e.setIndex( i );
-				if ( e.from() == 7085 || e.to() == 7085 )
-					System.out.println( "Reducing: " + key + " " + e );
 			}
 		}
 

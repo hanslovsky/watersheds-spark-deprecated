@@ -9,7 +9,6 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.broadcast.Broadcast;
 
-import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocArrayBased;
@@ -45,20 +44,6 @@ public class RegionMergingArrayBased
 
 	public JavaPairRDD< Long, MergeBlocIn > run( final JavaSparkContext sc, final JavaPairRDD< Long, RegionMergingInput > rdd, final double maxThreshold, final Visitor visitor, final long nOriginalBlocks, final double tolerance )
 	{
-		{
-			for ( final Tuple2< Long, RegionMergingInput > blub : rdd.filter( t -> t._2().counts.contains( 7085 ) ).collect() )
-			{
-				final Edge edge7085 = new Edge( blub._2().edges );
-				System.out.println( blub._1() );
-				for ( int i = 0; i < edge7085.size(); ++i )
-				{
-					edge7085.setIndex( i );
-					if ( edge7085.from() == 7085 || edge7085.to() == 7085 )
-						System.out.println( edge7085 );
-				}
-				System.out.println();
-			}
-		}
 
 		JavaPairRDD< Long, MergeBlocIn > zeroBased = rdd.mapToPair( new ToZeroBasedIndexing<>( sc.broadcast( edgeMerger ) ) );
 		System.out.println( "Starting with " + zeroBased.count() + " blocks." );
@@ -77,23 +62,23 @@ public class RegionMergingArrayBased
 		for ( boolean hasChanged = true; hasChanged; )
 		{
 
-			if ( zeroBased.cache().count() > 0 ) {
-				final List< Tuple2< Long, MergeBlocIn > > zb = zeroBased.filter( t -> {
-					for ( int i = 0; i < t._2().indexNodeMapping.length; ++i )
-						if ( t._2().indexNodeMapping[ i ] == 7085 )
-							return true;
-					return false;
-				}).collect();
-				for ( final Tuple2< Long, MergeBlocIn > z : zb ) {
-					final long[] indexNodeMapping = z._2().indexNodeMapping;
-					final Edge e = new Edge( z._2().g.edges() );
-					for ( int i = 0; i < e.size(); ++i ) {
-						e.setIndex( i );
-						if ( indexNodeMapping[ ( int ) e.from() ] == 7085 || indexNodeMapping[ ( int ) e.to() ] == 7085 )
-							System.out.println( "Input? " + z._1() + " " + e + " " + indexNodeMapping[ (int)e.from() ] + " " + indexNodeMapping[ (int)e.to() ]  );
-					}
-				}
-			}
+//			if ( zeroBased.cache().count() > 0 ) {
+//				final List< Tuple2< Long, MergeBlocIn > > zb = zeroBased.filter( t -> {
+//					for ( int i = 0; i < t._2().indexNodeMapping.length; ++i )
+//						if ( t._2().indexNodeMapping[ i ] == 7085 )
+//							return true;
+//					return false;
+//				}).collect();
+//				for ( final Tuple2< Long, MergeBlocIn > z : zb ) {
+//					final long[] indexNodeMapping = z._2().indexNodeMapping;
+//					final Edge e = new Edge( z._2().g.edges() );
+//					for ( int i = 0; i < e.size(); ++i ) {
+//						e.setIndex( i );
+//						if ( indexNodeMapping[ ( int ) e.from() ] == 7085 || indexNodeMapping[ ( int ) e.to() ] == 7085 )
+//							System.out.println( "Input? " + z._1() + " " + e + " " + indexNodeMapping[ (int)e.from() ] + " " + indexNodeMapping[ (int)e.to() ]  );
+//					}
+//				}
+//			}
 
 			final JavaPairRDD< Long, Tuple2< MergeBlocIn, Double > > ensuredWeights = zeroBased.mapToPair( new EnsureWeights( edgeWeight ) ).cache();
 
@@ -177,18 +162,18 @@ public class RegionMergingArrayBased
 //					} );
 					;
 
-			for ( final Tuple2< Long, OriginalLabelData > blub : reduced.cache().filter( t -> t._2().counts.contains( 7085 ) ).collect() )
-			{
-				final Edge edge7085 = new Edge( blub._2().edges );
-				System.out.println( blub._1() );
-				for ( int i = 0; i < edge7085.size(); ++i )
-				{
-					edge7085.setIndex( i );
-					if ( edge7085.from() == 7085 || edge7085.to() == 7085 )
-						System.out.println( edge7085 );
-				}
-				System.out.println();
-			}
+//			for ( final Tuple2< Long, OriginalLabelData > blub : reduced.cache().filter( t -> t._2().counts.contains( 7085 ) ).collect() )
+//			{
+//				final Edge edge7085 = new Edge( blub._2().edges );
+//				System.out.println( blub._1() );
+//				for ( int i = 0; i < edge7085.size(); ++i )
+//				{
+//					edge7085.setIndex( i );
+//					if ( edge7085.from() == 7085 || edge7085.to() == 7085 )
+//						System.out.println( edge7085 );
+//				}
+//				System.out.println();
+//			}
 
 			final JavaPairRDD< Long, RegionMergingInput > backToInput = reduced.mapToPair( t -> {
 				final Long key = t._1();
