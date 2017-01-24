@@ -344,7 +344,7 @@ public class PrepareRegionMergingCutBlocks
 	public static class FlattenInputs implements PairFlatMapFunction< TLongObjectHashMap< MergeBloc.In >, Long, MergeBloc.In > {
 
 		@Override
-		public Iterable< Tuple2< Long, In > > call( final TLongObjectHashMap< In > t ) throws Exception
+		public Iterator< Tuple2< Long, In > > call( final TLongObjectHashMap< In > t ) throws Exception
 		{
 			final Iterable< Tuple2< Long, In > > it = () -> new Iterator< Tuple2< Long, In > >() {
 
@@ -364,7 +364,7 @@ public class PrepareRegionMergingCutBlocks
 				}
 
 			};
-			return it;
+			return it.iterator();
 		}
 
 	}

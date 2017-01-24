@@ -13,7 +13,6 @@ import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import gnu.trove.set.hash.TLongHashSet;
-import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 
 public class Util
 {
@@ -100,30 +99,27 @@ public class Util
 		}
 	}
 
-	public static TLongLongHashMap remapCounts( final MergeBlocOut out, final long[] map, final DisjointSets djBlock, final long root )
+	public static TLongLongHashMap remapCounts( final MergeBlocOut out, final long[] map )
 	{
 		final TLongLongHashMap countsInBlock = new TLongLongHashMap();
 		for ( int i = 0; i < out.counts.length; ++i )
 		{
 			final int r = out.dj.findRoot( i );
 			if ( r == i )
-				if ( !out.outsideNodes.contains( i ) || djBlock.findRoot( (int)out.outsideNodes.get( i ) ) != root )
+				if ( !out.outsideNodes.contains( i ) )
 					countsInBlock.put( map[ r ], out.counts[ r ] );
 
 		}
 		return countsInBlock;
 	}
 
-	public static TLongLongHashMap remapOutsideNodes( final MergeBlocOut out, final DisjointSets djBlock, final int root, final long[] map )
+	public static TLongLongHashMap remapOutsideNodes( final MergeBlocOut out, final long[] map )
 	{
 		final TLongLongHashMap outsideNodes = new TLongLongHashMap();
 		for ( final TIntLongIterator it = out.outsideNodes.iterator(); it.hasNext(); )
 		{
 			it.advance();
-			final int r = djBlock.findRoot( ( int ) it.value() );
-			// TODO is second check right?
-			if ( r != root && out.dj.findRoot( it.key() ) == it.key() )
-				outsideNodes.put( map[ it.key() ], r );
+			outsideNodes.put( map[ it.key() ], it.value() );
 		}
 		return outsideNodes;
 	}

@@ -6,9 +6,12 @@ import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.util.ChangeablePriorityQueue;
+import gnu.trove.iterator.TLongIterator;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TIntIntHashMap;
+import gnu.trove.map.hash.TLongLongHashMap;
+import gnu.trove.set.hash.TLongHashSet;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import scala.Tuple2;
 
@@ -43,13 +46,24 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 		final ChangeablePriorityQueue queue = new ChangeablePriorityQueue( e.size() );
 
+		final TLongHashSet borderNodeSet = new TLongHashSet();
+
 		for ( int i = 0; i < e.size(); ++i )
 		{
 			e.setIndex( i );
 			final double w = e.weight();
-			final long from = in.indexNodeMapping[ ( int ) e.from() ], to = in.indexNodeMapping[ ( int ) e.to() ];
+			final long from = e.from(), to = e.to();
 			if ( w > 0.0 )
+			{
 				queue.push( i, w );
+
+				if ( in.outsideNodes.contains( ( int ) from ) )
+					borderNodeSet.add( to );
+
+				if ( in.outsideNodes.contains( ( int ) to ) )
+					borderNodeSet.add( from );
+
+			}
 		}
 
 		long pointingOutside = t._1();
@@ -111,6 +125,17 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 			final int n = dj.join( r1, r2 );
 
+//			if ( borderNodeSet.contains( r1 ) )
+//			{
+//				borderNodeSet.add( n );
+//				borderNodeSet.add( r2 );
+//			}
+//
+//			if ( borderNodeSet.contains( r2 ) )
+//			{
+//				borderNodeSet.add( n );
+//				borderNodeSet.add( r2 );
+//			}
 			final long c1 = in.counts[ r1 ];
 			final long c2 = in.counts[ r2 ];
 
@@ -126,6 +151,9 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 			final TIntIntHashMap discardEdges = in.g.contract( e, n, this.edgeMerger );
 			discardEdges.clear();
+
+			dj.findRoot( r1 );
+			dj.findRoot( r2 );
 
 
 
@@ -147,6 +175,21 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 		}
 
+		for ( int i = 0; i < nNodes; ++i )
+			if ( borderNodeSet.contains( dj.findRoot( i ) ) )
+				borderNodeSet.add( i );
+
+		final TLongLongHashMap borderNodes = new TLongLongHashMap();
+		for ( final TLongIterator it = borderNodeSet.iterator(); it.hasNext(); )
+		{
+			final long bn = it.next();
+			final int r = dj.findRoot( ( int ) bn );
+			borderNodes.put( bn, r );
+			if ( !borderNodes.contains( r ) )
+				borderNodes.put( r, r );
+
+		}
+
 		return new Tuple2<>( t._1(), new Tuple2<>(
 				pointingOutside, new MergeBlocOut(
 						in.counts,
@@ -155,7 +198,8 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 						merges.size() > 0 || pointingOutside != t._1().longValue(),
 						returnEdges,
 						merges,
-						in.indexNodeMapping ) ) );
+						in.indexNodeMapping,
+						borderNodes ) ) );
 	}
 
 	private static TDoubleArrayList filterEdges( final TDoubleArrayList edges, final long[] counts, final EdgeWeight edgeWeight )

@@ -7,14 +7,12 @@ import java.util.concurrent.Executors;
 import org.apache.spark.api.java.function.PairFunction;
 import org.mastodon.collection.ref.RefArrayList;
 
+import de.hanslovsky.watersheds.rewrite.preparation.AffinityWatershedBlocked.Predicate;
+import de.hanslovsky.watersheds.rewrite.preparation.AffinityWatershedBlocked.WeightedEdge;
 import de.hanslovsky.watersheds.rewrite.util.HashableLongArray;
 import de.hanslovsky.watersheds.rewrite.util.Util;
 import gnu.trove.map.hash.TLongDoubleHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
-import net.imglib2.algorithm.morphology.watershed.AffinityWatershedBlocked;
-import net.imglib2.algorithm.morphology.watershed.AffinityWatershedBlocked.Predicate;
-import net.imglib2.algorithm.morphology.watershed.AffinityWatershedBlocked.WeightedEdge;
-import net.imglib2.algorithm.morphology.watershed.CompareBetter;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import net.imglib2.algorithm.morphology.watershed.affinity.AffinityView;
 import net.imglib2.algorithm.morphology.watershed.affinity.CompositeFactory;
@@ -74,7 +72,7 @@ public class InitialWatershedBlock implements PairFunction< Tuple2< HashableLong
 
 		final long[] intervalDimensionsTruncated =
 				Util.getCurrentChunkDimensions( o, volumeDimensions, intervalDimensions );
-		intervalDimensionsTruncated[ dimensionality ] = o[ dimensionality ];
+		intervalDimensionsTruncated[ dimensionality ] = dimensionality;
 
 		final long[] labelsDimensions = new long[ intervalDimensionsTruncated.length - 1 ];
 		System.arraycopy( intervalDimensionsTruncated, 0, labelsDimensions, 0, labelsDimensions.length );
@@ -105,11 +103,17 @@ public class InitialWatershedBlock implements PairFunction< Tuple2< HashableLong
 
 		final FloatType worstValue = new FloatType( -Float.MAX_VALUE );
 
+		// TODO expose?
+		final float low = 1e-4f;
+		final float high = 1f - low;
+
 		final long[] counts = AffinityWatershedBlocked.letItRain(
 				Views.collapseReal( affsCopy ),
 				labels,
 				compare,
 				worstValue,
+				new FloatType( low ),
+				new FloatType( high ),
 				Executors.newFixedThreadPool( 1 ),
 				1,
 				() -> {} );

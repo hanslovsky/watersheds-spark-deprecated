@@ -4,11 +4,10 @@ import org.apache.spark.api.java.function.PairFunction;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
-import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocIn;
-import gnu.trove.map.hash.TIntLongHashMap;
+import gnu.trove.map.hash.TLongLongHashMap;
 import scala.Tuple2;
 
-public class EnsureWeights implements PairFunction< Tuple2< Long, MergeBlocIn >, Long, Tuple2< MergeBlocIn, Double > >
+public class EnsureWeights implements PairFunction< Tuple2< Long, RegionMergingInput >, Long, Tuple2< RegionMergingInput, Double > >
 {
 
 	private final EdgeWeight edgeWeight;
@@ -20,12 +19,12 @@ public class EnsureWeights implements PairFunction< Tuple2< Long, MergeBlocIn >,
 	}
 
 	@Override
-	public Tuple2< Long, Tuple2< MergeBlocIn, Double > > call( final Tuple2< Long, MergeBlocIn > t ) throws Exception
+	public Tuple2< Long, Tuple2< RegionMergingInput, Double > > call( final Tuple2< Long, RegionMergingInput > t ) throws Exception
 	{
 		double maxWeight = Double.NEGATIVE_INFINITY;
-		final Edge e = new Edge( t._2().g.edges() );
-		final TIntLongHashMap outsideNodes = t._2().outsideNodes;
-		final long[] counts = t._2().counts;
+		final Edge e = new Edge( t._2().edges );
+		final TLongLongHashMap outsideNodes = t._2().outsideNodes;
+		final TLongLongHashMap counts = t._2().counts;
 		for ( int i = 0; i < e.size(); ++i )
 		{
 			e.setIndex( i );
@@ -33,8 +32,8 @@ public class EnsureWeights implements PairFunction< Tuple2< Long, MergeBlocIn >,
 				e.weight( -1.0d );
 			else
 			{
-				if ( Double.isNaN( e.weight() ) )
-					e.weight( edgeWeight.weight( e.affinity(), counts[ ( int ) e.from() ], counts[ ( int ) e.to() ] ) );
+//				if ( Double.isNaN( e.weight() ) )
+				e.weight( edgeWeight.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
 				if ( !outsideNodes.contains( ( int ) e.from() ) && !outsideNodes.contains( ( int ) e.to() ) )
 					maxWeight = Math.max( e.weight(), maxWeight );
 			}

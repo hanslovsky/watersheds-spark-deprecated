@@ -412,9 +412,9 @@ public class PrepareRegionMergingCutBlocks
 	{
 
 		@Override
-		public Iterable< Tuple2< Long, BlockDivision > > call( final TLongObjectHashMap< BlockDivision > t ) throws Exception
+		public Iterator< Tuple2< Long, BlockDivision > > call( final TLongObjectHashMap< BlockDivision > t ) throws Exception
 		{
-			final Iterable< Tuple2< Long, BlockDivision > > it = () -> new Iterator< Tuple2< Long, BlockDivision > >()
+			final Iterator< Tuple2< Long, BlockDivision > > it = new Iterator< Tuple2< Long, BlockDivision > >()
 			{
 
 				final TLongObjectIterator< BlockDivision > localIt = t.iterator();
@@ -482,7 +482,8 @@ public class PrepareRegionMergingCutBlocks
 			final Edge dummy,
 			final EdgeMerger edgeMerger )
 	{
-
+//		if ( label < 0 || otherLabel < 0 || aff < 0.0 || Double.isNaN( aff ) )
+//			return -1;
 		if ( !nodeEdgeMap.contains( label ) )
 			nodeEdgeMap.put( label, new TLongIntHashMap() );
 		if ( !nodeEdgeMap.contains( otherLabel ) )

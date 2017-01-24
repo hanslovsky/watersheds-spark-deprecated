@@ -36,4 +36,10 @@ public class HashableLongArray implements Serializable
 		return o instanceof HashableLongArray ? Arrays.equals( ( ( HashableLongArray ) o ).data, data ) : false;
 	}
 
+	@Override
+	public String toString()
+	{
+		return Arrays.toString( data );
+	}
+
 }

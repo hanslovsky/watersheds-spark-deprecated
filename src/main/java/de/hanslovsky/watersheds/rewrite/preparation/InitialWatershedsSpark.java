@@ -1,14 +1,11 @@
 package de.hanslovsky.watersheds.rewrite.preparation;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-
-import javax.xml.bind.DatatypeConverter;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -17,33 +14,24 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.broadcast.Broadcast;
-import org.zeromq.ZContext;
-import org.zeromq.ZMQ;
-import org.zeromq.ZMQ.Socket;
-
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 
 import bdv.img.h5.H5Utils;
 import bdv.util.BdvFunctions;
 import bdv.util.BdvOptions;
+import bdv.util.BdvStackSource;
 import de.hanslovsky.watersheds.NumElements;
-import de.hanslovsky.watersheds.rewrite.io.AffinitiesChunkLoader;
-import de.hanslovsky.watersheds.rewrite.io.LabelsChunkWriter;
-import de.hanslovsky.watersheds.rewrite.io.ZMQFileOpenerFloatType;
-import de.hanslovsky.watersheds.rewrite.io.ZMQFileWriterLongType;
 import de.hanslovsky.watersheds.rewrite.util.HashableLongArray;
+import de.hanslovsky.watersheds.rewrite.util.IntensityMouseOver;
 import de.hanslovsky.watersheds.rewrite.util.Util;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
-import gnu.trove.set.hash.TLongHashSet;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.converter.Converters;
 import net.imglib2.img.Img;
 import net.imglib2.img.array.ArrayImg;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.basictypeaccess.array.FloatArray;
+import net.imglib2.img.basictypeaccess.array.LongArray;
 import net.imglib2.img.cell.CellImg;
 import net.imglib2.img.cell.CellImgFactory;
 import net.imglib2.type.numeric.ARGBType;
@@ -64,14 +52,16 @@ public class InitialWatershedsSpark
 	{
 
 
-		final int[] cellSize = new int[] { 300, 300, 100, 3 };
+		final int[] cellSize = new int[] { 100, 100, 100, 3 };
 		final int[] cellSizeLabels = Util.dropLast( cellSize );
-		final int[] dimsIntervalInt = new int[] { 60, 60, 1, 3 };
+		final int[] dimsIntervalInt = new int[] { 432, 432, 432, 3 };
 		final long[] dimsInterval = Arrays.stream( dimsIntervalInt ).mapToLong( i -> i ).toArray();
 		final int[] dimsIntervalIntNoChannels = Util.dropLast( dimsIntervalInt );
 
-		final String HOME_DIR = System.getProperty( "user.home" );
-		final String path = HOME_DIR + String.format( "/Dropbox/misc/excerpt-sliced-blocks.h5" );
+//		final String path = HOME_DIR + String.format( "/Dropbox/misc/excerpt.h5" );
+//		final String path = HOME_DIR + "/Dropbox/misc/sample_A.augmented.0-500x500x50+500+500+50.hdf";
+//		final String path = Util.HOME_DIR + "/tstvol-520-1-h5/groundtruth_aff-200x200x50.h5";
+		final String path = Util.HOME_DIR + "/local/affinities/tstvol-520-2-h5.h5";
 
 		System.out.println( "Loading data" );
 		final CellImg< FloatType, ?, ? > data =
@@ -87,62 +77,60 @@ public class InitialWatershedsSpark
 		data.getCells().cellDimensions( cellDims );
 
 		final int[] perm = Util.getFlipPermutation( data.numDimensions() - 1 );
-//		final CellImg< FloatType, ?, ? > input = new CellImgFactory< FloatType >( dimsIntervalInt ).create( dims, new FloatType() );
 		final ArrayImg< FloatType, FloatArray > input = ArrayImgs.floats( dims );
 		for ( final Pair< FloatType, FloatType > p : Views.interval( Views.pair( Views.permuteCoordinates( data, perm, data.numDimensions() - 1 ), input ), input ) )
-			p.getB().set( p.getA().getRealFloat() );
+		{
+			final float f = p.getA().getRealFloat();
+			// threshold affinities
+			p.getB().set( f < 0.001 ? 0.0f : f > 0.999 ? 1.0f : f );
+		}
 
 		final CompositeIntervalView< FloatType, RealComposite< FloatType > > affs = Views.collapseReal( input );
+		for ( int d = 0; d < affs.numDimensions(); ++d )
+			for ( final RealComposite< FloatType > a : Views.hyperSlice( affs, d, affs.max( d ) ) )
+				a.get( d ).set( Float.NaN );
+
+		final BdvStackSource< FloatType > bdv = BdvFunctions.show( Converters.convert( affs, ( s, t ) -> {
+			t.set( s.get( 0 ).get() * ( 1 << 16 ) );
+		}, new FloatType() ), "affs" );
+		BdvFunctions.show( Converters.convert( affs, ( s, t ) -> {
+			t.set( s.get( 1 ).get() * ( 1 << 16 ) );
+		}, new FloatType() ), "affs", BdvOptions.options().addTo( bdv ) );
+
+		new IntensityMouseOver( bdv.getBdvHandle().getViewerPanel() );
+
 		final long[] dimsNoChannels = Intervals.dimensionsAsLongArray( affs );
 
-		final Img< LongType > labelsTarget = new CellImgFactory< LongType >( dimsIntervalInt ).create( affs, new LongType() );
 
-		final String addr = "ipc://data_server";
-		final ZContext zmqContext = new ZContext();
-		final Socket serverSocket = zmqContext.createSocket( ZMQ.REP );
-		serverSocket.bind( addr );
-		final Gson gson = new Gson();
-
-		final Thread serverThread = new Thread( () -> {
-			while ( !Thread.currentThread().isInterrupted() )
-			{
-				final byte[] message = serverSocket.recv( 0 );
-				if ( message.length == 0 )
-					continue;
-				final JsonArray req = gson.fromJson( new String( message ), JsonArray.class );
-				final long[] dim = new long[ dims.length ];
-				final long[] offset = new long[ dims.length ];
-				long reqSize = 1;
-				for ( int d = 0; d < dim.length; ++d )
-				{
-					offset[ d ] = req.get( d ).getAsLong();
-					dim[ d ] = req.get( d + dim.length ).getAsLong();
-					reqSize *= dim[ d ];
-				}
-
-				final byte[] bytes = new byte[ Float.BYTES * ( int ) reqSize ];
-
-				final ByteBuffer bb = ByteBuffer.wrap( bytes );
-
-				for ( final FloatType v : Views.flatIterable( Views.offsetInterval( Views.extendValue( input, new FloatType( Float.NaN ) ), offset, dim ) ) )
-					bb.putFloat( v.get() );
-
-				serverSocket.send( bytes, 0 );
-			}
-
-		} );
-		System.out.print( "Starting server thread!" );
-		serverThread.start();
-		System.out.println( "Started server thread!" );
 
 		System.out.println( "Generating map" );
 
 		final long[] offset = new long[ dimsNoChannels.length ];
 		final ArrayList< HashableLongArray > lowerBounds = new ArrayList<>();
+		final ArrayList< Tuple2< HashableLongArray, float[] > > blocks = new ArrayList<>();
 		for ( int d = 0; d < dimsNoChannels.length; )
 		{
 			System.out.println( Arrays.toString( offset ) );
 			lowerBounds.add( new HashableLongArray( offset.clone() ) );
+			final long[] currentDims = new long[ offset.length + 1 ];
+			for ( int k = 0; k < offset.length; ++k )
+				currentDims[k] = Math.min( offset[k] + dimsInterval[k], dims[k] ) - offset[k];
+			currentDims[ offset.length ] = offset.length;
+			final float[] blockData = new float[ ( int ) Intervals.numElements( currentDims ) ];
+			final ArrayImg< FloatType, FloatArray > blockImg = ArrayImgs.floats( blockData, currentDims );
+
+			System.out.println( Arrays.toString( currentDims ) + " " + blockData.length + " " + Arrays.toString( offset ) + " " + Arrays.toString( Intervals.dimensionsAsLongArray( input ) ) );
+			for ( final Pair< FloatType, FloatType > p : Views.flatIterable( Views.interval( Views.pair( Views.offsetInterval(
+					Views.extendValue( input, new FloatType( Float.NaN ) ), Util.append( offset, 0 ), currentDims ), blockImg ), blockImg ) ) )
+				p.getB().set( p.getA() );
+
+			for ( int k = 0; k < Views.collapseReal( blockImg ).numDimensions(); ++k )
+				for ( final RealComposite< FloatType > l : Views.hyperSlice( Views.collapseReal( blockImg ), k, Views.collapseReal( blockImg ).max( k ) ) )
+					l.get( k ).set( Float.NaN );
+
+			blocks.add( new Tuple2<>( new HashableLongArray( offset.clone() ), blockData ) );
+
+
 			for ( d = 0; d < dimsNoChannels.length; ++d )
 			{
 				offset[ d ] += dimsIntervalIntNoChannels[ d ];
@@ -167,9 +155,7 @@ public class InitialWatershedsSpark
 		final JavaSparkContext sc = new JavaSparkContext( conf );
 		Logger.getRootLogger().setLevel( Level.ERROR );
 
-		final ZMQFileOpenerFloatType opener = new ZMQFileOpenerFloatType( addr );
-		final JavaPairRDD< HashableLongArray, float[] > imgs =
-				sc.parallelize( lowerBounds ).mapToPair( new AffinitiesChunkLoader( opener, dims, dimsIntervalInt ) ).cache();
+		final JavaPairRDD< HashableLongArray, float[] > imgs = sc.parallelizePairs( blocks );
 
 		final JavaPairRDD< HashableLongArray, Tuple2< long[], long[] > > ws = imgs.mapToPair(
 				func ).cache();
@@ -205,49 +191,6 @@ public class InitialWatershedsSpark
 
 		System.out.println( "Collected " + labelingsAndCounts.size() + " labelings." );
 
-		final String listenerAddr = "ipc://labels_listener";
-		final Socket labelsTargetListener = zmqContext.createSocket( ZMQ.REP );
-		labelsTargetListener.bind( listenerAddr );
-		final Thread labelsThread = new Thread( () -> {
-			while ( !Thread.currentThread().isInterrupted() )
-			{
-				final byte[] message = labelsTargetListener.recv( 0 );
-				if ( message.length == 0 )
-					continue;
-				System.out.println( "RECEIVED MESSAGE OF SIZE " + message.length );
-				final JsonObject json = gson.fromJson( new String( message ), JsonObject.class );
-				final long[] min = new long[ labelsTarget.numDimensions() ];
-				final long[] max = new long[ labelsTarget.numDimensions() ];
-				final byte[] bytes = DatatypeConverter.parseBase64Binary( json.get( "data" ).getAsString() );// .getBytes();
-				final ByteBuffer bb = ByteBuffer.wrap( bytes );
-				final JsonArray minA = json.get( "min" ).getAsJsonArray();
-				final JsonArray maxA = json.get( "max" ).getAsJsonArray();
-				for ( int d = 0; d < min.length; ++d )
-				{
-					min[ d ] = minA.get( d ).getAsLong();
-					max[ d ] = maxA.get( d ).getAsLong();
-				}
-
-				long m = Long.MAX_VALUE;
-				long M = Long.MIN_VALUE;
-				boolean hasZero = false;
-				final long validBits = ~( 1l << 63 | 1l << 62 );
-				for ( final LongType l : Views.flatIterable( Views.interval( labelsTarget, min, max ) ) )
-				{
-					final long n = bb.getLong() & validBits;
-					l.set( n );
-					if ( n == 0 )
-						hasZero = true;
-					else if ( n < m )
-						m = n;
-					else if ( n > M )
-						M = n;
-				}
-				System.out.println( "Got min=" + m + ", max=" + M + " for " + Arrays.toString( min ) + " " + Arrays.toString( max ) + " has background: " + hasZero );
-				labelsTargetListener.send( "" );
-			}
-		} );
-		labelsThread.start();
 
 		final JavaPairRDD< HashableLongArray, long[] > offsetLabels = ws
 				.mapToPair( new OffsetLabels( startIndicesBC, dimsNoChannels ) )
@@ -255,75 +198,21 @@ public class InitialWatershedsSpark
 				.cache();
 
 		final List< Tuple2< HashableLongArray, long[] > > labelings = offsetLabels.collect();
-		final TLongHashSet alreadyThere = new TLongHashSet();
-		alreadyThere.addAll( labelings.get( 0 )._2() );
-		System.out.println( alreadyThere.size() );
-		System.out.println( labelings.get( 0 )._1() + "ock?" );
-		for ( int i = 1; i < labelings.size(); ++i )
+
+		final Img< LongType > labelsTarget = new CellImgFactory< LongType >( dimsIntervalInt ).create( affs, new LongType() );
+		for ( final Tuple2< HashableLongArray, long[] > l : labelings )
 		{
-			final TLongHashSet curr = new TLongHashSet();
-			System.out.println( labelings.get( 1 )._1() + "ock?" );
-			for ( final long l : labelings.get( i )._2() )
-			{
-				curr.add( l );
-				if ( alreadyThere.contains( l ) )
-					System.out.print( "EVIL!!! " + l + " " + labelings.get( i )._1() );
-			}
-			alreadyThere.addAll( curr );
-			System.out.println( alreadyThere.size() );
+			final long[] sz = new long[ l._1().getData().length ];
+			for ( int d = 0; d < sz.length; ++d )
+				sz[d] = Math.min( l._1().getData()[d] + dimsInterval[d], dims[d] ) - l._1().getData()[d];
+			final ArrayImg< LongType, LongArray > img = ArrayImgs.longs( l._2(), sz );
+
+			for ( final Pair< LongType, LongType > p : Views.flatIterable( Views.interval( Views.pair( Views.offsetInterval( Views.extendValue( labelsTarget, new LongType() ), l._1().getData(), sz ), img ), img ) ) )
+				p.getA().set( p.getB() );
 		}
 
-		final JavaPairRDD< HashableLongArray, Boolean > abc = offsetLabels.mapToPair( ( t ) -> {
-			boolean doesNotContain4234 = true;
-			final long[] arr = t._2();
-			for ( int i = 0; i < arr.length && doesNotContain4234; ++i )
-				if ( arr[ i ] == 4234 )
-					doesNotContain4234 = false;
-			return new Tuple2<>( t._1(), doesNotContain4234 );
-		} );
-
-		for ( final Tuple2< HashableLongArray, Boolean > ab : abc.collect() )
-			System.out.println( "DOES IT CONTAIN IT? " + ab );
-
-		offsetLabels.mapToPair( new LabelsChunkWriter(
-				new ZMQFileWriterLongType( listenerAddr ),
-				dimsNoChannels,
-				dimsIntervalIntNoChannels ) ).count();
-
-		{
-			System.out.println( "Interrupting labels thread" );
-			labelsThread.interrupt();
-			final Socket closeSocket = zmqContext.createSocket( ZMQ.REQ );
-			closeSocket.connect( listenerAddr );
-			closeSocket.send( new byte[ 0 ], 0 );
-			try
-			{
-				labelsThread.join();
-			}
-			catch ( final InterruptedException e )
-			{
-				e.printStackTrace();
-			}
-		}
-
-		{
-			System.out.println( "Interrupting server thread" );
-			serverThread.interrupt();
-			final Socket closeSocket = zmqContext.createSocket( ZMQ.REQ );
-			closeSocket.connect( addr );
-			closeSocket.send( new byte[ 0 ], 0 );
-			try
-			{
-				serverThread.join();
-			}
-			catch ( final InterruptedException e )
-			{
-				e.printStackTrace();
-			}
-		}
 
 		System.out.print( "Closing context" );
-		zmqContext.close();
 
 		System.out.println( "Closing spark" );
 		sc.close();
@@ -336,10 +225,13 @@ public class InitialWatershedsSpark
 			t.set( cmap.get( s.get() ) );
 		}, new ARGBType() );
 
+		System.out.println( Arrays.toString( Intervals.dimensionsAsLongArray( labelsTarget ) ) );
+		System.out.println( "Saving to h5..." );
+		H5Utils.saveUnsignedLong( labelsTarget, path, "zws", Intervals.dimensionsAsIntArray( labelsTarget ) );
+		System.out.println( "Done saving to h5..." );
+
 
 		BdvFunctions.show( coloredLabels, "labels", coloredLabels.numDimensions() == 2 ? BdvOptions.options().is2D() : BdvOptions.options() );
-
-		H5Utils.saveUnsignedLong( labelsTarget, path, "zws", cellSizeLabels );
 	}
 
 }

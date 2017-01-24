@@ -45,6 +45,7 @@ public class ZMQFileWriterLongType implements FileWriter< LongType >, Serializab
 		final JsonObject obj = new JsonObject();
 		obj.add( "min", localGson.toJsonTree( offset ) );
 		obj.add( "max", localGson.toJsonTree( max ) );
+		System.out.println( "Filling obj: " + obj.toString() + " " + bytes.length );
 		obj.add( "data", localGson.toJsonTree( DatatypeConverter.printBase64Binary( bytes ) ) );
 		obj.addProperty( "id", IntervalIndexer.positionToIndex( offset, dims ) );
 

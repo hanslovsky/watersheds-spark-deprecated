@@ -17,13 +17,16 @@ public class RemappedData implements Serializable
 
 	public final TLongArrayList merges;
 
-	public RemappedData( final TDoubleArrayList edges, final TLongLongHashMap counts, final TLongLongHashMap outsideNodes, final TLongArrayList merges )
+	public final TLongLongHashMap borderNodeMappings;
+
+	public RemappedData( final TDoubleArrayList edges, final TLongLongHashMap counts, final TLongLongHashMap outsideNodes, final TLongArrayList merges, final TLongLongHashMap borderNodeMappings )
 	{
 		super();
 		this.edges = edges;
 		this.counts = counts;
 		this.outsideNodes = outsideNodes;
 		this.merges = merges;
+		this.borderNodeMappings = borderNodeMappings;
 	}
 
 }

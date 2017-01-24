@@ -1,6 +1,5 @@
 package de.hanslovsky.watersheds.rewrite;
 
-import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -24,11 +23,12 @@ import org.zeromq.ZMQ.Socket;
 import bdv.img.h5.H5Utils;
 import bdv.util.BdvFunctions;
 import bdv.util.BdvStackSource;
+import ch.systemsx.cisd.hdf5.HDF5Factory;
+import ch.systemsx.cisd.hdf5.IHDF5Reader;
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight.FunkyWeight;
-import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocIn;
 import de.hanslovsky.watersheds.rewrite.preparation.PrepareRegionMergingCutBlocks;
 import de.hanslovsky.watersheds.rewrite.preparation.PrepareRegionMergingCutBlocks.BlockDivision;
 import de.hanslovsky.watersheds.rewrite.regionmerging.OriginalLabelData;
@@ -55,7 +55,6 @@ import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.converter.Converters;
 import net.imglib2.img.Img;
 import net.imglib2.img.cell.CellImg;
-import net.imglib2.type.numeric.ARGBType;
 import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.Intervals;
@@ -70,31 +69,42 @@ import scala.Tuple3;
 public class WatershedsSparkWithRegionMergingLoadSegmentation
 {
 
-	public static void main( final String[] args ) throws IOException
+	public static String AFFINITY_DATASET = "main";
+
+	public static void main( final String[] args ) throws Exception
 	{
 
-		// define dimensions and load data
-		final int[] cellSize = new int[] { 300, 300, 100, 3 };
-		final int[] cellSizeLabels = Util.dropLast( cellSize );
-//		final int[] dimsIntervalInt = new int[] { 60, 60, 1, 3 };
+
 		final int[] dimsIntervalInt = new int[] { 100, 100, 2 };
+
+		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
+//		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt.h5";
+//		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt-sliced-blocks-only-10-in-z.h5";
+//		final String path = Util.HOME_DIR + "/Dropbox/misc/sample_A.augmented.0-slice-100.hdf";
+//		final String path = Util.HOME_DIR + "/Dropbox/misc/sample_A.augmented.0-500x500x50+500+500+50.hdf";
+//		final String path = Util.HOME_DIR + "/local/affinities/tstvol-520-2-h5.h5";
+
+		final IHDF5Reader f = HDF5Factory.openForReading( path );
+		final long[] dims = f.object().getDimensions( AFFINITY_DATASET );
+		final int[] cellSize = f.object().getDataSetInformation( AFFINITY_DATASET ).tryGetChunkSizes() == null ? Arrays.stream( dims ).mapToInt( i -> ( int ) i ).toArray() : f.object().getDataSetInformation( "main" ).tryGetChunkSizes();
+		final int[] cellSizeLabels = Util.dropLast( cellSize );
+
 		final long[] dimsInterval = Arrays.stream( dimsIntervalInt ).mapToLong( i -> i ).toArray();
 		final int[] dimsIntervalIntNoChannels = Util.dropLast( dimsIntervalInt );
 		final long[] dimsIntervalNoChannels = Util.dropLast( dimsInterval );
-
-
-		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
-//		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt-sliced-blocks.h5";
-
 		System.out.println( "Loading data" );
-		final CellImg< FloatType, ?, ? > data = H5Utils.loadFloat( path, "main", cellSize );
-		final long[] dims = Intervals.dimensionsAsLongArray( data );
+		final CellImg< FloatType, ?, ? > data = H5Utils.loadFloat( f, AFFINITY_DATASET, cellSize );
+		f.close();
+
 		final long inputSize = Intervals.numElements( data );
 		System.out.println( "Loaded data (" + inputSize + ")" );
 		final int[] perm = Util.getFlipPermutation( data.numDimensions() - 1 );
 		final RandomAccessibleInterval< FloatType > input = Views.permuteCoordinates( data, perm, data.numDimensions() - 1 );
 		final CompositeIntervalView< FloatType, RealComposite< FloatType > > affs = Views.collapseReal( input );
 		final long[] dimsNoChannels = Intervals.dimensionsAsLongArray( affs );
+
+		for ( final FloatType a : Views.flatIterable( data ) )
+			a.set( a.get() < 0.0 ? 0.0f : a.get() > 1.0 ? 1.0f : a.get() );
 
 		// anything that points outside must be nan
 		for ( int d = 0; d < affs.numDimensions(); ++d )
@@ -113,6 +123,12 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 
 		final Img< LongType > labelsTarget = H5Utils.loadUnsignedLong( path, "zws", cellSizeLabels );
+//		final ArrayImg< LongType, LongArray > labelsTarget = ArrayImgs.longs( dimsNoChannels );
+//		{
+//			final ArrayCursor< LongType > ltC = labelsTarget.cursor();
+//			for ( long l = 1; ltC.hasNext(); ++l )
+//				ltC.next().set( l );
+//		}
 
 		final TLongLongHashMap counts = Util.countLabels( labelsTarget );
 
@@ -137,10 +153,12 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksRdd =
 				sc.parallelizePairs( blocks ).cache();
+		System.out.println( "Created " + blocksRdd.count() + " initial blocks..." );
 
 
 		final EdgeMerger merger = new EdgeMerger.MAX_AFFINITY_MERGER();
 		final FunkyWeight weightFunc = new EdgeWeight.FunkyWeight();
+//		final EdgeWeight weightFunc = ( EdgeWeight & Serializable ) ( affinity, count1, count2 ) -> Math.min( count1, count2 ) / ( affinity * affinity );
 
 		final Broadcast< long[] > dimsIntervalNoChannelsBC = sc.broadcast( dimsIntervalNoChannels );
 
@@ -161,7 +179,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final JavaPairRDD< Long, BlockDivision > graphs = graphsAndBorderNodes._1().cache();
 
 		final Map< Long, HashableLongArray > blockToInitialBlockMap =
-				graphsAndBorderNodes._2().flatMapToPair( t -> new IterableWithConstant<>( Arrays.asList( ArrayUtils.toObject( t._2() ) ), t._1() ) ).collectAsMap();
+				graphsAndBorderNodes._2().flatMapToPair( t -> new IterableWithConstant<>( Arrays.asList( ArrayUtils.toObject( t._2() ) ), t._1() ).iterator() ).collectAsMap();
 		final Broadcast< Map< Long, HashableLongArray > > blockToInitialBlockMapBC = sc.broadcast( blockToInitialBlockMap );
 
 		// make sure we know which original block everything points to.
@@ -173,13 +191,13 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		final RegionMergingArrayBased rm = new RegionMergingArrayBased( merger, weightFunc );
 
-		final double threshold = 200;
+		final double threshold = 200.0;
 
 		final JavaPairRDD< Long, RegionMergingInput > rmIn = RegionMergingArrayBased.fromBlockDivision( graphs ).cache();
 
 		final long nOriginalBlocks = rmIn.count();
 
-//		final JavaPairRDD< Long, RegionMergingInput > finalRmIn = mergeSmallBlocks( sc, rmIn, 0 );
+//		final JavaPairRDD< Long, RegionMergingInput > finalRmIn = mergeSmallBlocks( sc, rmIn, 1 ).cache();
 //
 //		rmIn.unpersist();
 
@@ -235,24 +253,13 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 				blockImages,
 				chBdv,
 				cbhBdv,
-				labelsTarget.factory() );
+				labelsTarget.factory(),
+				path );
 
-		final double tolerance = 10.0;
+		final double tolerance = 1e33;
 
-		final JavaPairRDD< Long, MergeBlocIn > graphsAfterMerging = rm.run( sc, finalRmIn, threshold, rmVisitor, nOriginalBlocks, tolerance );
+		final JavaPairRDD< Long, RegionMergingInput > graphsAfterMerging = rm.run( sc, finalRmIn, threshold, rmVisitor, nOriginalBlocks, tolerance );
 		graphsAfterMerging.count();
-
-//		chBdv.close();
-//
-//		cbhBdv.close();
-//
-//		BdvFunctions.show( Util.toColor( Views.stack( images ), colorMap ), "colored history 2", Util.bdvOptions( labelsTarget ) );
-//
-//		BdvFunctions.show( Util.toColor( Views.stack( blockImages ), blockColors ), "colored block history 2", Util.bdvOptions( labelsTarget ) );
-
-		BdvFunctions.show( Converters.convert( Views.stack( images ), ( s, t ) -> {
-			t.set( s.get() == 6535 || s.get() == 388 ? 255 << 8 : 255 << 16 );
-		}, new ARGBType() ), "7181", Util.bdvOptions( images.get( 0 ) ) );
 
 		sc.close();
 
@@ -392,7 +399,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		final JavaPairRDD< Long, ArrayList< RemappedData > > aggregated = smallBlocksMapping
 				.mapToPair( t -> new Tuple2<>( djhmBC.getValue().findRoot( t._1() ), t._2()._2() ) )
-				.mapToPair( t -> new Tuple2<>( t._1(), new RemappedData( t._2().edges, t._2().counts, t._2().outsideNodes, new TLongArrayList() ) ) )
+				.mapToPair( t -> new Tuple2<>( t._1(), new RemappedData( t._2().edges, t._2().counts, t._2().outsideNodes, new TLongArrayList(), new TLongLongHashMap() ) ) )
 				.aggregateByKey( new ArrayList<>(),
 						( v1, v2 ) -> {
 							v1.add( v2 );

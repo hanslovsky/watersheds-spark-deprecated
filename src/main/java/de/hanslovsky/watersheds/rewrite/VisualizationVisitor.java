@@ -1,15 +1,21 @@
 package de.hanslovsky.watersheds.rewrite;
 
+import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.broadcast.Broadcast;
 
+import bdv.img.h5.H5Utils;
 import bdv.util.BdvStackSource;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocOut;
 import de.hanslovsky.watersheds.rewrite.regionmerging.RegionMergingArrayBased.Visitor;
@@ -30,6 +36,7 @@ import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.basictypeaccess.array.LongArray;
 import net.imglib2.type.numeric.ARGBType;
 import net.imglib2.type.numeric.integer.LongType;
+import net.imglib2.util.Intervals;
 import net.imglib2.util.Pair;
 import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
@@ -37,6 +44,12 @@ import scala.Tuple2;
 
 public class VisualizationVisitor implements Visitor
 {
+
+	public static Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
+	static
+	{
+		LOG.setLevel( Level.INFO );
+	}
 
 	private final JavaSparkContext sc;
 
@@ -60,6 +73,8 @@ public class VisualizationVisitor implements Visitor
 
 	private final Converter< LongType, ARGBType > blockConv;
 
+	private final String fileName;
+
 	public VisualizationVisitor(
 			final JavaSparkContext sc,
 			final Broadcast< Map< Long, HashableLongArray > > blockToInitialBlockMapBC,
@@ -69,7 +84,8 @@ public class VisualizationVisitor implements Visitor
 			final List< RandomAccessibleInterval< LongType > > blockImages,
 			final BdvStackSource< LongType > coloredHistoryBdv,
 			final BdvStackSource< LongType > coloredBlockHistoryBdv,
-			final ImgFactory< LongType > factory )
+			final ImgFactory< LongType > factory,
+			final String fileName )
 	{
 		super();
 		this.sc = sc;
@@ -83,10 +99,22 @@ public class VisualizationVisitor implements Visitor
 		this.factory = factory;
 		this.conv = ( Converter< LongType, ARGBType > ) coloredHistoryBdv.getBdvHandle().getViewerPanel().getState().getSources().get( 0 ).getConverter();
 		this.blockConv = ( Converter< LongType, ARGBType > ) coloredBlockHistoryBdv.getBdvHandle().getViewerPanel().getState().getSources().get( 0 ).getConverter();
+		this.fileName = fileName;
+
+		if ( fileName != null )
+		{
+			for ( int i = 0; i < images.size(); ++i )
+				H5Utils.saveUnsignedLong( images.get( i ), fileName, "labels-" + i, Intervals.dimensionsAsIntArray( images.get( i ) ) );
+			for ( int i = 0; i < blockImages.size(); ++i )
+				H5Utils.saveUnsignedLong( blockImages.get( i ), fileName, "blocks-" + i, Intervals.dimensionsAsIntArray( blockImages.get( i ) ) );
+		}
+
 	}
 
 	@Override public void visit( final JavaPairRDD< Long, Tuple2< Long, MergeBlocOut > > mergedEdges, final int[] parents )
 	{
+		final ArrayList< Object > unpersistList = new ArrayList<>();
+
 		final DisjointSets dj = new DisjointSets( parents, new int[ parents.length ], parents.length );
 		final TLongObjectHashMap< TLongArrayList > rootChildMap = new TLongObjectHashMap<>();
 
@@ -104,19 +132,27 @@ public class VisualizationVisitor implements Visitor
 			final TLongArrayList m = t._2()._2().merges;
 			final long[] map = t._2()._2().indexNodeMapping;
 			return new Tuple2<>( t._1(), new Tuple2<>( m, map ) );
-		} );
+		} )
+				.cache();
+		mergesAndMapping.count();
+		unpersistList.add( mergesAndMapping.cache() );
 
+		LOG.info( "Got merges and mappings." );
 		final Broadcast< Map< Long, HashableLongArray > > blockToInitialBlockMapBC = this.blockToInitialBlockMapBC;
 
+		LOG.info( "Mapping merges to each block." );
 		final JavaPairRDD< HashableLongArray, Tuple2< TLongArrayList, long[] > > mergesForEachBlock = mergesAndMapping
 				.flatMapToPair( t -> {
 					final TLongArrayList affectedChildren = rcmBC.value().get( t._1() );
 					final IterableWithConstant< Long, Tuple2< TLongArrayList, long[] > > iterable =
 							new IterableWithConstant<>( Arrays.asList( ArrayUtils.toObject( affectedChildren.toArray() ) ), t._2() );
-					return iterable;
+					return iterable.iterator();
 				} )
-				.mapToPair( t -> new Tuple2<>( blockToInitialBlockMapBC.value().get( t._1() ), t._2() ) );
+				.mapToPair( t -> new Tuple2<>( blockToInitialBlockMapBC.value().get( t._1() ), t._2() ) ).cache();
+		mergesForEachBlock.count();
+		unpersistList.add( mergesForEachBlock );
 
+		LOG.info( "Mapping merges to each block." );
 		final JavaPairRDD< HashableLongArray, ArrayList< Tuple2< TLongArrayList, long[] > > > mergesForEachBlockAggregated = mergesForEachBlock
 				.aggregateByKey(
 						new ArrayList<>(),
@@ -128,6 +164,8 @@ public class VisualizationVisitor implements Visitor
 							al1.addAll( al2 );
 							return al1;
 						} );
+
+		LOG.info( "Painting labels in each block." );
 		final JavaPairRDD< HashableLongArray, long[] > previous = labelBlocks.get( labelBlocks.size() - 1 );
 		final JavaPairRDD< HashableLongArray, long[] > current = previous
 				.join( mergesForEachBlockAggregated )
@@ -158,25 +196,41 @@ public class VisualizationVisitor implements Visitor
 
 		current.count();
 
-		labelBlocks.remove( 0 ).unpersist();
+		unpersistList.add( labelBlocks.remove( 0 ) );
 
 		final Img< LongType > img = factory.create( images.get( 0 ), new LongType() );
 		for ( final Tuple2< HashableLongArray, long[] > currentData : current.collect() )
 		{
 			final long[] min = currentData._1().getData();
 			final ArrayImg< LongType, LongArray > src = ArrayImgs.longs( currentData._2(), dimsIntervalNoChannels );
-			final IntervalView< LongType > tgt = Views.offsetInterval( img, min, dimsIntervalNoChannels );
+			final IntervalView< LongType > tgt = Views.offsetInterval( Views.extendValue( img, new LongType( -1 ) ), min, dimsIntervalNoChannels );
 			for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( src, tgt ), new FinalInterval( dimsIntervalNoChannels ) ) )
-				p.getB().set( p.getA() );
+			{
+				final long a = p.getA().get();
+				if ( a == -1 )
+					continue;
+				p.getB().set( a );
+			}
 		}
+		if ( fileName != null )
+			H5Utils.saveUnsignedLong( img, fileName, "labels-" + images.size(), Intervals.dimensionsAsIntArray( img ) );
 		images.add( img );
 		coloredHistoryBdv = Util.replaceSourceAndReuseConverter( coloredHistoryBdv, Views.stack( images ), conv, Util.bdvOptions( img ) );
 
 		final Img< LongType > blockImg = factory.create( blockImages.get( 0 ), new LongType() );
 		for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( blockImages.get( blockImages.size() - 1 ), blockImg ), blockImg ) )
 			p.getB().set( dj.findRoot( p.getA().getInteger() ) );
+		if ( fileName != null )
+			H5Utils.saveUnsignedLong( blockImg, fileName, "blocks-" + blockImages.size(), Intervals.dimensionsAsIntArray( blockImg ) );
 		blockImages.add( blockImg );
 		coloredBlockHistoryBdv = Util.replaceSourceAndReuseConverter( coloredBlockHistoryBdv, Views.stack( blockImages ), blockConv, Util.bdvOptions( blockImg ) );
+
+		for ( final Object o : unpersistList )
+			if ( o instanceof JavaPairRDD )
+				( ( JavaPairRDD ) o ).unpersist();
+			else if ( o instanceof JavaRDD )
+				( ( JavaRDD ) o ).unpersist();
+
 	}
 
 }

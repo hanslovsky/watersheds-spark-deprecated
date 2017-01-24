@@ -9,6 +9,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.broadcast.Broadcast;
 
+import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocArrayBased;
@@ -18,6 +19,7 @@ import de.hanslovsky.watersheds.rewrite.preparation.PrepareRegionMergingCutBlock
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.map.hash.TLongIntHashMap;
+import gnu.trove.map.hash.TLongLongHashMap;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import scala.Tuple2;
 
@@ -42,15 +44,16 @@ public class RegionMergingArrayBased
 		this.edgeWeight = edgeWeight;
 	}
 
-	public JavaPairRDD< Long, MergeBlocIn > run( final JavaSparkContext sc, final JavaPairRDD< Long, RegionMergingInput > rdd, final double maxThreshold, final Visitor visitor, final long nOriginalBlocks, final double tolerance )
+	public JavaPairRDD< Long, RegionMergingInput > run(
+			final JavaSparkContext sc,
+			final JavaPairRDD< Long, RegionMergingInput > in,
+			final double maxThreshold,
+			final Visitor visitor,
+			final long nOriginalBlocks,
+			final double tolerance )
 	{
 
-		JavaPairRDD< Long, MergeBlocIn > zeroBased = rdd.mapToPair( new ToZeroBasedIndexing<>( sc.broadcast( edgeMerger ) ) );
-		System.out.println( "Starting with " + zeroBased.count() + " blocks." );
-
-		final JavaPairRDD< Long, long[] > mapping = rdd.mapToPair( t -> {
-			return new Tuple2<>( t._1(), Util.inverse( t._2().nodeIndexMapping ) );
-		});
+		JavaPairRDD< Long, RegionMergingInput > rdd = in.mapToPair( t -> t );
 
 		final int nBlocks = ( int ) nOriginalBlocks;// rdd.count();
 
@@ -61,31 +64,46 @@ public class RegionMergingArrayBased
 
 		for ( boolean hasChanged = true; hasChanged; )
 		{
+			final ArrayList< Object > unpersistList = new ArrayList<>();
+			final JavaPairRDD< Long, Tuple2< RegionMergingInput, Double > > ensuredWeights = rdd.mapToPair( new EnsureWeights( edgeWeight ) );
+			ensuredWeights.cache();
+			unpersistList.add( ensuredWeights );
 
-//			if ( zeroBased.cache().count() > 0 ) {
-//				final List< Tuple2< Long, MergeBlocIn > > zb = zeroBased.filter( t -> {
-//					for ( int i = 0; i < t._2().indexNodeMapping.length; ++i )
-//						if ( t._2().indexNodeMapping[ i ] == 7085 )
-//							return true;
-//					return false;
-//				}).collect();
-//				for ( final Tuple2< Long, MergeBlocIn > z : zb ) {
-//					final long[] indexNodeMapping = z._2().indexNodeMapping;
-//					final Edge e = new Edge( z._2().g.edges() );
-//					for ( int i = 0; i < e.size(); ++i ) {
-//						e.setIndex( i );
-//						if ( indexNodeMapping[ ( int ) e.from() ] == 7085 || indexNodeMapping[ ( int ) e.to() ] == 7085 )
-//							System.out.println( "Input? " + z._1() + " " + e + " " + indexNodeMapping[ (int)e.from() ] + " " + indexNodeMapping[ (int)e.to() ]  );
-//					}
-//				}
-//			}
+			ensuredWeights.filter( t -> t._1().longValue() == 15 ).values().map( v -> {
+				final Edge e = new Edge( v._1().edges );
+				System.out.println( "DEBUG! " + e.size() );
+				for ( int i = 0; i < e.size(); ++i )
+				{
+					e.setIndex( i );
+					System.out.println( e );
+				}
+				System.out.println( v._1().outsideNodes );
+				return true;
+			} ).count();
 
-			final JavaPairRDD< Long, Tuple2< MergeBlocIn, Double > > ensuredWeights = zeroBased.mapToPair( new EnsureWeights( edgeWeight ) ).cache();
+			final JavaPairRDD< Long, MergeBlocIn > zeroBased = ensuredWeights.mapToPair( t -> new Tuple2<>( t._1(), t._2()._1() ) ).mapToPair( new ToZeroBasedIndexing<>( sc.broadcast( edgeMerger ) ) );
+			zeroBased.cache();
+			unpersistList.add( zeroBased );
+
+			zeroBased.filter( t -> t._1().longValue() == 15 ).values().map( v -> {
+				final Edge e = new Edge( v.g.edges() );
+				System.out.println( "DEBUG ZERO_BASED! " + e.size() );
+				for ( int i = 0; i < e.size(); ++i )
+				{
+					e.setIndex( i );
+					System.out.println( e );
+				}
+				System.out.println( v.outsideNodes );
+				return true;
+			} ).count();
+
+			System.out.println( "Currently " + ensuredWeights.count() + " blocks remaining." );
 
 			final long remainingBlocks = ensuredWeights.count();
 
 			// why is filter necessary?
 			final JavaRDD< Double > filtered = ensuredWeights.map( t -> t._2()._2() ).filter( d -> d > 0 ).cache();
+			unpersistList.add( filtered );
 
 			if ( filtered.count() == 0 )
 				break;
@@ -96,9 +114,21 @@ public class RegionMergingArrayBased
 
 			System.out.println( "Merging everything up to " + threshold + " (" + maxThreshold + ")" );
 
-			final JavaPairRDD< Long, Tuple2< Long, MergeBlocOut > > mergedEdges = ensuredWeights
-					.mapToPair( t -> new Tuple2<>( t._1(), t._2()._1() ) )
+			final JavaPairRDD< Long, Tuple2< Long, MergeBlocOut > > mergedEdges = zeroBased
 					.mapToPair( new MergeBlocArrayBased( edgeMerger, edgeWeight, threshold ) ).cache();
+			unpersistList.add( mergedEdges );
+
+			mergedEdges.filter( t -> t._1().longValue() == 15 ).values().map( v -> {
+				final Edge e = new Edge( v._2().edges );
+				System.out.println( "DEBUG MERGED_EDGES! " + e.size() + " " + 15 + " " + v._1() );
+				for ( int i = 0; i < e.size(); ++i )
+				{
+					e.setIndex( i );
+					System.out.println( e );
+				}
+				System.out.println( v._2().outsideNodes );
+				return true;
+			} ).count();
 
 			hasChanged = mergedEdges.values().filter( t -> t._2().hasChanged ).count() > 0;
 			if ( !hasChanged )
@@ -108,7 +138,7 @@ public class RegionMergingArrayBased
 			visitor.visit( mergedEdges, parents );
 			System.out.println( "Done visiting" );
 
-			final long[] counts = new long[ nBlocks ];
+			// Update counts of outside nodes
 
 			final List< Tuple2< Long, Long > > joins = mergedEdges.map( t -> new Tuple2<>( t._1(), t._2()._1() ) ).collect();
 
@@ -121,18 +151,108 @@ public class RegionMergingArrayBased
 			}
 
 			for ( int i = 0; i < nBlocks; ++i )
-				++counts[ dj.findRoot( i ) ];
+				dj.findRoot( i );
 
 			final int setCount = dj.setCount();
 
 			final Broadcast< int[] > parentsBC = sc.broadcast( parents );
 
-			final JavaPairRDD< Long, RemappedData > remappedData = mergedEdges
-					.mapToPair( new FindRootBlock( parentsBC, setCount ) )
-					.mapToPair( new RemapToOriginalIndices( parentsBC, setCount ) );
+			final JavaPairRDD< Long, Tuple2< Long, RemappedData > > remappedData = mergedEdges
+					.mapToPair( t -> {
+						final Edge e = new Edge( t._2()._2().edges );
+						final DisjointSets map = t._2()._2().dj;
+						final long[] counts = t._2()._2().counts;
+						for ( int i = 0; i < e.size(); ++i )
+						{
+							e.setIndex( i );
+							final int from = ( int ) e.from();
+							final int to = ( int ) e.to();
+
+							final int rFrom = map.findRoot( from );
+							final int rTo = map.findRoot( to );
+
+							if ( rFrom != from )
+								counts[ from ] = 0;
+
+							if ( rTo != to )
+								counts[ to ] = 0;
+
+							e.from( rFrom );
+							e.to( rTo );
+
+							if ( rFrom == rTo )
+								e.weight( -1.0 );
+
+						}
+						return t;
+					} )
+					.mapToPair( new RemapToOriginalIndices() );
+			remappedData.cache();
+			unpersistList.add( remappedData );
+			remappedData.count();
+			System.out.println( "Done remapping." );
+			remappedData.filter( t -> t._1().longValue() == 15 ).values().map( v -> {
+				final Edge e = new Edge( v._2().edges );
+				System.out.println( "DEBUG2 REMAPPED_DATA! " + e.size() + " " + 15 + " " + v._1() );
+				for ( int i = 0; i < e.size(); ++i )
+				{
+					e.setIndex( i );
+					System.out.println( e );
+				}
+				System.out.println( v._2().borderNodeMappings );
+				System.out.println( v._2().outsideNodes );
+				return true;
+			} ).count();
+
+			final JavaPairRDD< Long, RemappedData > noRoot = remappedData.mapToPair( t -> new Tuple2<>( t._1(), t._2()._2() ) );
+
+			noRoot.filter( t -> t._1().longValue() == 15 ).values().map( v -> {
+				final Edge e = new Edge( v.edges );
+				System.out.println( "DEBUG2 NO_ROOT! " + e.size() );
+				for ( int i = 0; i < e.size(); ++i )
+				{
+					e.setIndex( i );
+					System.out.println( e );
+				}
+				System.out.println( v.borderNodeMappings );
+				System.out.println( v.outsideNodes );
+				return true;
+			} ).count();
+
+			final JavaPairRDD< Long, RemappedData > withUpdatedBorderNodes = OutsideNodeCountRequest.request( noRoot );
+			withUpdatedBorderNodes.filter( t -> t._1().longValue() == 15 ).values().map( v -> {
+				final Edge e = new Edge( v.edges );
+				System.out.println( "DEBUG2 WITH_UPDATED_BORDER_NODES! " + e.size() );
+				for ( int i = 0; i < e.size(); ++i )
+				{
+					e.setIndex( i );
+					System.out.println( e );
+				}
+				System.out.println( v.borderNodeMappings );
+				System.out.println( v.outsideNodes );
+				return true;
+			} ).count();
 
 
-			final JavaPairRDD< Long, ArrayList< RemappedData > > aggregated = remappedData
+			final JavaPairRDD< Long, RemappedData > withRootBlock = withUpdatedBorderNodes.mapToPair( t -> new Tuple2<>( ( long ) dj.findRoot( t._1().intValue() ), t._2() ) );
+
+			final JavaPairRDD< Long, RemappedData > withCorrectOutsideNodes = withRootBlock.mapToPair( t -> {
+				final long root = t._1();
+				final TLongLongHashMap outsideNodes = new TLongLongHashMap();
+				for ( final TLongLongIterator it = t._2().outsideNodes.iterator(); it.hasNext(); )
+				{
+					it.advance();
+					final int r = dj.findRoot( ( int ) it.value() );
+					if ( r != root )
+						outsideNodes.put( it.key(), r );
+				}
+
+				return new Tuple2<>( root, new RemappedData( t._2().edges, t._2().counts, outsideNodes, t._2().merges, t._2.borderNodeMappings ) );
+
+			} );
+
+
+			final JavaPairRDD< Long, ArrayList< RemappedData > > aggregated = withCorrectOutsideNodes
 					.aggregateByKey(
 							new ArrayList<>(),
 							( v1, v2 ) -> {
@@ -144,64 +264,45 @@ public class RegionMergingArrayBased
 								return v1;
 							} );
 
-			final JavaPairRDD< Long, OriginalLabelData > reduced = aggregated
-					.mapToPair( new ReduceBlock() )
-//					.mapToPair( t -> {
-//
-//						final OriginalLabelData old = t._2();
-//						final TDoubleArrayList edges = new TDoubleArrayList();
-//						final Edge oldE = new Edge( old.edges );
-//						final Edge e = new Edge( edges );
-//						for ( int i = 0; i < oldE.size(); ++i )
-//						{
-//							oldE.setIndex( i );
-//							if ( oldE.weight() >= 0.0 )
-//								e.add( oldE.weight(), oldE.affinity(), oldE.from(), oldE.to(), oldE.multiplicity() );
-//						}
-//						return new Tuple2<>( t._1(), new OriginalLabelData( edges, old.counts, old.outsideNodes ) );
-//					} );
-					;
 
-//			for ( final Tuple2< Long, OriginalLabelData > blub : reduced.cache().filter( t -> t._2().counts.contains( 7085 ) ).collect() )
-//			{
-//				final Edge edge7085 = new Edge( blub._2().edges );
-//				System.out.println( blub._1() );
-//				for ( int i = 0; i < edge7085.size(); ++i )
-//				{
-//					edge7085.setIndex( i );
-//					if ( edge7085.from() == 7085 || edge7085.to() == 7085 )
-//						System.out.println( edge7085 );
-//				}
-//				System.out.println();
-//			}
+			final JavaPairRDD< Long, OriginalLabelData > reduced = aggregated.mapToPair( new ReduceBlock() );
 
-			final JavaPairRDD< Long, RegionMergingInput > backToInput = reduced.mapToPair( t -> {
-				final Long key = t._1();
-				final OriginalLabelData data = t._2();
+			rdd = reduced
+					.mapToPair( t -> {
+						final Long key = t._1();
+						final OriginalLabelData data = t._2();
 
-				final TLongIntHashMap nodeIndexMapping = new TLongIntHashMap();
-				final TLongLongIterator it = data.counts.iterator();
-				for ( int i = 0; it.hasNext(); ++i )
-				{
-					it.advance();
-					nodeIndexMapping.put( it.key(), i );
-				}
+						final TLongIntHashMap nodeIndexMapping = new TLongIntHashMap();
+						final TLongLongIterator it = data.counts.iterator();
+						for ( int i = 0; it.hasNext(); ++i )
+						{
+							it.advance();
+							nodeIndexMapping.put( it.key(), i );
+						}
+						return new Tuple2<>( key, new RegionMergingInput( nodeIndexMapping.size(), nodeIndexMapping, data.counts, data.outsideNodes, data.edges ) );
+					} )
+					.mapToPair( new GenerateNodeIndexMapping<>() );
 
-				return new Tuple2<>( key, new RegionMergingInput( nodeIndexMapping.size(), nodeIndexMapping, data.counts, data.outsideNodes, data.edges) );
-			} );
+//			final JavaPairRDD< Long, MergeBlocIn > bti = backToInput
+////					.mapToPair( new GenerateNodeIndexMapping<>() )
+//					.mapToPair( new ToZeroBasedIndexing<>( sc.broadcast( edgeMerger ) ) );
+//			bti.persist( zeroBased.getStorageLevel() );
+//			zeroBased.unpersist();
+//			zeroBased = bti;
 
-			zeroBased = backToInput
-//					.mapToPair( new GenerateNodeIndexMapping<>() )
-					.mapToPair( new ToZeroBasedIndexing<>( sc.broadcast( edgeMerger ) ) );
-
-			System.out.println( zeroBased.count() + " blocks remaining" );
-			System.out.println();
-			System.out.println();
 //			if ( zeroBased.count() == 1 )
 //				break;
+			System.out.println();
+
+			for ( final Object o : unpersistList )
+				if ( o instanceof JavaPairRDD )
+					((JavaPairRDD)o).unpersist();
+				else if ( o instanceof JavaRDD )
+					( ( JavaRDD ) o ).unpersist();
+
 		}
 
-		return zeroBased;
+		return rdd;
 
 
 	}
