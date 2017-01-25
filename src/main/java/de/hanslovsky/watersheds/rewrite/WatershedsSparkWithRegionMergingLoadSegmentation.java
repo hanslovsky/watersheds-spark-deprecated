@@ -6,6 +6,10 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.lang3.ArrayUtils;
@@ -45,6 +49,7 @@ import de.hanslovsky.watersheds.rewrite.util.IntensityMouseOver;
 import de.hanslovsky.watersheds.rewrite.util.IterableWithConstant;
 import de.hanslovsky.watersheds.rewrite.util.Util;
 import gnu.trove.iterator.TLongIterator;
+import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
@@ -121,16 +126,40 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			t.mul( ( 1 << 16 ) * 1.0 );
 		}, new FloatType() ), "affs", Util.bdvOptions( affs ) );
 
-
+		System.out.println( "Loading labels: " + path );
 		final Img< LongType > labelsTarget = H5Utils.loadUnsignedLong( path, "zws", cellSizeLabels );
-//		final ArrayImg< LongType, LongArray > labelsTarget = ArrayImgs.longs( dimsNoChannels );
-//		{
-//			final ArrayCursor< LongType > ltC = labelsTarget.cursor();
-//			for ( long l = 1; ltC.hasNext(); ++l )
-//				ltC.next().set( l );
-//		}
+		System.out.println( "Loaded labels." );
 
-		final TLongLongHashMap counts = Util.countLabels( labelsTarget );
+
+		final int nThreads = Runtime.getRuntime().availableProcessors() - 1;
+		final ExecutorService es = Executors.newFixedThreadPool( nThreads );
+		final ArrayList< Callable< TLongLongHashMap > > tasks = new ArrayList<>();
+		final int lastDim = labelsTarget.numDimensions() - 1;
+		final long stepSize = labelsTarget.dimension( lastDim ) / nThreads;
+		for ( long z = 0; z < labelsTarget.dimension( lastDim ); z += stepSize )
+		{
+			final long[] zOffset = new long[ lastDim + 1 ];
+			zOffset[ lastDim ] = z;
+			final long[] currentDim = dimsNoChannels.clone();
+			currentDim[ lastDim ] = Math.min( z + stepSize, dimsNoChannels[ lastDim ] ) - z;
+			final IntervalView< LongType > oi = Views.offsetInterval( labelsTarget, zOffset, currentDim );
+
+			tasks.add( () -> Util.countLabels( oi ) );
+
+		}
+		final List< Future< TLongLongHashMap > > futures = es.invokeAll( tasks );
+//		final TLongLongHashMap counts = Util.countLabels( labelsTarget );
+		final TLongLongHashMap counts = new TLongLongHashMap();
+		for ( final Future< TLongLongHashMap > fut : futures )
+			for ( final TLongLongIterator futIt = fut.get().iterator(); futIt.hasNext(); ) {
+				futIt.advance();
+				final long l = futIt.key();
+				final long count = counts.contains( l ) ? counts.get( l ) + futIt.value() : futIt.value();
+				counts.put( l, count );
+			}
+		System.out.println( "Got counts." );
+
+		es.shutdown();
 
 		System.out.println( "Creating blocks... " );
 		final ArrayList< Tuple2< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > > blocks =
@@ -139,7 +168,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		// start spark server
 		System.out.println( "Starting Spark server... " );
-		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[1]" ).set( "spark.driver.maxResultSize", "4g" );
+		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[*]" ).set( "spark.driver.maxResultSize", "4g" );
 		final JavaSparkContext sc = new JavaSparkContext( conf );
 		Logger.getRootLogger().setLevel( Level.ERROR );
 
