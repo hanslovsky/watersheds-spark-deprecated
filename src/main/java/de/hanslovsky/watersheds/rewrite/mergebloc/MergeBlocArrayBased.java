@@ -24,12 +24,20 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 	private final double threshold;
 
+	private final double regionRatio;
+
 	public MergeBlocArrayBased( final EdgeMerger edgeMerger, final EdgeWeight edgeWeight, final double threshold )
+	{
+		this( edgeMerger, edgeWeight, threshold, 0.0 );
+	}
+
+	public MergeBlocArrayBased( final EdgeMerger edgeMerger, final EdgeWeight edgeWeight, final double threshold, final double regionRatio )
 	{
 		super();
 		this.edgeMerger = edgeMerger;
 		this.edgeWeight = edgeWeight;
 		this.threshold = threshold;
+		this.regionRatio = regionRatio;
 	}
 
 
@@ -67,10 +75,13 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 		}
 
 		long pointingOutside = t._1();
+		final long self = t._1();
+		final int nInternalNodes = nNodes - in.outsideNodes.size();
+		final int minNMerges = ( int ) ( nInternalNodes * regionRatio );
 
 		final TLongArrayList merges = new TLongArrayList();
 
-		while ( !queue.empty() )
+		for ( int count = 0; !queue.empty() && ( count < minNMerges || pointingOutside == self ); )
 		{
 			final int next = queue.pop();
 			e.setIndex( next );
@@ -81,16 +92,18 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 			else if ( in.outsideNodes.contains( ( int ) e.from() ) )
 			{
-				pointingOutside = in.outsideNodes.get( ( int ) e.from() );
-				break;
+				if ( pointingOutside == self )
+					pointingOutside = in.outsideNodes.get( ( int ) e.from() );
+				continue;
+//				break;
 			}
-
 			else if ( in.outsideNodes.contains( ( int ) e.to() ) )
 			{
-				pointingOutside = in.outsideNodes.get( ( int ) e.to() );
-				break;
+				if ( pointingOutside == self )
+					pointingOutside = in.outsideNodes.get( ( int ) e.to() );
+				continue;
+//				break;
 			}
-
 			else if ( Double.isNaN( w ) )
 			{
 				final int f = dj.findRoot( ( int ) e.from() );
@@ -154,6 +167,8 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 			dj.findRoot( r1 );
 			dj.findRoot( r2 );
+
+			++count;
 
 
 
