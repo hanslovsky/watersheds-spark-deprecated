@@ -30,9 +30,12 @@ public class EnsureWeights implements PairFunction< Tuple2< Long, RegionMergingI
 			e.setIndex( i );
 			if ( e.from() == e.to() )
 				e.weight( -1.0d );
+			else if ( e.weight() < 0.0 )
+			{
+
+			}
 			else
 			{
-//				if ( Double.isNaN( e.weight() ) )
 				e.weight( edgeWeight.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
 				if ( !outsideNodes.contains( ( int ) e.from() ) && !outsideNodes.contains( ( int ) e.to() ) )
 					maxWeight = Math.max( e.weight(), maxWeight );
