@@ -21,6 +21,7 @@ import net.imglib2.converter.Converters;
 import net.imglib2.img.Img;
 import net.imglib2.img.ImgFactory;
 import net.imglib2.img.cell.CellImg;
+import net.imglib2.realtransform.AffineTransform3D;
 import net.imglib2.type.numeric.ARGBType;
 import net.imglib2.type.numeric.IntegerType;
 import net.imglib2.type.numeric.NumericType;
@@ -291,10 +292,45 @@ public class Util
 	public static < T > BdvStackSource< T > replaceSourceAndReuseConverter( BdvStackSource< T > bdv, final RandomAccessibleInterval< T > replacement, final Converter< T, ARGBType > conv, final BdvOptions options )
 	{
 		final ViewerPanel viewer = bdv.getBdvHandle().getViewerPanel();
-		viewer.removeSource( bdv.getSources().get( 0 ).getSpimSource() );
-		bdv = BdvFunctions.show( replacement, "colored history", options.addTo( bdv ) );
+		final Source< T > source = bdv.getSources().get( 0 ).getSpimSource();
+		viewer.removeSource( source );
+		final AffineTransform3D tf = new AffineTransform3D();
+		viewer.getState().getViewerTransform( tf );
+		bdv = BdvFunctions.show( replacement, source.getName(), options.addTo( bdv ) );
+		bdv.getBdvHandle().getViewerPanel().setCurrentViewerTransform( tf );
 		Util.replaceConverter( bdv, 0, conv );
 		return bdv;
+	}
+
+	public static int[] reverse( final int[] array )
+	{
+		ArrayUtils.reverse( array );
+		return array;
+	}
+
+	public static long[] reverse( final long[] array )
+	{
+		ArrayUtils.reverse( array );
+		return array;
+	}
+
+	public static JavaPairRDD< Integer, Integer > recordsPerPartition( final JavaRDDLike< ?, ? > rdd )
+	{
+		return rdd.mapPartitionsWithIndex( ( i, it ) -> new Iterator< Tuple2< Integer, Integer > >()
+		{
+			@Override
+			public boolean hasNext()
+			{
+				return it.hasNext();
+			}
+
+			@Override
+			public Tuple2< Integer, Integer > next()
+			{
+				it.next();
+				return new Tuple2<>( i, 1 );
+			}
+		}, false ).mapToPair( t -> t ).reduceByKey( ( i1, i2 ) -> i1 + i2 );
 	}
 
 }
