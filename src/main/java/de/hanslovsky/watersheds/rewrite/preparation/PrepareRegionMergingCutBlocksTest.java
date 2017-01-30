@@ -45,7 +45,6 @@ import de.hanslovsky.watersheds.rewrite.util.IdServiceZMQ;
 import de.hanslovsky.watersheds.rewrite.util.NumElements;
 import de.hanslovsky.watersheds.rewrite.util.Util;
 import gnu.trove.iterator.TLongIterator;
-import gnu.trove.iterator.TLongObjectIterator;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
 import gnu.trove.set.hash.TLongHashSet;
@@ -457,8 +456,6 @@ public class PrepareRegionMergingCutBlocksTest
 							{
 								if ( data5711.outsideNodes.contains( sv ) )
 									t.set( 80 << 16 | 80 << 8 | 80 << 0 );
-								else if ( data5711.borderNodes.contains( sv ) )
-									t.set( 160 << 16 | 160 << 8 | 160 << 0 );
 								else
 								{
 									if ( !cmap.contains( sv ) )
@@ -472,13 +469,7 @@ public class PrepareRegionMergingCutBlocksTest
 								t.set( 0 );
 						},
 						new ARGBType() ),
-				"b386 " + data5711.outsideNodes.size() + " " + data5711.borderNodes.size() );
-
-		for ( final TLongObjectIterator< TLongHashSet > it = data5711.borderNodes.iterator(); it.hasNext(); )
-		{
-			it.advance();
-			System.out.println( it.key() + " " + it.value() );
-		}
+				"b386 " + data5711.outsideNodes.size() );
 
 		sc.close();
 

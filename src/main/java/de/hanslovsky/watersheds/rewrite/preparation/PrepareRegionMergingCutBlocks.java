@@ -50,8 +50,6 @@ public class PrepareRegionMergingCutBlocks
 
 		final public TLongLongHashMap outsideNodes;
 
-		final public TLongObjectHashMap< TLongHashSet > borderNodes;
-
 		final public TDoubleArrayList edges;
 
 		final public TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap;
@@ -63,7 +61,6 @@ public class PrepareRegionMergingCutBlocks
 			super();
 			this.counts = counts;
 			this.outsideNodes = outsideNodes;
-			this.borderNodes = borderNodes;
 			this.edges = edges;
 			this.nodeEdgeMap = nodeEdgeMap;
 			this.e1 = new Edge( this.edges );
