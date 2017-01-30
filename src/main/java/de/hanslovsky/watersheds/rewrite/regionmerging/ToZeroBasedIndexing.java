@@ -1,14 +1,13 @@
 package de.hanslovsky.watersheds.rewrite.regionmerging;
 
-import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.broadcast.Broadcast;
 
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.UndirectedGraphArrayBased;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocIn;
-import scala.Tuple2;
 
-public class ToZeroBasedIndexing< K > implements PairFunction< Tuple2< K, RegionMergingInput >, K, MergeBlocIn >
+public class ToZeroBasedIndexing implements Function< RegionMergingInput, MergeBlocIn >
 {
 
 	private final Broadcast< EdgeMerger > edgerMergeBC;
@@ -20,17 +19,15 @@ public class ToZeroBasedIndexing< K > implements PairFunction< Tuple2< K, Region
 	}
 
 	@Override
-	public Tuple2< K, MergeBlocIn > call( final Tuple2< K, RegionMergingInput > t ) throws Exception
+	public MergeBlocIn call( final RegionMergingInput input ) throws Exception
 	{
-		final RegionMergingInput input = t._2();
-
 		final UndirectedGraphArrayBased g = new UndirectedGraphArrayBased( input.nNodes, Util.mapEdges( input.edges, input.nodeIndexMapping ), edgerMergeBC.getValue() );
 
-		return new Tuple2<>( t._1(), new MergeBlocIn(
+		return new MergeBlocIn(
 				g,
 				Util.mapCounts( input.counts, input.nodeIndexMapping ),
 				Util.mapOutsideNodes( input.outsideNodes, input.nodeIndexMapping ),
-				Util.inverse( input.nodeIndexMapping ) ) );
+				Util.inverse( input.nodeIndexMapping ) );
 	}
 
 }

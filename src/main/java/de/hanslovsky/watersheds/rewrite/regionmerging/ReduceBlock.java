@@ -2,23 +2,19 @@ package de.hanslovsky.watersheds.rewrite.regionmerging;
 
 import java.util.ArrayList;
 
-import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.api.java.function.Function;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.util.DisjointSetsHashMap;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TLongLongHashMap;
-import scala.Tuple2;
 
-public class ReduceBlock implements PairFunction< Tuple2< Long, ArrayList< RemappedData > >, Long, OriginalLabelData >
+public class ReduceBlock implements Function< ArrayList< RemappedData >, OriginalLabelData >
 {
 
 	@Override
-	public Tuple2< Long, OriginalLabelData > call( final Tuple2< Long, ArrayList< RemappedData > > t ) throws Exception
+	public OriginalLabelData call( final ArrayList< RemappedData > mappedDatas ) throws Exception
 	{
-		final long key = t._1();
-		final ArrayList< RemappedData > mappedDatas = t._2();
-
 		final TDoubleArrayList allEdges = new TDoubleArrayList();
 		final Edge ae = new Edge( allEdges );
 
@@ -47,7 +43,7 @@ public class ReduceBlock implements PairFunction< Tuple2< Long, ArrayList< Remap
 			}
 		}
 
-		return new Tuple2<>( key, new OriginalLabelData( allEdges, allCounts, allOutsideNodes ) );
+		return new OriginalLabelData( allEdges, allCounts, allOutsideNodes );
 	}
 
 }

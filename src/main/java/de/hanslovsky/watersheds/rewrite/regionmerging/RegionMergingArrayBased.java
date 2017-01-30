@@ -6,7 +6,7 @@ import java.util.List;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.broadcast.Broadcast;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
@@ -53,7 +53,7 @@ public class RegionMergingArrayBased
 			final double tolerance )
 	{
 
-		JavaPairRDD< Long, RegionMergingInput > rdd = in.mapToPair( t -> t );
+		JavaPairRDD< Long, RegionMergingInput > rdd = in.mapValues( t -> t );
 
 		final int nBlocks = ( int ) nOriginalBlocks;// rdd.count();
 
@@ -69,10 +69,11 @@ public class RegionMergingArrayBased
 			ensuredWeights.cache();
 			unpersistList.add( ensuredWeights );
 
-			final JavaPairRDD< Long, MergeBlocIn > zeroBased = ensuredWeights.mapToPair( t -> new Tuple2<>( t._1(), t._2()._1() ) ).mapToPair( new ToZeroBasedIndexing<>( sc.broadcast( edgeMerger ) ) );
+			final JavaPairRDD< Long, MergeBlocIn > zeroBased = ensuredWeights.mapValues( t -> t._1() ).mapValues( new ToZeroBasedIndexing( sc.broadcast( edgeMerger ) ) );
 			zeroBased.cache();
 			unpersistList.add( zeroBased );
 
+			final int nRegions = zeroBased.map( t -> t._2().counts.length - t._2().outsideNodes.size() ).reduce( ( i1, i2 ) -> i1 + i2 );
 
 			System.out.println( "Currently " + ensuredWeights.count() + " blocks remaining." );
 
@@ -123,10 +124,10 @@ public class RegionMergingArrayBased
 			final Broadcast< int[] > parentsBC = sc.broadcast( parents );
 
 			final JavaPairRDD< Long, Tuple2< Long, RemappedData > > remappedData = mergedEdges
-					.mapToPair( t -> {
-						final Edge e = new Edge( t._2()._2().edges );
-						final DisjointSets map = t._2()._2().dj;
-						final long[] counts = t._2()._2().counts;
+					.mapValues( input -> {
+						final Edge e = new Edge( input._2().edges );
+						final DisjointSets map = input._2().dj;
+						final long[] counts = input._2().counts;
 						for ( int i = 0; i < e.size(); ++i )
 						{
 							e.setIndex( i );
@@ -149,15 +150,15 @@ public class RegionMergingArrayBased
 								e.weight( -1.0 );
 
 						}
-						return t;
+						return input;
 					} )
-					.mapToPair( new RemapToOriginalIndices() );
+					.mapValues( new RemapToOriginalIndices() );
 			remappedData.cache();
 			unpersistList.add( remappedData );
 			remappedData.count();
 			System.out.println( "Done remapping." );
 
-			final JavaPairRDD< Long, RemappedData > noRoot = remappedData.mapToPair( t -> new Tuple2<>( t._1(), t._2()._2() ) );
+			final JavaPairRDD< Long, RemappedData > noRoot = remappedData.mapValues( t -> t._2() );
 
 			final JavaPairRDD< Long, RemappedData > withUpdatedBorderNodes = OutsideNodeCountRequest.request( noRoot );
 
@@ -192,13 +193,10 @@ public class RegionMergingArrayBased
 							} );
 
 
-			final JavaPairRDD< Long, OriginalLabelData > reduced = aggregated.mapToPair( new ReduceBlock() );
+			final JavaPairRDD< Long, OriginalLabelData > reduced = aggregated.mapValues( new ReduceBlock() );
 
 			rdd = reduced
-					.mapToPair( t -> {
-						final Long key = t._1();
-						final OriginalLabelData data = t._2();
-
+					.mapValues( data -> {
 						final TLongIntHashMap nodeIndexMapping = new TLongIntHashMap();
 						final TLongLongIterator it = data.counts.iterator();
 						for ( int i = 0; it.hasNext(); ++i )
@@ -206,9 +204,9 @@ public class RegionMergingArrayBased
 							it.advance();
 							nodeIndexMapping.put( it.key(), i );
 						}
-						return new Tuple2<>( key, new RegionMergingInput( nodeIndexMapping.size(), nodeIndexMapping, data.counts, data.outsideNodes, data.edges ) );
+						return new RegionMergingInput( nodeIndexMapping.size(), nodeIndexMapping, data.counts, data.outsideNodes, data.edges );
 					} )
-					.mapToPair( new GenerateNodeIndexMapping<>() );
+					.mapValues( new GenerateNodeIndexMapping() );
 
 //			final JavaPairRDD< Long, MergeBlocIn > bti = backToInput
 ////					.mapToPair( new GenerateNodeIndexMapping<>() )
@@ -245,15 +243,13 @@ public class RegionMergingArrayBased
 		});
 	}
 
-	public static class GenerateNodeIndexMapping< K > implements PairFunction< Tuple2< K, RegionMergingInput >, K, RegionMergingInput >
+	public static class GenerateNodeIndexMapping implements Function< RegionMergingInput, RegionMergingInput >
 	{
 
 		@Override
-		public Tuple2< K, RegionMergingInput > call( final Tuple2< K, RegionMergingInput > t ) throws Exception
+		public RegionMergingInput call( final RegionMergingInput rmi ) throws Exception
 		{
-			final RegionMergingInput rmi = t._2();
-
-			return new Tuple2<>( t._1(), rmi );
+			return rmi;
 		}
 
 	}
