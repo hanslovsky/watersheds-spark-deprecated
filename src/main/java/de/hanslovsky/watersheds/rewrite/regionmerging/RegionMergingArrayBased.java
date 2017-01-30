@@ -65,7 +65,7 @@ public class RegionMergingArrayBased
 		for ( boolean hasChanged = true; hasChanged; )
 		{
 			final ArrayList< Object > unpersistList = new ArrayList<>();
-			final JavaPairRDD< Long, Tuple2< RegionMergingInput, Double > > ensuredWeights = rdd.mapToPair( new EnsureWeights( edgeWeight ) );
+			final JavaPairRDD< Long, Tuple2< RegionMergingInput, Double > > ensuredWeights = rdd.mapValues( new EnsureWeights( edgeWeight ) );
 			ensuredWeights.cache();
 			unpersistList.add( ensuredWeights );
 

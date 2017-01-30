@@ -1,13 +1,13 @@
 package de.hanslovsky.watersheds.rewrite.regionmerging;
 
-import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.api.java.function.Function;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import gnu.trove.map.hash.TLongLongHashMap;
 import scala.Tuple2;
 
-public class EnsureWeights implements PairFunction< Tuple2< Long, RegionMergingInput >, Long, Tuple2< RegionMergingInput, Double > >
+public class EnsureWeights implements Function< RegionMergingInput, Tuple2< RegionMergingInput, Double > >
 {
 
 	private final EdgeWeight edgeWeight;
@@ -19,12 +19,12 @@ public class EnsureWeights implements PairFunction< Tuple2< Long, RegionMergingI
 	}
 
 	@Override
-	public Tuple2< Long, Tuple2< RegionMergingInput, Double > > call( final Tuple2< Long, RegionMergingInput > t ) throws Exception
+	public Tuple2< RegionMergingInput, Double > call( final RegionMergingInput in ) throws Exception
 	{
 		double maxWeight = Double.NEGATIVE_INFINITY;
-		final Edge e = new Edge( t._2().edges );
-		final TLongLongHashMap outsideNodes = t._2().outsideNodes;
-		final TLongLongHashMap counts = t._2().counts;
+		final Edge e = new Edge( in.edges );
+		final TLongLongHashMap outsideNodes = in.outsideNodes;
+		final TLongLongHashMap counts = in.counts;
 		for ( int i = 0; i < e.size(); ++i )
 		{
 			e.setIndex( i );
@@ -41,7 +41,7 @@ public class EnsureWeights implements PairFunction< Tuple2< Long, RegionMergingI
 					maxWeight = Math.max( e.weight(), maxWeight );
 			}
 		}
-		return new Tuple2<>( t._1(), new Tuple2<>( t._2(), maxWeight ) );
+		return new Tuple2<>( in, maxWeight );
 	}
 
 }
