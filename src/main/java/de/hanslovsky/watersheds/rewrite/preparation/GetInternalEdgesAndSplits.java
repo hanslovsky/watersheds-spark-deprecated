@@ -122,18 +122,6 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 				Views.collapseReal( ArrayImgs.floats( t._2()._2(), extendedAffinitiesBlockDim ) );
 
 		final IntervalView< LongType > innerLabels = Views.offsetInterval( labels, offset, blockDim );
-//		for ( final LongType il : innerLabels )
-//			if ( il.get() < 0 || il.get() > 9000000 ) {
-//				System.out.println( "INNER LABELS CONTAIN GARBAGE! " + il );
-//				BdvFunctions.show( Converters.convert( ( RandomAccessibleInterval< LongType > ) labels, ( src, tgt ) -> {
-//					tgt.set( src.get() < 0 ? 1 << 16 : 0 );
-//				}, new LongType() ), "LAB" );
-//				BdvFunctions.show( Converters.convert( ( RandomAccessibleInterval< LongType > ) innerLabels, ( src, tgt ) -> {
-//					tgt.set( src.get() < 0 ? 1 << 16 : 0 );
-//				}, new LongType() ), "INNER LAB" );
-//				Thread.sleep( 100000000 );
-////				System.exit( 123 );
-//			}
 		final IntervalView< RealComposite< FloatType > > innerAffinities = Views.offsetInterval( affinities, offset, blockDim );
 
 		final TDoubleArrayList edges = new TDoubleArrayList();
