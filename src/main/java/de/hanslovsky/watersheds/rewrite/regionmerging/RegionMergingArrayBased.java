@@ -69,33 +69,10 @@ public class RegionMergingArrayBased
 			ensuredWeights.cache();
 			unpersistList.add( ensuredWeights );
 
-			ensuredWeights.filter( t -> t._1().longValue() == 15 ).values().map( v -> {
-				final Edge e = new Edge( v._1().edges );
-				System.out.println( "DEBUG! " + e.size() );
-				for ( int i = 0; i < e.size(); ++i )
-				{
-					e.setIndex( i );
-					System.out.println( e );
-				}
-				System.out.println( v._1().outsideNodes );
-				return true;
-			} ).count();
-
 			final JavaPairRDD< Long, MergeBlocIn > zeroBased = ensuredWeights.mapToPair( t -> new Tuple2<>( t._1(), t._2()._1() ) ).mapToPair( new ToZeroBasedIndexing<>( sc.broadcast( edgeMerger ) ) );
 			zeroBased.cache();
 			unpersistList.add( zeroBased );
 
-			zeroBased.filter( t -> t._1().longValue() == 15 ).values().map( v -> {
-				final Edge e = new Edge( v.g.edges() );
-				System.out.println( "DEBUG ZERO_BASED! " + e.size() );
-				for ( int i = 0; i < e.size(); ++i )
-				{
-					e.setIndex( i );
-					System.out.println( e );
-				}
-				System.out.println( v.outsideNodes );
-				return true;
-			} ).count();
 
 			System.out.println( "Currently " + ensuredWeights.count() + " blocks remaining." );
 
@@ -117,18 +94,6 @@ public class RegionMergingArrayBased
 			final JavaPairRDD< Long, Tuple2< Long, MergeBlocOut > > mergedEdges = zeroBased
 					.mapToPair( new MergeBlocArrayBased( edgeMerger, edgeWeight, threshold ) ).cache();
 			unpersistList.add( mergedEdges );
-
-			mergedEdges.filter( t -> t._1().longValue() == 15 ).values().map( v -> {
-				final Edge e = new Edge( v._2().edges );
-				System.out.println( "DEBUG MERGED_EDGES! " + e.size() + " " + 15 + " " + v._1() );
-				for ( int i = 0; i < e.size(); ++i )
-				{
-					e.setIndex( i );
-					System.out.println( e );
-				}
-				System.out.println( v._2().outsideNodes );
-				return true;
-			} ).count();
 
 			hasChanged = mergedEdges.values().filter( t -> t._2().hasChanged ).count() > 0;
 			if ( !hasChanged )
@@ -191,48 +156,10 @@ public class RegionMergingArrayBased
 			unpersistList.add( remappedData );
 			remappedData.count();
 			System.out.println( "Done remapping." );
-			remappedData.filter( t -> t._1().longValue() == 15 ).values().map( v -> {
-				final Edge e = new Edge( v._2().edges );
-				System.out.println( "DEBUG2 REMAPPED_DATA! " + e.size() + " " + 15 + " " + v._1() );
-				for ( int i = 0; i < e.size(); ++i )
-				{
-					e.setIndex( i );
-					System.out.println( e );
-				}
-				System.out.println( v._2().borderNodeMappings );
-				System.out.println( v._2().outsideNodes );
-				return true;
-			} ).count();
 
 			final JavaPairRDD< Long, RemappedData > noRoot = remappedData.mapToPair( t -> new Tuple2<>( t._1(), t._2()._2() ) );
 
-			noRoot.filter( t -> t._1().longValue() == 15 ).values().map( v -> {
-				final Edge e = new Edge( v.edges );
-				System.out.println( "DEBUG2 NO_ROOT! " + e.size() );
-				for ( int i = 0; i < e.size(); ++i )
-				{
-					e.setIndex( i );
-					System.out.println( e );
-				}
-				System.out.println( v.borderNodeMappings );
-				System.out.println( v.outsideNodes );
-				return true;
-			} ).count();
-
 			final JavaPairRDD< Long, RemappedData > withUpdatedBorderNodes = OutsideNodeCountRequest.request( noRoot );
-			withUpdatedBorderNodes.filter( t -> t._1().longValue() == 15 ).values().map( v -> {
-				final Edge e = new Edge( v.edges );
-				System.out.println( "DEBUG2 WITH_UPDATED_BORDER_NODES! " + e.size() );
-				for ( int i = 0; i < e.size(); ++i )
-				{
-					e.setIndex( i );
-					System.out.println( e );
-				}
-				System.out.println( v.borderNodeMappings );
-				System.out.println( v.outsideNodes );
-				return true;
-			} ).count();
-
 
 			final JavaPairRDD< Long, RemappedData > withRootBlock = withUpdatedBorderNodes.mapToPair( t -> new Tuple2<>( ( long ) dj.findRoot( t._1().intValue() ), t._2() ) );
 
