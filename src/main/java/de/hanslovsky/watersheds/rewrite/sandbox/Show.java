@@ -69,7 +69,7 @@ public class Show
 		new IntensityMouseOver( labelsBdv.getBdvHandle().getViewerPanel() );
 		new IntensityMouseOver( blocksBdv.getBdvHandle().getViewerPanel() );
 
-		final int[] cellSize = new int[] { 50, 50, 50, 3 };
+		final int[] cellSize = new int[] { 300, 300, 100, 3 };
 		System.out.println( "Loading data" );
 		final CellImg< FloatType, ?, ? > data =
 				H5Utils.loadFloat( path, "main", cellSize );

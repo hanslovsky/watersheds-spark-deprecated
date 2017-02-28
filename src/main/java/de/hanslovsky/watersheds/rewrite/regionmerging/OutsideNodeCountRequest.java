@@ -24,7 +24,7 @@ public class OutsideNodeCountRequest
 	public static Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
 	static
 	{
-		LOG.setLevel( Level.OFF );
+		LOG.setLevel( Level.TRACE );
 	}
 
 	public static JavaPairRDD< Long, RemappedData > request( final JavaPairRDD< Long, RemappedData > rdd )
@@ -43,8 +43,8 @@ public class OutsideNodeCountRequest
 						requests.get( block ).add( node );
 
 					}
-					if ( t._1().longValue() == 15 )
-						System.out.println( "REQUESTS? " + requests );
+//					if ( t._1().longValue() == 15 )
+//						System.out.println( "REQUESTS? " + requests );
 					return new Iterator< Tuple2< Long, Tuple2< Long, TLongHashSet > > >()
 					{
 
@@ -110,8 +110,8 @@ public class OutsideNodeCountRequest
 							countsForBlock.put( mappedId, counts.get( mappedId ) );
 							borderNodeMapForBlock.put( id, mappedId );
 						}
-						if ( it.key() == 15 )
-							System.out.println( "HANDLING REQUEST: " + tt._1() + " " + borderNodeMapForBlock + " " + countsForBlock + " " + borderNodeMap );
+//						if ( it.key() == 15 )
+//							System.out.println( "HANDLING REQUEST: " + tt._1() + " " + borderNodeMapForBlock + " " + countsForBlock + " " + borderNodeMap );
 						result.put( it.key(), new Tuple2<>( borderNodeMapForBlock, countsForBlock ) );
 
 					}
@@ -152,7 +152,7 @@ public class OutsideNodeCountRequest
 				.join( response )
 				.mapToPair( t -> {
 					final TLongLongHashMap counts = t._2()._1().counts;
-					LOG.info( "Merging " + counts.size() + " counts into block." );
+					LOG.debug( "Merging " + counts.size() + " counts into block." );
 
 					final TLongLongHashMap borderNodeAssignments = new TLongLongHashMap();
 

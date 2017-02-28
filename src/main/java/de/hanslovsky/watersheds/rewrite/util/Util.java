@@ -337,4 +337,28 @@ public class Util
 		}, false ).mapToPair( t -> t ).reduceByKey( ( i1, i2 ) -> i1 + i2 );
 	}
 
+	public static BdvStackSource< FloatType > showAffinities( final RandomAccessibleInterval< RealComposite< FloatType > > affs )
+	{
+		final BdvStackSource< FloatType > bdv = BdvFunctions.show( Converters.convert( affs, ( s, t ) -> {
+			t.set( ( 1 << 16 ) * s.get( 0 ).get() );
+		}, new FloatType() ),
+				"affs - " + 0,
+				Util.bdvOptions( affs ) );
+
+		for ( int i = 1; i < affs.numDimensions(); ++i )
+		{
+			final int finalI = i;
+			BdvFunctions.show( Converters.convert( affs, ( s, t ) -> {
+				t.set( ( 1 << 16 ) * s.get( finalI ).get() );
+			}, new FloatType() ),
+					"affs - " + i,
+					Util.bdvOptions( affs ).addTo( bdv ) );
+		}
+
+		new IntensityMouseOver( bdv.getBdvHandle().getViewerPanel() );
+
+		return bdv;
+
+	}
+
 }

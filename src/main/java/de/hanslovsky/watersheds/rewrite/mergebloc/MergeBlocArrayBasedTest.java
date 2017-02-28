@@ -139,7 +139,7 @@ public class MergeBlocArrayBasedTest
 		}
 
 
-		final MergeBlocArrayBased mb = new MergeBlocArrayBased( new EdgeMerger.MAX_AFFINITY_MERGER(), fw, 200.0 );
+		final MergeBlocArrayBased mb = new MergeBlocArrayBased( new EdgeMerger.MAX_AFFINITY_MERGER(), fw, 200.0, 0.0 );
 		System.out.println( "Start edge merging" );
 		final long t0 = System.currentTimeMillis();
 		final MergeBlocOut out = mb.call(

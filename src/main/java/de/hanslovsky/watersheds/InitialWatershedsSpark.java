@@ -61,9 +61,9 @@ public class InitialWatershedsSpark
 	{
 
 
-		final int[] cellSize = new int[] { 300, 300, 100, 3 };
+		final int[] cellSize = new int[] { 432, 432, 432, 3 };
 		final int[] cellSizeLabels = Util.dropLast( cellSize );
-		final int[] dimsIntervalInt = new int[] { 300, 300, 100, 3 };
+		final int[] dimsIntervalInt = new int[] { 150, 150, 150, 3 };
 		final long[] dimsInterval = Arrays.stream( dimsIntervalInt ).mapToLong( i -> i ).toArray();
 		final int[] dimsIntervalIntNoChannels = Util.dropLast( dimsIntervalInt );
 

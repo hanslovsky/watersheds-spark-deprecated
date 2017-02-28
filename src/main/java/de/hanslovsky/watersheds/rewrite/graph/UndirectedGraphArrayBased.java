@@ -1,6 +1,11 @@
 package de.hanslovsky.watersheds.rewrite.graph;
 
 import java.io.Serializable;
+import java.lang.invoke.MethodHandles;
+
+import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 
 import gnu.trove.iterator.TIntIntIterator;
 import gnu.trove.list.array.TDoubleArrayList;
@@ -8,6 +13,11 @@ import gnu.trove.map.hash.TIntIntHashMap;
 
 public class UndirectedGraphArrayBased implements Serializable
 {
+
+	public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
+	{
+		LOG.setLevel( Level.TRACE );
+	}
 
 	private final TDoubleArrayList edges;
 
@@ -139,6 +149,7 @@ public class UndirectedGraphArrayBased implements Serializable
 			{
 				assert fromMap.get( to ) == toMap.get( from ): "Edges are inconsistent!";
 				e2.setIndex( fromMap.get( to ) );
+				LOG.trace( "Edge exists multiple times! " + e1 + " " + e2 + " " + fromMap + " " + toMap );
 				edgeMerger.merge( e1, e2 );
 				e2.weight( Double.NaN );
 				e1.weight( -1.0 );

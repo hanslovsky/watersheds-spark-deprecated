@@ -1,5 +1,11 @@
 package de.hanslovsky.watersheds.rewrite.regionmerging;
 
+import java.lang.invoke.MethodHandles;
+
+import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
+
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocOut;
 import gnu.trove.iterator.TIntLongIterator;
@@ -17,12 +23,19 @@ import gnu.trove.set.hash.TLongHashSet;
 public class Util
 {
 
+	public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
+	{
+		LOG.setLevel( Level.TRACE );
+	}
+
 	public static TDoubleArrayList mapEdges( final TDoubleArrayList edges, final TLongIntHashMap nodeIndexMapping )
 	{
 
 		final TDoubleArrayList mappedEdges = new TDoubleArrayList();
 		final Edge e = new Edge( edges );
 		final Edge m = new Edge( mappedEdges );
+		LOG.setLevel( Level.TRACE );
+		LOG.trace( "Mapping to zero based: " + e.size() + " edges." );
 		for ( int i = 0; i < e.size(); ++i )
 		{
 			e.setIndex( i );
@@ -30,9 +43,16 @@ public class Util
 			final long t = e.to();
 			// TODO Why is this necessary?
 			if ( !nodeIndexMapping.contains( f ) || !nodeIndexMapping.contains( t ) )
+			{
+				LOG.trace( "NodeIndexMapping does not contain " + f + " or " + t + " " + nodeIndexMapping.toString() );
 				e.weight( -1.0d );
+			}
 			else
-				m.add( e.weight(), e.affinity(), nodeIndexMapping.get( e.from() ), nodeIndexMapping.get( e.to() ), e.multiplicity() );
+			{
+				final int idx = m.add( e.weight(), e.affinity(), nodeIndexMapping.get( e.from() ), nodeIndexMapping.get( e.to() ), e.multiplicity() );
+				m.setIndex( idx );
+				LOG.trace( "Adding edge " + m + " from " + e );
+			}
 		}
 
 		return mappedEdges;

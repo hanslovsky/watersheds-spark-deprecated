@@ -5,8 +5,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -25,8 +25,6 @@ import org.zeromq.ZMQ.Context;
 import org.zeromq.ZMQ.Socket;
 
 import bdv.img.h5.H5Utils;
-import bdv.util.BdvFunctions;
-import bdv.util.BdvStackSource;
 import ch.systemsx.cisd.hdf5.HDF5Factory;
 import ch.systemsx.cisd.hdf5.IHDF5Reader;
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
@@ -38,14 +36,13 @@ import de.hanslovsky.watersheds.rewrite.preparation.PrepareRegionMergingCutBlock
 import de.hanslovsky.watersheds.rewrite.regionmerging.OriginalLabelData;
 import de.hanslovsky.watersheds.rewrite.regionmerging.ReduceBlock;
 import de.hanslovsky.watersheds.rewrite.regionmerging.RegionMergingArrayBased;
+import de.hanslovsky.watersheds.rewrite.regionmerging.RegionMergingArrayBased.Visitor;
 import de.hanslovsky.watersheds.rewrite.regionmerging.RegionMergingInput;
 import de.hanslovsky.watersheds.rewrite.regionmerging.RemappedData;
-import de.hanslovsky.watersheds.rewrite.util.DisjointSetsHashMap;
 import de.hanslovsky.watersheds.rewrite.util.EdgeCheck;
 import de.hanslovsky.watersheds.rewrite.util.ExtractLabelsOnly;
 import de.hanslovsky.watersheds.rewrite.util.HashableLongArray;
 import de.hanslovsky.watersheds.rewrite.util.IdServiceZMQ;
-import de.hanslovsky.watersheds.rewrite.util.IntensityMouseOver;
 import de.hanslovsky.watersheds.rewrite.util.IterableWithConstant;
 import de.hanslovsky.watersheds.rewrite.util.Util;
 import gnu.trove.iterator.TLongIterator;
@@ -57,8 +54,9 @@ import gnu.trove.map.hash.TLongObjectHashMap;
 import net.imglib2.Cursor;
 import net.imglib2.RandomAccessible;
 import net.imglib2.RandomAccessibleInterval;
-import net.imglib2.converter.Converters;
+import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import net.imglib2.img.Img;
+import net.imglib2.img.ImgFactory;
 import net.imglib2.img.cell.CellImg;
 import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.type.numeric.real.FloatType;
@@ -74,30 +72,43 @@ import scala.Tuple3;
 public class WatershedsSparkWithRegionMergingLoadSegmentation
 {
 
+	public static interface VisitorFactory
+	{
+		Visitor create( final JavaSparkContext sc,
+				RandomAccessibleInterval< LongType > labels,
+				RandomAccessibleInterval< LongType > blocks,
+				final Broadcast< Map< Long, HashableLongArray > > blockToInitialBlockMapBC,
+				final ArrayList< JavaPairRDD< HashableLongArray, long[] > > labelBlocks );
+	}
+
 	public static String AFFINITY_DATASET = "main";
 
 	public static void main( final String[] args ) throws Exception
 	{
 
 
-		final int[] dimsIntervalInt = new int[] { 100, 100, 2 };
+		final int[] dimsIntervalInt = new int[] { 150, 150, 2 };
 
 		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
 //		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt.h5";
+//		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt-sliced-blocks.h5";
 //		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt-sliced-blocks-only-10-in-z.h5";
 //		final String path = Util.HOME_DIR + "/Dropbox/misc/sample_A.augmented.0-slice-100.hdf";
 //		final String path = Util.HOME_DIR + "/Dropbox/misc/sample_A.augmented.0-500x500x50+500+500+50.hdf";
 //		final String path = Util.HOME_DIR + "/local/affinities/tstvol-520-2-h5.h5";
+//		final String path = Util.HOME_DIR + "/local/affinities/tstvol-520-2-h5-2D.h5";
+//		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt-yz-slice.h5";
 
 		final IHDF5Reader f = HDF5Factory.openForReading( path );
-		final long[] dims = f.object().getDimensions( AFFINITY_DATASET );
-		final int[] cellSize = f.object().getDataSetInformation( AFFINITY_DATASET ).tryGetChunkSizes() == null ? Arrays.stream( dims ).mapToInt( i -> ( int ) i ).toArray() : f.object().getDataSetInformation( "main" ).tryGetChunkSizes();
+		final long[] dims = Util.reverse( f.object().getDimensions( AFFINITY_DATASET ) );
+		final int[] cs = f.object().getDataSetInformation( AFFINITY_DATASET ).tryGetChunkSizes();
+		final int[] cellSize = cs == null ? Arrays.stream( dims ).mapToInt( i -> ( int ) i ).toArray() : Util.reverse( cs );
 		final int[] cellSizeLabels = Util.dropLast( cellSize );
 
 		final long[] dimsInterval = Arrays.stream( dimsIntervalInt ).mapToLong( i -> i ).toArray();
 		final int[] dimsIntervalIntNoChannels = Util.dropLast( dimsIntervalInt );
 		final long[] dimsIntervalNoChannels = Util.dropLast( dimsInterval );
-		System.out.println( "Loading data" );
+		System.out.println( "Loading data: " + path );
 		final CellImg< FloatType, ?, ? > data = H5Utils.loadFloat( f, AFFINITY_DATASET, cellSize );
 		f.close();
 
@@ -109,7 +120,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final long[] dimsNoChannels = Intervals.dimensionsAsLongArray( affs );
 
 		for ( final FloatType a : Views.flatIterable( data ) )
-			a.set( a.get() < 0.0 ? 0.0f : a.get() > 1.0 ? 1.0f : a.get() );
+			a.set( a.get() < 0.00 ? 0.0f : a.get() > 1.0 ? 1.0f : a.get() );
 
 		// anything that points outside must be nan
 		for ( int d = 0; d < affs.numDimensions(); ++d )
@@ -121,21 +132,64 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		assert Arrays.equals( Util.dropLast( dims ), dimsNoChannels ): Arrays.toString( dims ) + " " + Arrays.toString( dimsNoChannels );
 
-		BdvFunctions.show( Converters.convert( affs, ( s, t ) -> {
-			Util.max( s, t, affs.numDimensions() );
-			t.mul( ( 1 << 16 ) * 1.0 );
-		}, new FloatType() ), "affs", Util.bdvOptions( affs ) );
+		Util.showAffinities( affs );
 
 		System.out.println( "Loading labels: " + path );
 		final Img< LongType > labelsTarget = H5Utils.loadUnsignedLong( path, "zws", cellSizeLabels );
 		System.out.println( "Loaded labels." );
 
 
+		// start spark server
+		System.out.println( "Starting Spark server... " );
+		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[*]" ).set( "spark.driver.maxResultSize", "4g" );
+		Logger.getRootLogger().setLevel( Level.ERROR );
+		final JavaSparkContext sc = new JavaSparkContext( conf );
+
+		final EdgeMerger merger = new EdgeMerger.MAX_AFFINITY_MERGER();
+//		final FunkyWeightSquared weightFunc = new EdgeWeight.FunkyWeightSquared();
+		final FunkyWeight weightFunc = new EdgeWeight.FunkyWeight();
+//		final EdgeWeight weightFunc = ( EdgeWeight & Serializable ) ( affinity, count1, count2 ) -> Math.min( count1, count2 ) / ( affinity * affinity );
+		final EdgeCheck edgeCheck = ( EdgeCheck & Serializable ) e -> e.weight() <= 0.1;
+//		( EdgeCheck & Serializable ) e -> e.affinity() >= 0.8,
+
+		final double threshold = 100.0;
+
+		final VisitorFactory visFac = ( sc1, labels, blocks, blockToInitialBlockMapBC, labelBlocks ) -> {
+			final VisualizationVisitor vis = new VisualizationVisitor(
+					sc1,
+					blockToInitialBlockMapBC,
+					dimsIntervalNoChannels,
+					labelBlocks,
+					labelsTarget,
+					blocks,
+					labelsTarget.factory(),
+					path );
+			return vis;
+		};
+
+		run( sc, input, labelsTarget, dimsIntervalNoChannels, labelsTarget.factory(), merger, weightFunc, edgeCheck, threshold, visFac );
+
+	}
+
+	public static void run(
+			final JavaSparkContext sc,
+			final RandomAccessibleInterval< FloatType > input,
+			final RandomAccessibleInterval< LongType > labelsTarget,
+			final long[] dimsIntervalNoChannels,
+			final ImgFactory< LongType > labelsImgFactory,
+			final EdgeMerger merger,
+			final EdgeWeight weightFunc,
+			final EdgeCheck edgeCheck,
+			final double threshold,
+			final VisitorFactory visFac ) throws InterruptedException, ExecutionException
+	{
+
+		final long[] dimsNoChannels = Intervals.dimensionsAsLongArray( labelsTarget );
 		final int nThreads = Runtime.getRuntime().availableProcessors() - 1;
 		final ExecutorService es = Executors.newFixedThreadPool( nThreads );
 		final ArrayList< Callable< TLongLongHashMap > > tasks = new ArrayList<>();
 		final int lastDim = labelsTarget.numDimensions() - 1;
-		final long stepSize = labelsTarget.dimension( lastDim ) / nThreads;
+		final long stepSize = Math.max( labelsTarget.dimension( lastDim ) / nThreads, 1 );
 		for ( long z = 0; z < labelsTarget.dimension( lastDim ); z += stepSize )
 		{
 			final long[] zOffset = new long[ lastDim + 1 ];
@@ -151,7 +205,8 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 //		final TLongLongHashMap counts = Util.countLabels( labelsTarget );
 		final TLongLongHashMap counts = new TLongLongHashMap();
 		for ( final Future< TLongLongHashMap > fut : futures )
-			for ( final TLongLongIterator futIt = fut.get().iterator(); futIt.hasNext(); ) {
+			for ( final TLongLongIterator futIt = fut.get().iterator(); futIt.hasNext(); )
+			{
 				futIt.advance();
 				final long l = futIt.key();
 				final long count = counts.contains( l ) ? counts.get( l ) + futIt.value() : futIt.value();
@@ -165,13 +220,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final ArrayList< Tuple2< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > > blocks =
 				createBlocks( Views.extendValue( input, new FloatType( Float.NaN ) ), Views.extendValue( labelsTarget, new LongType( -1 ) ), dimsNoChannels, dimsIntervalNoChannels, counts );
 
-
-		// start spark server
-		System.out.println( "Starting Spark server... " );
-		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[*]" ).set( "spark.driver.maxResultSize", "4g" );
-		final JavaSparkContext sc = new JavaSparkContext( conf );
-		Logger.getRootLogger().setLevel( Level.ERROR );
-
 		final Context ctx = ZMQ.context( 1 );
 
 		final String blockIdAddr = "ipc://blockIdService";
@@ -183,11 +231,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksRdd =
 				sc.parallelizePairs( blocks ).cache();
 		System.out.println( "Created " + blocksRdd.count() + " initial blocks..." );
-
-
-		final EdgeMerger merger = new EdgeMerger.MAX_AFFINITY_MERGER();
-		final FunkyWeight weightFunc = new EdgeWeight.FunkyWeight();
-//		final EdgeWeight weightFunc = ( EdgeWeight & Serializable ) ( affinity, count1, count2 ) -> Math.min( count1, count2 ) / ( affinity * affinity );
 
 		final Broadcast< long[] > dimsIntervalNoChannelsBC = sc.broadcast( dimsIntervalNoChannels );
 
@@ -203,9 +246,10 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 						sc.broadcast( dimsIntervalNoChannels ),
 						merger,
 						weightFunc,
-						( EdgeCheck & Serializable ) e -> e.affinity() >= 0.5,
+						edgeCheck,
 						blockIdService );
-		final JavaPairRDD< Long, BlockDivision > graphs = graphsAndBorderNodes._1().cache();
+		final JavaPairRDD< Long, BlockDivision > graphs = graphsAndBorderNodes._1();
+		System.out.println( "Graphs num partitions: " + graphs.getNumPartitions() + " " + graphs.count() );
 
 		final Map< Long, HashableLongArray > blockToInitialBlockMap =
 				graphsAndBorderNodes._2().flatMapToPair( t -> new IterableWithConstant<>( Arrays.asList( ArrayUtils.toObject( t._2() ) ), t._1() ).iterator() ).collectAsMap();
@@ -220,74 +264,50 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		final RegionMergingArrayBased rm = new RegionMergingArrayBased( merger, weightFunc );
 
-		final double threshold = 200.0;
-
 		final JavaPairRDD< Long, RegionMergingInput > rmIn = RegionMergingArrayBased.fromBlockDivision( graphs ).cache();
 
 		final long nOriginalBlocks = rmIn.count();
 
-//		final JavaPairRDD< Long, RegionMergingInput > finalRmIn = mergeSmallBlocks( sc, rmIn, 1 ).cache();
+		System.out.println( "Starting with " + nOriginalBlocks + " blocks." );
+
+//		final Tuple2< JavaPairRDD< Long, RegionMergingInput >, DisjointSets > msb = mergeSmallBlocks( sc, rmIn, 1 );
+//
+//		final JavaPairRDD< Long, RegionMergingInput > finalRmIn = msb._1().cache();
 //
 //		rmIn.unpersist();
+//
+//		final DisjointSets dj = msb._2();
+
+//		final JavaPairRDD< Long, RegionMergingInput > finalRmIn = rmIn;
+//
+//		final DisjointSets dj = new DisjointSets( ( int ) finalRmIn.count() );
+
+		final DisjointSets dj = new DisjointSets( ( int ) rmIn.count() );
 
 		final JavaPairRDD< Long, RegionMergingInput > finalRmIn = rmIn;
 
-		final ArrayList< RandomAccessibleInterval< LongType > > blockImages = new ArrayList<>();
-		final Img< LongType > blockZero = labelsTarget.factory().create( labelsTarget, new LongType() );
+//		final JavaPairRDD< Long, RegionMergingInput > finalRmIn = MergeBlocks.mergeSmallBlocks( rmIn, dj, 50 ).cache();
+
+//		rmIn.unpersist();
+
+		final JavaPairRDD< Integer, Integer > recordsPerPartition = Util.recordsPerPartition( finalRmIn );
+		System.out.println( "finalRmIn records per partition:" );
+		System.out.println( recordsPerPartition.collect() );
+
+		final Img< LongType > blockZero = labelsImgFactory.create( labelsTarget, new LongType() );
 //		final TLongLongHashMap labelBlockmap = generateLabelBlockMap( graphs );
 		final TLongLongHashMap labelBlockmap = generateLabelBlockMapFromRegionMergingInput( finalRmIn );
 
 		for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( labelsTarget, blockZero ), blockZero ) )
 			p.getB().set( labelBlockmap.get( p.getA().get() ) );
 
-		blockImages.add( blockZero );
-		final TLongIntHashMap blockColors = new TLongIntHashMap();
-		final Random blockRng = new Random( 100 );
-		final List< Long > blockIds = graphs.keys().collect();
-		for ( final Long b : blockIds )
-			blockColors.put( b.longValue(), blockRng.nextInt() );
+		final Visitor vis = visFac.create( sc, labelsTarget, blockZero, blockToInitialBlockMapBC, labelBlocks );
 
-		final ArrayList< RandomAccessibleInterval< LongType > > images = new ArrayList<>();
+		final double tolerance = 1e32;
+		final double regionRatio = 0.5;
 
-		images.add( labelsTarget );
-
-		final TLongIntHashMap colorMap = new TLongIntHashMap();
-		{
-			final Random rng = new Random( 100 );
-			final RandomAccessibleInterval< LongType > i0 = images.get( 0 );
-			for ( final LongType i : Views.flatIterable( i0 ) )
-				if ( !colorMap.contains( i.get() ) )
-					colorMap.put( i.get(), rng.nextInt() );
-		}
-
-		final BdvStackSource< LongType > chBdv = BdvFunctions.show( Views.stack( images ), "colored history", Util.bdvOptions( labelsTarget ) );
-		Util.replaceConverter( chBdv, 0, ( s, t ) -> {
-			t.set( colorMap.get( s.get() ) );
-		} );
-		final IntensityMouseOver mouseOver = new IntensityMouseOver( chBdv.getBdvHandle().getViewerPanel() );
-
-		final BdvStackSource< LongType > cbhBdv = BdvFunctions.show( Views.stack( blockImages ), "colored block history", Util.bdvOptions( labelsTarget ) );
-		Util.replaceConverter( cbhBdv, 0, ( s, t ) -> {
-			t.set( blockColors.get( s.get() ) );
-		} );
-
-		final IntensityMouseOver mouseOverBlock = new IntensityMouseOver( cbhBdv.getBdvHandle().getViewerPanel() );
-
-		final VisualizationVisitor rmVisitor = new VisualizationVisitor(
-				sc,
-				blockToInitialBlockMapBC,
-				dimsIntervalNoChannels,
-				labelBlocks,
-				images,
-				blockImages,
-				chBdv,
-				cbhBdv,
-				labelsTarget.factory(),
-				path );
-
-		final double tolerance = 1e33;
-
-		final JavaPairRDD< Long, RegionMergingInput > graphsAfterMerging = rm.run( sc, finalRmIn, threshold, rmVisitor, nOriginalBlocks, tolerance );
+		System.out.println( "Running region-merging" );
+		final JavaPairRDD< Long, RegionMergingInput > graphsAfterMerging = rm.run( sc, finalRmIn, threshold, vis, nOriginalBlocks, tolerance, regionRatio, dj );
 		graphsAfterMerging.count();
 
 		sc.close();
@@ -384,7 +404,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		return labelBlockmap;
 	}
 
-	public static final JavaPairRDD< Long, RegionMergingInput > mergeSmallBlocks( final JavaSparkContext sc, final JavaPairRDD< Long, RegionMergingInput > rmIn, final int nNodes )
+	public static final Tuple2< JavaPairRDD< Long, RegionMergingInput >, DisjointSets > mergeSmallBlocks( final JavaSparkContext sc, final JavaPairRDD< Long, RegionMergingInput > rmIn, final int nNodes )
 	{
 		final JavaPairRDD< Long, Tuple2< Long, RegionMergingInput > > smallBlocksMapping = rmIn.mapToPair( t -> {
 			final long self = t._1();
@@ -402,10 +422,15 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 				{
 					e.setIndex( i );
 					final double w = e.weight();
-					if ( w < minWeight )
+					if ( in.outsideNodes.contains( e.from() ) && w < minWeight )
 					{
 						minWeight = w;
-						minBlock = in.outsideNodes.contains( e.from() ) ? in.outsideNodes.get( e.from() ) : in.outsideNodes.get( e.to() );
+						minBlock = in.outsideNodes.get( e.from() );
+					}
+					else if ( in.outsideNodes.contains( e.to() ) && w < minWeight )
+					{
+						minWeight = w;
+						minBlock = in.outsideNodes.get( e.to() );
 					}
 				}
 				System.out.println( "Eliminating 1 sized block: " + self + " " + minBlock );
@@ -415,19 +440,21 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		} ).cache();
 
 		final JavaRDD< Tuple2< Long, Long > > merges = smallBlocksMapping.map( t -> new Tuple2<>( t._1(), t._2()._1() ) );
-		final DisjointSetsHashMap djhm = new DisjointSetsHashMap();
+
+		final DisjointSets djhm = new DisjointSets( ( int ) rmIn.count() );
+
 		for ( final Tuple2< Long, Long > m : merges.collect() )
 		{
-			final long r1 = djhm.findRoot( m._1() );
-			final long r2 = djhm.findRoot( m._2() );
+			final int r1 = djhm.findRoot( m._1().intValue() );
+			final int r2 = djhm.findRoot( m._2().intValue() );
 			if ( r1 != r2 )
 				djhm.join( r1, r2 );
 		}
 
-		final Broadcast< DisjointSetsHashMap > djhmBC = sc.broadcast( djhm );
+		final Broadcast< DisjointSets > djhmBC = sc.broadcast( djhm );
 
 		final JavaPairRDD< Long, ArrayList< RemappedData > > aggregated = smallBlocksMapping
-				.mapToPair( t -> new Tuple2<>( djhmBC.getValue().findRoot( t._1() ), t._2()._2() ) )
+				.mapToPair( t -> new Tuple2<>( ( long ) djhmBC.getValue().findRoot( t._1().intValue() ), t._2()._2() ) )
 				.mapToPair( t -> new Tuple2<>( t._1(), new RemappedData( t._2().edges, t._2().counts, t._2().outsideNodes, new TLongArrayList(), new TLongLongHashMap() ) ) )
 				.aggregateByKey( new ArrayList<>(),
 						( v1, v2 ) -> {
@@ -439,7 +466,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 							return v1;
 						} );
 
-		final JavaPairRDD< Long, OriginalLabelData > reduced = aggregated.mapToPair( new ReduceBlock() );
+		final JavaPairRDD< Long, OriginalLabelData > reduced = aggregated.mapValues( new ReduceBlock() );
 		final JavaPairRDD< Long, RegionMergingInput > finalRmIn = reduced.mapToPair( t -> {
 			final OriginalLabelData old = t._2();
 			final TLongIntHashMap nodeIndexMapping = new TLongIntHashMap();
@@ -449,7 +476,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			return new Tuple2<>( t._1(), new RegionMergingInput( old.counts.size(), nodeIndexMapping, old.counts, old.outsideNodes, old.edges ) );
 		} );
 
-		return finalRmIn;
+		return new Tuple2<>( finalRmIn, djhm );
 	}
 
 

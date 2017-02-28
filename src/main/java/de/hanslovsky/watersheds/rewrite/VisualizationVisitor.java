@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.log4j.Level;
@@ -16,14 +17,17 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.broadcast.Broadcast;
 
 import bdv.img.h5.H5Utils;
+import bdv.util.BdvFunctions;
 import bdv.util.BdvStackSource;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocOut;
 import de.hanslovsky.watersheds.rewrite.regionmerging.RegionMergingArrayBased.Visitor;
 import de.hanslovsky.watersheds.rewrite.util.DisjointSetsHashMap;
 import de.hanslovsky.watersheds.rewrite.util.HashableLongArray;
+import de.hanslovsky.watersheds.rewrite.util.IntensityMouseOver;
 import de.hanslovsky.watersheds.rewrite.util.IterableWithConstant;
 import de.hanslovsky.watersheds.rewrite.util.Util;
 import gnu.trove.list.array.TLongArrayList;
+import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import net.imglib2.FinalInterval;
 import net.imglib2.RandomAccessibleInterval;
@@ -80,6 +84,46 @@ public class VisualizationVisitor implements Visitor
 			final Broadcast< Map< Long, HashableLongArray > > blockToInitialBlockMapBC,
 			final long[] dimsIntervalNoChannels,
 			final ArrayList< JavaPairRDD< HashableLongArray, long[] > > labelBlocks,
+			final RandomAccessibleInterval< LongType > labels,
+			final RandomAccessibleInterval< LongType > blocks,
+			final ImgFactory< LongType > factory,
+			final String fileName )
+	{
+		this( sc, blockToInitialBlockMapBC, dimsIntervalNoChannels, labelBlocks, createList( labels ), createList( blocks ), createBDV( labels, "labels" ), createBDV( blocks, "blocks" ), factory, fileName );
+	}
+
+	public static < T > ArrayList< T > createList( final T t )
+	{
+		final ArrayList< T > res = new ArrayList<>();
+		res.add( t );
+		return res;
+	}
+
+	public static BdvStackSource< LongType > createBDV( final RandomAccessibleInterval< LongType > source, final String name )
+	{
+		final Random rng = new Random();
+		final TLongIntHashMap cmap = new TLongIntHashMap();
+		for ( final LongType s : Views.flatIterable( source ) )
+			if ( !cmap.contains( s.get() ) )
+				cmap.put( s.get(), rng.nextInt() );
+
+		final ArrayList< RandomAccessibleInterval< LongType > > images = createList( source );
+
+		final BdvStackSource< LongType > bdv = BdvFunctions.show( Views.stack( images ), name, Util.bdvOptions( source ) );
+		Util.replaceConverter( bdv, 0, ( s, t ) -> {
+			t.set( cmap.get( s.get() ) );
+		} );
+		final IntensityMouseOver mouseOver = new IntensityMouseOver( bdv.getBdvHandle().getViewerPanel() );
+
+		return bdv;
+
+	}
+
+	public VisualizationVisitor(
+			final JavaSparkContext sc,
+			final Broadcast< Map< Long, HashableLongArray > > blockToInitialBlockMapBC,
+			final long[] dimsIntervalNoChannels,
+			final ArrayList< JavaPairRDD< HashableLongArray, long[] > > labelBlocks,
 			final List< RandomAccessibleInterval< LongType > > images,
 			final List< RandomAccessibleInterval< LongType > > blockImages,
 			final BdvStackSource< LongType > coloredHistoryBdv,
@@ -111,14 +155,14 @@ public class VisualizationVisitor implements Visitor
 
 	}
 
-	@Override public void visit( final JavaPairRDD< Long, Tuple2< Long, MergeBlocOut > > mergedEdges, final int[] parents )
+	@Override
+	public void visit( final JavaPairRDD< Long, Tuple2< Long, MergeBlocOut > > mergedEdges, final DisjointSets dj )
 	{
 		final ArrayList< Object > unpersistList = new ArrayList<>();
 
-		final DisjointSets dj = new DisjointSets( parents, new int[ parents.length ], parents.length );
 		final TLongObjectHashMap< TLongArrayList > rootChildMap = new TLongObjectHashMap<>();
 
-		for ( int i = 0; i < parents.length; ++i )
+		for ( int i = 0; i < dj.size(); ++i )
 		{
 			final long root = dj.findRoot( i );
 			if ( !rootChildMap.contains( root ) )

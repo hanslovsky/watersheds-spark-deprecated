@@ -1,5 +1,10 @@
 package de.hanslovsky.watersheds.rewrite.mergebloc;
 
+import java.lang.invoke.MethodHandles;
+
+import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 import org.apache.spark.api.java.function.PairFunction;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
@@ -18,6 +23,11 @@ import scala.Tuple2;
 public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlocIn >, Long, Tuple2< Long, MergeBlocOut > >
 {
 
+	public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
+	{
+		LOG.setLevel( Level.TRACE );
+	}
+
 	private final EdgeMerger edgeMerger;
 
 	private final EdgeWeight edgeWeight;
@@ -25,6 +35,8 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 	private final double threshold;
 
 	private final double regionRatio;
+
+	public static final int MERGERS_ENTRY_SIZE = 4;
 
 	public MergeBlocArrayBased( final EdgeMerger edgeMerger, final EdgeWeight edgeWeight, final double threshold )
 	{
@@ -59,10 +71,20 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 		for ( int i = 0; i < e.size(); ++i )
 		{
 			e.setIndex( i );
-			final double w = e.weight();
+			double w = e.weight();
 			final long from = e.from(), to = e.to();
-			if ( w > 0.0 )
+
+			if ( Double.isNaN( w ) )
 			{
+				w = edgeWeight.weight( e.affinity(), in.counts[ ( int ) e.from() ], in.counts[ ( int ) e.to() ] );
+				e.weight( w );
+			}
+
+			if ( w >= 0.0 )
+			{
+
+				LOG.trace( "Adding to queue: " + e.toString() + " (" + in.indexNodeMapping[ ( int ) from ] + ", " + in.indexNodeMapping[ ( int ) to ] + ")" );
+
 				queue.push( i, w );
 
 				if ( in.outsideNodes.contains( ( int ) from ) )
@@ -72,6 +94,8 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 					borderNodeSet.add( from );
 
 			}
+			else
+				LOG.trace( "Not adding to queue: " + e.toString() + " (" + in.indexNodeMapping[ ( int ) from ] + ", " + in.indexNodeMapping[ ( int ) to ] + ")" );
 		}
 
 		long pointingOutside = t._1();
@@ -86,9 +110,29 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 			final int next = queue.pop();
 			e.setIndex( next );
 			final double w = e.weight();
+			LOG.trace( "Looking at edge " + e + "(" + in.indexNodeMapping[ ( int ) e.from() ] + ", " + in.indexNodeMapping[ ( int ) e.to() ] + ")" );
 
-			if ( w < 0.0 )
+			if ( Double.isNaN( w ) )
+			{
+				final int f = dj.findRoot( ( int ) e.from() );
+				final int to = dj.findRoot( ( int ) e.to() );
+				final double weight = edgeWeight.weight( e.affinity(), in.counts[ f ], in.counts[ to ] );
+				// TODO need only weight update?
+				e.from( f );
+				e.to( to );
+				e.weight( weight );
+				queue.push( next, weight );
 				continue;
+			}
+
+			else if ( w < 0.0 )
+				continue;
+
+			else if ( w > threshold )
+			{
+				queue.push( next, w );
+				break;
+			}
 
 			else if ( in.outsideNodes.contains( ( int ) e.from() ) )
 			{
@@ -103,24 +147,6 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 					pointingOutside = in.outsideNodes.get( ( int ) e.to() );
 				continue;
 //				break;
-			}
-			else if ( Double.isNaN( w ) )
-			{
-				final int f = dj.findRoot( ( int ) e.from() );
-				final int to = dj.findRoot( ( int ) e.to() );
-				final double weight = edgeWeight.weight( e.affinity(), in.counts[ f ], in.counts[ to ] );
-				// TODO need only weight update?
-				e.from( f );
-				e.to( to );
-				e.weight( weight );
-				queue.push( next, weight );
-				continue;
-			}
-
-			else if ( w > threshold )
-			{
-				queue.push( next, w );
-				break;
 			}
 
 			final int from = ( int ) e.from();
@@ -157,6 +183,9 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 			merges.add( n );
 			merges.add( Double.doubleToLongBits( w ) );
 
+			if ( LOG.getLevel().isGreaterOrEqual( Level.TRACE ) )
+				LOG.trace( "Merging " + e + " into " + n + " -- ( (" + in.indexNodeMapping[ ( int ) e.from() ] + ", " + in.indexNodeMapping[ ( int ) e.to() ] + ") ->" + in.indexNodeMapping[ n ] + " )" );
+
 			assert c1 > 0 && c2 > 0: "Counts does not contain ids!";
 
 			in.counts[ n == r1 ? r2 : r1 ] = 0;
@@ -168,6 +197,7 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 			dj.findRoot( r1 );
 			dj.findRoot( r2 );
 
+//			System.out.println( this.getClass().getSimpleName() + ": count: " + count + " " + minNMerges );
 			++count;
 
 

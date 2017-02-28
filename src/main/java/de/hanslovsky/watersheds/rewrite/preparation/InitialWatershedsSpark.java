@@ -52,16 +52,20 @@ public class InitialWatershedsSpark
 	{
 
 
-		final int[] cellSize = new int[] { 100, 100, 100, 3 };
+		final int[] cellSize = new int[] { 150, 150, 2 };
 		final int[] cellSizeLabels = Util.dropLast( cellSize );
-		final int[] dimsIntervalInt = new int[] { 432, 432, 432, 3 };
+		final int[] dimsIntervalInt = new int[] { 150, 150, 2 };
 		final long[] dimsInterval = Arrays.stream( dimsIntervalInt ).mapToLong( i -> i ).toArray();
 		final int[] dimsIntervalIntNoChannels = Util.dropLast( dimsIntervalInt );
 
-//		final String path = HOME_DIR + String.format( "/Dropbox/misc/excerpt.h5" );
+		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
+//		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt-sliced-blocks.h5";
+//		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt-yz-slice.h5";
+//		final String path = Util.HOME_DIR + "/local/affinities/tstvol-520-2-h5-2D.h5";
+//		final String path = Util.HOME_DIR + String.format( "/Dropbox/misc/excerpt.h5" );
 //		final String path = HOME_DIR + "/Dropbox/misc/sample_A.augmented.0-500x500x50+500+500+50.hdf";
 //		final String path = Util.HOME_DIR + "/tstvol-520-1-h5/groundtruth_aff-200x200x50.h5";
-		final String path = Util.HOME_DIR + "/local/affinities/tstvol-520-2-h5.h5";
+//		final String path = Util.HOME_DIR + "/local/affinities/tstvol-520-2-h5.h5";
 
 		System.out.println( "Loading data" );
 		final CellImg< FloatType, ?, ? > data =
@@ -82,7 +86,7 @@ public class InitialWatershedsSpark
 		{
 			final float f = p.getA().getRealFloat();
 			// threshold affinities
-			p.getB().set( f < 0.001 ? 0.0f : f > 0.999 ? 1.0f : f );
+			p.getB().set( f < 0.00 ? 0.0f : f > 1.0 ? 1.0f : f );
 		}
 
 		final CompositeIntervalView< FloatType, RealComposite< FloatType > > affs = Views.collapseReal( input );

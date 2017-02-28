@@ -21,15 +21,21 @@ public class ReduceBlock implements Function< ArrayList< RemappedData >, Origina
 		final TLongLongHashMap allCounts = new TLongLongHashMap();
 		final TLongLongHashMap allOutsideNodes = new TLongLongHashMap();
 
-		final DisjointSetsHashMap dj = new DisjointSetsHashMap();
+		final TLongLongHashMap parents = new TLongLongHashMap();
 
 		for ( final RemappedData md : mappedDatas )
 		{
 			allCounts.putAll( md.counts );
 			allOutsideNodes.putAll( md.outsideNodes );
-			for ( int i = 0, k = 1; i < md.merges.size(); i += 2, k += 2 )
-				dj.join( dj.findRoot( md.merges.get( i ) ), dj.findRoot( md.merges.get( k ) ) );
+			for ( int i = 0, k = 1, n = 2; i < md.merges.size(); i += 4, k += 4, n += 4 )
+			{
+				parents.put( md.merges.get( i ), md.merges.get( n ) );
+				parents.put( md.merges.get( k ), md.merges.get( n ) );
+			}
+//				dj.join( dj.findRoot( md.merges.get( i ) ), dj.findRoot( md.merges.get( k ) ) );
 		}
+
+		final DisjointSetsHashMap dj = new DisjointSetsHashMap( parents, new TLongLongHashMap(), 0 );
 
 		for ( final RemappedData md : mappedDatas )
 		{

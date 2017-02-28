@@ -16,4 +16,14 @@ public interface EdgeWeight
 		}
 	}
 
+	public static class FunkyWeightSquared implements EdgeWeight, Serializable
+	{
+		@Override
+		public double weight( final double affinity, final long c1, final long c2 )
+		{
+			final double diff = 1.0 - affinity;
+			return Math.min( c1, c2 ) * diff * diff;
+		}
+	}
+
 }

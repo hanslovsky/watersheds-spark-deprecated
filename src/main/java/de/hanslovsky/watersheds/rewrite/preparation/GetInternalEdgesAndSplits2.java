@@ -15,11 +15,15 @@ import de.hanslovsky.watersheds.rewrite.util.IdService;
 import gnu.trove.iterator.TIntIterator;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;
+import gnu.trove.iterator.TLongObjectIterator;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TIntArrayList;
+import gnu.trove.list.array.TLongArrayList;
+import gnu.trove.map.hash.TLongDoubleHashMap;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
+import gnu.trove.set.hash.TLongHashSet;
 import net.imglib2.img.array.ArrayImg;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.array.ArrayRandomAccess;
@@ -35,8 +39,15 @@ import net.imglib2.view.composite.RealComposite;
 import scala.Tuple2;
 import scala.Tuple3;
 
-public class GetInternalEdgesAndSplits< K > implements
-PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetInternalEdgesAndSplits.IntraBlockOutput >
+/**
+ *
+ * @author Philipp Hanslovsky
+ *
+ * @param <K>
+ */
+
+public class GetInternalEdgesAndSplits2< K > implements
+PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetInternalEdgesAndSplits2.IntraBlockOutput >
 {
 
 	public static class IntraBlockOutput implements Serializable
@@ -93,7 +104,7 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 
 	private final IdService idService;
 
-	public GetInternalEdgesAndSplits(
+	public GetInternalEdgesAndSplits2(
 			final long[] blockDim,
 			final EdgeMerger edgeMerger,
 			final EdgeWeight func,
@@ -109,7 +120,7 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 	}
 
 	@Override
-	public Tuple2< K, GetInternalEdgesAndSplits.IntraBlockOutput > call( final Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > > t ) throws Exception
+	public Tuple2< K, GetInternalEdgesAndSplits2.IntraBlockOutput > call( final Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > > t ) throws Exception
 	{
 		final long[] blockDim = this.blockDim;// .getValue();
 		final long[] extendedBlockDim = PrepareRegionMergingCutBlocks.padDimensions( blockDim, 1 );
@@ -121,7 +132,6 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 		final CompositeIntervalView< FloatType, RealComposite< FloatType > > affinities =
 				Views.collapseReal( ArrayImgs.floats( t._2()._2(), extendedAffinitiesBlockDim ) );
 
-		System.out.println( "BLOCK DIM " + Arrays.toString( blockDim ) );
 		final IntervalView< LongType > innerLabels = Views.offsetInterval( labels, offset, blockDim );
 		final IntervalView< RealComposite< FloatType > > innerAffinities = Views.offsetInterval( affinities, offset, blockDim );
 
@@ -147,8 +157,6 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 		{
 			e.setIndex( i );
 			e.weight( edgeWeight.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
-			if ( e.from() == 13 || e.to() == 13 )
-				System.out.println( "Edge is good? " + edgeCheck.isGoodEdge( e ) + " " + e );
 			if ( edgeCheck.isGoodEdge( e ) )
 				dj.join( dj.findRoot( e.from() ), dj.findRoot( e.to() ) );
 			else
@@ -169,11 +177,74 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 
 		}
 
-		final TLongLongHashMap rootToGlobalId = new TLongLongHashMap();
-		final TLongLongHashMap nodeBlockAssignment = assignNodesToBlocks( idService, dj, parents, rootToGlobalId );
+		final TLongLongHashMap rootToLocalId = new TLongLongHashMap();
+		final long startId = 0;
+		final TLongLongHashMap nodeBlockAssignmentLocal = assignNodesToBlocks( ( numIds ) -> startId, dj, parents, rootToLocalId );
 
-		final GetInternalEdgesAndSplits.IntraBlockOutput output = new IntraBlockOutput( t._2()._1(), t._2()._2(), t._2()._3(), nodeBlockAssignment, splitEdges, rootToGlobalId.values(), edges, nodeEdgeMap );
+		final TLongObjectHashMap< TLongArrayList > blockNodeMap = new TLongObjectHashMap<>();
 
+		for ( final TLongLongIterator it = nodeBlockAssignmentLocal.iterator(); it.hasNext(); )
+		{
+			it.advance();
+			final long b = it.value();
+			if ( !blockNodeMap.contains( b ) )
+				blockNodeMap.put( b, new TLongArrayList() );
+			blockNodeMap.get( b ).add( it.key() );
+		}
+
+		final TLongDoubleHashMap bestWeight = new TLongDoubleHashMap();
+		final TLongLongHashMap bestBlock = new TLongLongHashMap();
+		for ( final TLongObjectIterator< TLongArrayList > it = blockNodeMap.iterator(); it.hasNext(); )
+		{
+			it.advance();
+			final TLongArrayList l = it.value();
+			if ( l.size() < 1 ) // expose this!
+			{
+				final long k = it.key();
+				bestWeight.put( k, Double.MAX_VALUE );
+				bestBlock.put( k, k );
+			}
+		}
+
+		for ( final TIntIterator it = splitEdges.iterator(); it.hasNext(); )
+		{
+			e.setIndex( it.next() );
+			final long fromBlock = nodeBlockAssignmentLocal.get( e.from() );
+			final long toBlock = nodeBlockAssignmentLocal.get( e.to() );
+
+			if ( fromBlock == toBlock )
+				continue;
+
+			final double w = e.weight();
+
+			if ( bestWeight.contains( fromBlock ) && w < bestWeight.get( fromBlock ) )
+			{
+				bestWeight.put( fromBlock, w );
+				bestBlock.put( fromBlock, toBlock );
+			}
+			else if ( bestWeight.contains( toBlock ) && w < bestWeight.get( toBlock ) )
+			{
+				bestWeight.put( toBlock, w );
+				bestBlock.put( toBlock, fromBlock );
+			}
+		}
+
+		for ( final TLongLongIterator it = bestBlock.iterator(); it.hasNext(); )
+		{
+			it.advance();
+			dj.join( dj.findRoot( it.key() ), dj.findRoot( it.value() ) );
+		}
+
+		nodeBlockAssignmentLocal.transformValues( ( l ) -> dj.findRoot( l ) );
+
+		final TLongHashSet blocks = new TLongHashSet( nodeBlockAssignmentLocal.valueCollection() );
+
+		final int nBlocks = blocks.size();
+		final long ids = idService.requestIds( nBlocks );
+
+		final TLongLongHashMap rootToId = new TLongLongHashMap();
+
+		final GetInternalEdgesAndSplits2.IntraBlockOutput output = new IntraBlockOutput( t._2()._1(), t._2()._2(), t._2()._3(), nodeBlockAssignmentLocal, splitEdges, rootToLocalId.values(), edges, nodeEdgeMap );
 
 		return new Tuple2<>( t._1, output );
 	}
@@ -248,7 +319,7 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 		System.out.println( lRa.get() );
 
 		final AtomicLong startId = new AtomicLong( l.length );
-		final GetInternalEdgesAndSplits< Long > splits = new GetInternalEdgesAndSplits<>( blockDim, new EdgeMerger.MAX_AFFINITY_MERGER(), new EdgeWeight.FunkyWeight(), ( e ) -> e.affinity() > 0, ( n ) -> {
+		final GetInternalEdgesAndSplits2< Long > splits = new GetInternalEdgesAndSplits2<>( blockDim, new EdgeMerger.MAX_AFFINITY_MERGER(), new EdgeWeight.FunkyWeight(), ( e ) -> e.affinity() > 0, ( n ) -> {
 			return startId.getAndIncrement();
 		} );
 

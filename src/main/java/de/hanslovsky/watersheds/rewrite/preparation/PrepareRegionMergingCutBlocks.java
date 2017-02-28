@@ -294,7 +294,11 @@ public class PrepareRegionMergingCutBlocks
 			final long label = labelsAccess.get().get();
 			parents.put( label, label );
 			for ( int d = 0; d < blockMax.length; ++d )
-				if ( labelsAccess.getLongPosition( d ) < blockMax[ d ] - 1 )
+				// TODO is blockMax[ d ] - 1 bug? should it be blockMax[ d ]?
+				// If so -> WHY?
+				// Should it be blockMax[ d ]
+				// YES IT SHOULD BE BECAUSE WE COMPARE TO blockMax[ d ]!!
+				if ( labelsAccess.getLongPosition( d ) < blockMax[ d ] )
 				{
 					final double aff = affinity.get( d ).getRealDouble();
 					if ( !Double.isNaN( aff ) )
