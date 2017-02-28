@@ -20,7 +20,7 @@ public class RemapToOriginalIndices implements Function< Tuple2< Long, MergeBloc
 
 	public static Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
 	{
-		LOG.setLevel( Level.TRACE );
+		LOG.setLevel( Level.INFO );
 	}
 
 	@Override

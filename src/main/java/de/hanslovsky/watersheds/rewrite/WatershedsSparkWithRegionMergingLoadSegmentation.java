@@ -87,10 +87,11 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 	{
 
 
-		final int[] dimsIntervalInt = new int[] { 150, 150, 2 };
+//		final int[] dimsIntervalInt = new int[] { 150, 150, 2 };
+		final int[] dimsIntervalInt = new int[] { 150, 150, 50, 3 };
 
-		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
-//		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt.h5";
+//		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
+		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt.h5";
 //		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt-sliced-blocks.h5";
 //		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt-sliced-blocks-only-10-in-z.h5";
 //		final String path = Util.HOME_DIR + "/Dropbox/misc/sample_A.augmented.0-slice-100.hdf";

@@ -24,7 +24,7 @@ public class OutsideNodeCountRequest
 	public static Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
 	static
 	{
-		LOG.setLevel( Level.TRACE );
+		LOG.setLevel( Level.INFO );
 	}
 
 	public static JavaPairRDD< Long, RemappedData > request( final JavaPairRDD< Long, RemappedData > rdd )

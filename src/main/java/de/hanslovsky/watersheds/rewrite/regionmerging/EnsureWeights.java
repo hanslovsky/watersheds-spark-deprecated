@@ -17,7 +17,7 @@ public class EnsureWeights implements Function< RegionMergingInput, Tuple2< Regi
 
 	public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
 	{
-		LOG.setLevel( Level.TRACE );
+		LOG.setLevel( Level.INFO );
 	}
 
 	private final EdgeWeight edgeWeight;

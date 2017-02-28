@@ -25,7 +25,7 @@ public class Util
 
 	public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
 	{
-		LOG.setLevel( Level.TRACE );
+		LOG.setLevel( Level.INFO );
 	}
 
 	public static TDoubleArrayList mapEdges( final TDoubleArrayList edges, final TLongIntHashMap nodeIndexMapping )
@@ -34,7 +34,6 @@ public class Util
 		final TDoubleArrayList mappedEdges = new TDoubleArrayList();
 		final Edge e = new Edge( edges );
 		final Edge m = new Edge( mappedEdges );
-		LOG.setLevel( Level.TRACE );
 		LOG.trace( "Mapping to zero based: " + e.size() + " edges." );
 		for ( int i = 0; i < e.size(); ++i )
 		{

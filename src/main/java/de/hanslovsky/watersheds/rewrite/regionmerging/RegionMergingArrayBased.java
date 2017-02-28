@@ -34,7 +34,7 @@ public class RegionMergingArrayBased
 
 	static
 	{
-		LOG.setLevel( Level.TRACE );
+		LOG.setLevel( Level.INFO );
 	}
 
 	public static interface Visitor

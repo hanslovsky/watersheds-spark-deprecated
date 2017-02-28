@@ -25,7 +25,7 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 	public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
 	{
-		LOG.setLevel( Level.TRACE );
+		LOG.setLevel( Level.INFO );
 	}
 
 	private final EdgeMerger edgeMerger;

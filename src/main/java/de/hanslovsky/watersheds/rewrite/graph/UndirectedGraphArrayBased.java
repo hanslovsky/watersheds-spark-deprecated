@@ -16,7 +16,7 @@ public class UndirectedGraphArrayBased implements Serializable
 
 	public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
 	{
-		LOG.setLevel( Level.TRACE );
+		LOG.setLevel( Level.INFO );
 	}
 
 	private final TDoubleArrayList edges;

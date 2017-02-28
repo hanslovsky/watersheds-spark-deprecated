@@ -23,7 +23,7 @@ public class MergeBlocks
 
 	public static Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
 	{
-		LOG.setLevel( Level.TRACE );
+		LOG.setLevel( Level.INFO );
 	}
 
 	public static JavaPairRDD< Long, RegionMergingInput > mergeRemappedData( final JavaPairRDD< Long, RemappedData > noRoot, final DisjointSets dj )
