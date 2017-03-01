@@ -14,7 +14,6 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 
-import de.hanslovsky.watersheds.Util;
 import de.hanslovsky.watersheds.rewrite.VisualizationVisitor;
 import de.hanslovsky.watersheds.rewrite.WatershedsSparkWithRegionMergingLoadSegmentation;
 import de.hanslovsky.watersheds.rewrite.WatershedsSparkWithRegionMergingLoadSegmentation.VisitorFactory;
@@ -23,6 +22,7 @@ import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger.MAX_AFFINITY_MERGER;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.util.EdgeCheck;
 import de.hanslovsky.watersheds.rewrite.util.HashableLongArray;
+import de.hanslovsky.watersheds.rewrite.util.Util;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
 import net.imglib2.AbstractInterval;
