@@ -6,10 +6,10 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.spark.api.java.function.PairFunction;
 
-import de.hanslovsky.watersheds.DisjointSetsHashMap;
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
+import de.hanslovsky.watersheds.rewrite.util.DisjointSetsHashMap;
 import de.hanslovsky.watersheds.rewrite.util.EdgeCheck;
 import de.hanslovsky.watersheds.rewrite.util.IdService;
 import gnu.trove.iterator.TIntIterator;
