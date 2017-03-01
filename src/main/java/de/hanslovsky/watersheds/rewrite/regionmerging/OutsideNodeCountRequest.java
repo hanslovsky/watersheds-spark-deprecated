@@ -3,11 +3,14 @@ package de.hanslovsky.watersheds.rewrite.regionmerging;
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.PairFlatMapFunction;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import gnu.trove.iterator.TLongIterator;
@@ -30,173 +33,197 @@ public class OutsideNodeCountRequest
 	public static JavaPairRDD< Long, RemappedData > request( final JavaPairRDD< Long, RemappedData > rdd )
 	{
 
-		final JavaPairRDD< Long, Tuple2< Long, TLongHashSet > > blub = rdd
-				.flatMapToPair( t -> {
-					final TLongObjectHashMap< TLongHashSet > requests = new TLongObjectHashMap<>();
-					for ( final TLongLongIterator it = t._2().outsideNodes.iterator(); it.hasNext(); )
-					{
-						it.advance();
-						final long node = it.key();
-						final long block = it.value();
-						if ( !requests.contains( block ) )
-							requests.put( block, new TLongHashSet() );
-						requests.get( block ).add( node );
+		final JavaPairRDD< Long, Tuple2< Long, TLongHashSet > > singleRequests = rdd.flatMapToPair( new AssignRequestsToBlockIds() );
 
-					}
-					return new Iterator< Tuple2< Long, Tuple2< Long, TLongHashSet > > >()
-					{
-
-						private final TLongObjectIterator< TLongHashSet > requestIt = requests.iterator();
-
-						@Override
-						public boolean hasNext()
-						{
-							return requestIt.hasNext();
-						}
-
-						@Override
-						public Tuple2< Long, Tuple2< Long, TLongHashSet > > next()
-						{
-							requestIt.advance();
-							return new Tuple2<>( requestIt.key(), new Tuple2<>( t._1(), requestIt.value() ) );
-						}
-					};
-				} );
-
-		final JavaPairRDD< Long, TLongObjectHashMap< TLongHashSet > > requestsRDD = blub.aggregateByKey(
+		final JavaPairRDD< Long, TLongObjectHashMap< TLongHashSet > > combinedRequestsForEachBlock = singleRequests.aggregateByKey(
 				new TLongObjectHashMap< TLongHashSet >(),
-				( m, val ) -> {
-					final long k = val._1();
-					if ( !m.contains( k ) )
-						m.put( k, val._2() );
-					else
-						m.get( k ).addAll( val._2() );
-					return m;
-				},
-				( m1, m2 ) -> {
-					for ( final TLongObjectIterator< TLongHashSet > it = m2.iterator(); it.hasNext(); )
-					{
-						it.advance();
-						final long k = it.key();
-						if ( m1.contains( k ) )
-							m1.get( k ).addAll( it.value() );
-						else
-							m1.put( k, it.value() );
-					}
-					return m1;
-				} );
+				( m, val ) -> putOrAddAll( m, val._1(), val._2() ),
+				( m1, m2 ) -> putOrAddAll( m2, m1 ) );
 
 		final JavaPairRDD< Long, ArrayList< Tuple2< TLongLongHashMap, TLongLongHashMap > > > response = rdd
-				.join( requestsRDD )
-//				.values()
-				.flatMapToPair( tt -> {
-					final Tuple2< RemappedData, TLongObjectHashMap< TLongHashSet > > t = tt._2();
-					final TLongLongHashMap counts = t._1().counts;
-					final TLongLongHashMap borderNodeMap = t._1().borderNodeMappings;
-					final TLongObjectHashMap< Tuple2< TLongLongHashMap, TLongLongHashMap > > result = new TLongObjectHashMap<>();
-					for ( final TLongObjectIterator< TLongHashSet > it = t._2().iterator(); it.hasNext(); )
-					{
-						it.advance();
-						final TLongLongHashMap countsForBlock = new TLongLongHashMap();
-						final TLongLongHashMap borderNodeMapForBlock = new TLongLongHashMap();
-						for ( final TLongIterator req = it.value().iterator(); req.hasNext(); )
-						{
-							final long id = req.next();
-							final long mappedId = borderNodeMap.get( id );
-//							if ( !borderNodeMap.contains( id ) )
-//								throw new RuntimeException( "Why does borderNodeMpa not contain " + id );
-							countsForBlock.put( mappedId, counts.get( mappedId ) );
-							borderNodeMapForBlock.put( id, mappedId );
-						}
-//						if ( it.key() == 15 )
-//							System.out.println( "HANDLING REQUEST: " + tt._1() + " " + borderNodeMapForBlock + " " + countsForBlock + " " + borderNodeMap );
-						result.put( it.key(), new Tuple2<>( borderNodeMapForBlock, countsForBlock ) );
+				.join( combinedRequestsForEachBlock )
+				.values()
+				.flatMapToPair( new HandleRequests() )
+				.aggregateByKey( new ArrayList<>(), ( l, v ) -> addAndReturn( l, v ), ( l1, l2 ) -> addAllAndReturn( l1, l2 ) );
+		singleRequests.unpersist();
 
-					}
+		return rdd.join( response ).mapValues( new ApplyResponse() );
+	}
 
-					return new Iterator< Tuple2< Long, Tuple2< TLongLongHashMap, TLongLongHashMap > > >()
-					{
+	public static class AssignRequestsToBlockIds implements PairFlatMapFunction< Tuple2< Long, RemappedData >, Long, Tuple2< Long, TLongHashSet > >
+	{
 
-						private final TLongObjectIterator< Tuple2< TLongLongHashMap, TLongLongHashMap > > it = result.iterator();
+		@Override
+		public Iterator< Tuple2< Long, Tuple2< Long, TLongHashSet > > > call( final Tuple2< Long, RemappedData > t ) throws Exception
+		{
+			final TLongObjectHashMap< TLongHashSet > requests = new TLongObjectHashMap<>();
+			for ( final TLongLongIterator it = t._2().outsideNodes.iterator(); it.hasNext(); )
+			{
+				it.advance();
+				final long node = it.key();
+				final long block = it.value();
+				if ( !requests.contains( block ) )
+					requests.put( block, new TLongHashSet() );
+				requests.get( block ).add( node );
 
-						@Override
-						public boolean hasNext()
-						{
-							return it.hasNext();
-						}
+			}
+			return new Iterator< Tuple2< Long, Tuple2< Long, TLongHashSet > > >()
+			{
 
-						@Override
-						public Tuple2< Long, Tuple2< TLongLongHashMap, TLongLongHashMap > > next()
-						{
-							it.advance();
-							return new Tuple2<>( it.key(), it.value() );
-						}
+				private final TLongObjectIterator< TLongHashSet > requestIt = requests.iterator();
 
-					};
-				} )
-				.aggregateByKey(
-						new ArrayList<>(),
-						( l, v ) -> {
-							l.add( v );
-							return l;
-						},
-						( l1, l2 ) -> {
-							l1.addAll( l2 );
-							return l1;
-						} );
-		blub.unpersist();
+				@Override
+				public boolean hasNext()
+				{
+					return requestIt.hasNext();
+				}
 
-		return rdd
-				.join( response )
-				.mapToPair( t -> {
-					final TLongLongHashMap counts = t._2()._1().counts;
-					LOG.debug( "Merging " + counts.size() + " counts into block." );
+				@Override
+				public Tuple2< Long, Tuple2< Long, TLongHashSet > > next()
+				{
+					requestIt.advance();
+					return new Tuple2<>( requestIt.key(), new Tuple2<>( t._1(), requestIt.value() ) );
+				}
+			};
+		}
+	}
 
-					final TLongLongHashMap borderNodeAssignments = new TLongLongHashMap();
+	public static TLongObjectHashMap< TLongHashSet > putOrAddAll( final TLongObjectHashMap< TLongHashSet > m, final long k, final TLongHashSet v )
+	{
+		if ( m.contains( k ) )
+			m.get( k ).addAll( v );
+		else
+			m.put( k, v );
+		return m;
+	}
 
-					for ( final Tuple2< TLongLongHashMap, TLongLongHashMap > cts : t._2()._2() )
-					{
-						final TLongLongHashMap bna = cts._1();
-						for ( final TLongLongIterator it = bna.iterator(); it.hasNext(); )
-						{
-							it.advance();
-							final long k = it.key();
-							final long v = it.value();
-							if ( k != v )
-								counts.remove( k );
-						}
-						borderNodeAssignments.putAll( bna );
-						counts.putAll( cts._2() );
-					}
+	public static TLongObjectHashMap< TLongHashSet > putOrAddAll( final TLongObjectHashMap< TLongHashSet > source, final TLongObjectHashMap< TLongHashSet > target )
+	{
+		for ( final TLongObjectIterator< TLongHashSet > it = source.iterator(); it.hasNext(); )
+		{
+			it.advance();
+			putOrAddAll( target, it.key(), it.value() );
+		}
+		return target;
+	}
 
-					final Edge e = new Edge( t._2()._1().edges );
-					for ( int i = 0; i < e.size(); ++i )
-					{
-						e.setIndex( i );
-						final long from = e.from();
-						final long to = e.to();
+	public static < K, L extends List< K > > L addAndReturn( final L l, final K k )
+	{
+		l.add( k );
+		return l;
+	}
 
-						if ( borderNodeAssignments.contains( from ) )
-							e.from( borderNodeAssignments.get( from ) );
+	public static < K, L extends List< K > > L addAllAndReturn( final L l, final L toBeAdded )
+	{
+		l.addAll( toBeAdded );
+		return l;
+	}
 
-						if ( borderNodeAssignments.contains( to ) )
-							e.to( borderNodeAssignments.get( to ) );
-					}
+	public static class HandleRequests implements
+	PairFlatMapFunction< Tuple2< RemappedData, TLongObjectHashMap< TLongHashSet > >, Long, Tuple2< TLongLongHashMap, TLongLongHashMap > >
+	{
 
-					final TLongLongHashMap outsideNodes = t._2()._1().outsideNodes;
-					final TLongLongHashMap outsideNodesMapped = new TLongLongHashMap();
-					for ( final TLongLongIterator it = outsideNodes.iterator(); it.hasNext(); )
-					{
-						it.advance();
-						final long k = it.key();
-						if ( !borderNodeAssignments.contains( k ) )
-							throw new RuntimeException( "Outside node " + k + "not contained!" );
-						outsideNodesMapped.put( borderNodeAssignments.get( k ), it.value() );
-					}
+		@Override
+		public Iterator< Tuple2< Long, Tuple2< TLongLongHashMap, TLongLongHashMap > > > call( final Tuple2< RemappedData, TLongObjectHashMap< TLongHashSet > > dataAndRequests ) throws Exception
+		{
+			final TLongLongHashMap counts = dataAndRequests._1().counts;
+			final TLongLongHashMap borderNodeMap = dataAndRequests._1().borderNodeMappings;
+			final TLongObjectHashMap< Tuple2< TLongLongHashMap, TLongLongHashMap > > result = new TLongObjectHashMap<>();
+			final TLongObjectHashMap< TLongHashSet > requests = dataAndRequests._2();
+			for ( final TLongObjectIterator< TLongHashSet > it = requests.iterator(); it.hasNext(); )
+			{
+				it.advance();
+				final TLongLongHashMap countsForBlock = new TLongLongHashMap();
+				final TLongLongHashMap borderNodeMapForBlock = new TLongLongHashMap();
+				for ( final TLongIterator req = it.value().iterator(); req.hasNext(); )
+				{
+					final long id = req.next();
+					final long mappedId = borderNodeMap.get( id );
+					countsForBlock.put( mappedId, counts.get( mappedId ) );
+					borderNodeMapForBlock.put( id, mappedId );
+				}
+				result.put( it.key(), new Tuple2<>( borderNodeMapForBlock, countsForBlock ) );
 
-					return new Tuple2<>( t._1(), new RemappedData( t._2()._1().edges, counts, outsideNodesMapped, t._2()._1().merges, t._2()._1().borderNodeMappings ) );
-//					return new Tuple2<>( t._1(), t._2()._1() );
-				} );
+			}
+
+			return new Iterator< Tuple2< Long, Tuple2< TLongLongHashMap, TLongLongHashMap > > >()
+			{
+
+				private final TLongObjectIterator< Tuple2< TLongLongHashMap, TLongLongHashMap > > it = result.iterator();
+
+				@Override
+				public boolean hasNext()
+				{
+					return it.hasNext();
+				}
+
+				@Override
+				public Tuple2< Long, Tuple2< TLongLongHashMap, TLongLongHashMap > > next()
+				{
+					it.advance();
+					return new Tuple2<>( it.key(), it.value() );
+				}
+
+			};
+		}
+
+	}
+
+	public static class ApplyResponse implements
+	Function< Tuple2< RemappedData, ArrayList< Tuple2< TLongLongHashMap, TLongLongHashMap > > >, RemappedData >
+	{
+
+		@Override
+		public RemappedData call( final Tuple2< RemappedData, ArrayList< Tuple2< TLongLongHashMap, TLongLongHashMap > > > t ) throws Exception
+		{
+			final TLongLongHashMap counts = t._1().counts;
+			LOG.debug( "Merging " + counts.size() + " counts into block." );
+
+			final TLongLongHashMap borderNodeAssignments = new TLongLongHashMap();
+
+			for ( final Tuple2< TLongLongHashMap, TLongLongHashMap > cts : t._2() )
+			{
+				final TLongLongHashMap bna = cts._1();
+				for ( final TLongLongIterator it = bna.iterator(); it.hasNext(); )
+				{
+					it.advance();
+					final long k = it.key();
+					final long v = it.value();
+					if ( k != v )
+						counts.remove( k );
+				}
+				borderNodeAssignments.putAll( bna );
+				counts.putAll( cts._2() );
+			}
+
+			final Edge e = new Edge( t._1().edges );
+			for ( int i = 0; i < e.size(); ++i )
+			{
+				e.setIndex( i );
+				final long from = e.from();
+				final long to = e.to();
+
+				if ( borderNodeAssignments.contains( from ) )
+					e.from( borderNodeAssignments.get( from ) );
+
+				if ( borderNodeAssignments.contains( to ) )
+					e.to( borderNodeAssignments.get( to ) );
+			}
+
+			final TLongLongHashMap outsideNodes = t._1().outsideNodes;
+			final TLongLongHashMap outsideNodesMapped = new TLongLongHashMap();
+			for ( final TLongLongIterator it = outsideNodes.iterator(); it.hasNext(); )
+			{
+				it.advance();
+				final long k = it.key();
+				if ( !borderNodeAssignments.contains( k ) )
+					throw new RuntimeException( "Outside node " + k + "not contained!" );
+				outsideNodesMapped.put( borderNodeAssignments.get( k ), it.value() );
+			}
+
+			return new RemappedData( t._1().edges, counts, outsideNodesMapped, t._1().merges, t._1().borderNodeMappings );
+		}
+
 	}
 
 }
