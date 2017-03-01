@@ -1,9 +1,13 @@
 package de.hanslovsky.watersheds.rewrite.preparation;
 
 import java.io.Serializable;
+import java.lang.invoke.MethodHandles;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 import org.apache.spark.api.java.function.PairFunction;
 
 import de.hanslovsky.watersheds.DisjointSetsHashMap;
@@ -38,6 +42,11 @@ import scala.Tuple3;
 public class GetInternalEdgesAndSplits< K > implements
 PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetInternalEdgesAndSplits.IntraBlockOutput >
 {
+
+	public static Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
+	{
+		LOG.setLevel( Level.DEBUG );
+	}
 
 	public static class IntraBlockOutput implements Serializable
 	{
@@ -121,7 +130,7 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 		final CompositeIntervalView< FloatType, RealComposite< FloatType > > affinities =
 				Views.collapseReal( ArrayImgs.floats( t._2()._2(), extendedAffinitiesBlockDim ) );
 
-		System.out.println( "BLOCK DIM " + Arrays.toString( blockDim ) );
+		LOG.debug( "BLOCK DIM " + Arrays.toString( blockDim ) );
 		final IntervalView< LongType > innerLabels = Views.offsetInterval( labels, offset, blockDim );
 		final IntervalView< RealComposite< FloatType > > innerAffinities = Views.offsetInterval( affinities, offset, blockDim );
 
@@ -137,6 +146,7 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 		PrepareRegionMergingCutBlocks.addEdges( innerLabels, innerAffinities, blockDim, nodeEdgeMap, e, dummy, edgeMerger, parents );
 		final int nIntraBlockEdges = e.size();
 
+		LOG.trace( "Parents after adding edges: " + parents );
 
 		final TLongLongHashMap ranks = new TLongLongHashMap();
 		for ( final TLongIterator it = parents.keySet().iterator(); it.hasNext(); )
@@ -147,20 +157,24 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 		{
 			e.setIndex( i );
 			e.weight( edgeWeight.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
-			if ( e.from() == 13 || e.to() == 13 )
-				System.out.println( "Edge is good? " + edgeCheck.isGoodEdge( e ) + " " + e );
 			if ( edgeCheck.isGoodEdge( e ) )
+			{
 				dj.join( dj.findRoot( e.from() ), dj.findRoot( e.to() ) );
+				LOG.trace( "Join edge: " + e );
+			}
 			else
 			{
 				splitEdges.add( i );
 				dj.findRoot( e.from() );
 				dj.findRoot( e.to() );
+				LOG.trace( "Splitting edge: " + e );
 			}
 		}
 
 
 
+		LOG.debug( "Number of split edges: " + splitEdges.size() );
+		LOG.trace( "Parents after finding roots: " + parents );
 		for ( final TIntIterator it = splitEdges.iterator(); it.hasNext(); )
 		{
 			e.setIndex( it.next() );
@@ -171,6 +185,7 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 
 		final TLongLongHashMap rootToGlobalId = new TLongLongHashMap();
 		final TLongLongHashMap nodeBlockAssignment = assignNodesToBlocks( idService, dj, parents, rootToGlobalId );
+		LOG.trace( t._1() + " - node block assignment: " + nodeBlockAssignment );
 
 		final GetInternalEdgesAndSplits.IntraBlockOutput output = new IntraBlockOutput( t._2()._1(), t._2()._2(), t._2()._3(), nodeBlockAssignment, splitEdges, rootToGlobalId.values(), edges, nodeEdgeMap );
 

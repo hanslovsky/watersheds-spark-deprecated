@@ -5,11 +5,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.lang3.ArrayUtils;
@@ -46,7 +42,6 @@ import de.hanslovsky.watersheds.rewrite.util.IdServiceZMQ;
 import de.hanslovsky.watersheds.rewrite.util.IterableWithConstant;
 import de.hanslovsky.watersheds.rewrite.util.Util;
 import gnu.trove.iterator.TLongIterator;
-import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
@@ -143,8 +138,8 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		// start spark server
 		System.out.println( "Starting Spark server... " );
 		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[*]" ).set( "spark.driver.maxResultSize", "4g" );
-		Logger.getRootLogger().setLevel( Level.ERROR );
 		final JavaSparkContext sc = new JavaSparkContext( conf );
+		Logger.getRootLogger().setLevel( Level.ERROR );
 
 		final EdgeMerger merger = new EdgeMerger.MAX_AFFINITY_MERGER();
 //		final FunkyWeightSquared weightFunc = new EdgeWeight.FunkyWeightSquared();
@@ -153,7 +148,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final EdgeCheck edgeCheck = ( EdgeCheck & Serializable ) e -> e.weight() <= 0.1;
 //		( EdgeCheck & Serializable ) e -> e.affinity() >= 0.8,
 
-		final double threshold = 100.0;
+		final double threshold = 200.0;
 
 		final VisitorFactory visFac = ( sc1, labels, blocks, blockToInitialBlockMapBC, labelBlocks ) -> {
 			final VisualizationVisitor vis = new VisualizationVisitor(
@@ -186,40 +181,40 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 	{
 
 		final long[] dimsNoChannels = Intervals.dimensionsAsLongArray( labelsTarget );
-		final int nThreads = Runtime.getRuntime().availableProcessors() - 1;
-		final ExecutorService es = Executors.newFixedThreadPool( nThreads );
-		final ArrayList< Callable< TLongLongHashMap > > tasks = new ArrayList<>();
-		final int lastDim = labelsTarget.numDimensions() - 1;
-		final long stepSize = Math.max( labelsTarget.dimension( lastDim ) / nThreads, 1 );
-		for ( long z = 0; z < labelsTarget.dimension( lastDim ); z += stepSize )
-		{
-			final long[] zOffset = new long[ lastDim + 1 ];
-			zOffset[ lastDim ] = z;
-			final long[] currentDim = dimsNoChannels.clone();
-			currentDim[ lastDim ] = Math.min( z + stepSize, dimsNoChannels[ lastDim ] ) - z;
-			final IntervalView< LongType > oi = Views.offsetInterval( labelsTarget, zOffset, currentDim );
-
-			tasks.add( () -> Util.countLabels( oi ) );
-
-		}
-		final List< Future< TLongLongHashMap > > futures = es.invokeAll( tasks );
+//		final int nThreads = Runtime.getRuntime().availableProcessors() - 1;
+//		final ExecutorService es = Executors.newFixedThreadPool( nThreads );
+//		final ArrayList< Callable< TLongLongHashMap > > tasks = new ArrayList<>();
+//		final int lastDim = labelsTarget.numDimensions() - 1;
+//		final long stepSize = Math.max( labelsTarget.dimension( lastDim ) / nThreads, 1 );
+//		for ( long z = 0; z < labelsTarget.dimension( lastDim ); z += stepSize )
+//		{
+//			final long[] zOffset = new long[ lastDim + 1 ];
+//			zOffset[ lastDim ] = z;
+//			final long[] currentDim = dimsNoChannels.clone();
+//			currentDim[ lastDim ] = Math.min( z + stepSize, dimsNoChannels[ lastDim ] ) - z;
+//			final IntervalView< LongType > oi = Views.offsetInterval( labelsTarget, zOffset, currentDim );
+//
+//			tasks.add( () -> Util.countLabels( oi ) );
+//
+//		}
+//		final List< Future< TLongLongHashMap > > futures = es.invokeAll( tasks );
 //		final TLongLongHashMap counts = Util.countLabels( labelsTarget );
-		final TLongLongHashMap counts = new TLongLongHashMap();
-		for ( final Future< TLongLongHashMap > fut : futures )
-			for ( final TLongLongIterator futIt = fut.get().iterator(); futIt.hasNext(); )
-			{
-				futIt.advance();
-				final long l = futIt.key();
-				final long count = counts.contains( l ) ? counts.get( l ) + futIt.value() : futIt.value();
-				counts.put( l, count );
-			}
-		System.out.println( "Got counts." );
-
-		es.shutdown();
+//		final TLongLongHashMap counts = new TLongLongHashMap();
+//		for ( final Future< TLongLongHashMap > fut : futures )
+//			for ( final TLongLongIterator futIt = fut.get().iterator(); futIt.hasNext(); )
+//			{
+//				futIt.advance();
+//				final long l = futIt.key();
+//				final long count = counts.contains( l ) ? counts.get( l ) + futIt.value() : futIt.value();
+//				counts.put( l, count );
+//			}
+//		System.out.println( "Got counts." );
+//
+//		es.shutdown();
 
 		System.out.println( "Creating blocks... " );
 		final ArrayList< Tuple2< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > > blocks =
-				createBlocks( Views.extendValue( input, new FloatType( Float.NaN ) ), Views.extendValue( labelsTarget, new LongType( -1 ) ), dimsNoChannels, dimsIntervalNoChannels, counts );
+				createBlocks( Views.extendValue( input, new FloatType( Float.NaN ) ), Views.extendValue( labelsTarget, new LongType( -1 ) ), dimsNoChannels, dimsIntervalNoChannels );
 
 		final Context ctx = ZMQ.context( 1 );
 
@@ -269,8 +264,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		final long nOriginalBlocks = rmIn.count();
 
-		System.out.println( "Starting with " + nOriginalBlocks + " blocks." );
-
 //		final Tuple2< JavaPairRDD< Long, RegionMergingInput >, DisjointSets > msb = mergeSmallBlocks( sc, rmIn, 1 );
 //
 //		final JavaPairRDD< Long, RegionMergingInput > finalRmIn = msb._1().cache();
@@ -305,7 +298,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final Visitor vis = visFac.create( sc, labelsTarget, blockZero, blockToInitialBlockMapBC, labelBlocks );
 
 		final double tolerance = 1e32;
-		final double regionRatio = 0.5;
+		final double regionRatio = 0.0;
 
 		System.out.println( "Running region-merging" );
 		final JavaPairRDD< Long, RegionMergingInput > graphsAfterMerging = rm.run( sc, finalRmIn, threshold, vis, nOriginalBlocks, tolerance, regionRatio, dj );
@@ -321,8 +314,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			final RandomAccessible< FloatType > affs,
 			final RandomAccessible< LongType > labelsExtend,
 			final long[] dimsNoChannels,
-			final long[] dimsIntervalNoChannels,
-			final TLongLongHashMap counts )
+			final long[] dimsIntervalNoChannels )
 	{
 
 		final long[] extendedBlockSize = Arrays.stream( dimsIntervalNoChannels ).map( l -> l + 2 ).toArray();
@@ -337,9 +329,17 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		{
 			final long[] labelData = new long[ numberOfElementsPerLabelBLock ];
 			final long[] lower = Arrays.stream( offset ).map( val -> val - 1 ).toArray();
+
+			final TLongLongHashMap counts = new TLongLongHashMap();
+
 			final Cursor< LongType > l = Views.offsetInterval( labelsExtend, lower, extendedBlockSize ).cursor();
 			for ( int i = 0; l.hasNext(); ++i )
-				labelData[ i ] = l.next().get();
+			{
+				final long lbl = l.next().get();
+				labelData[ i ] = lbl;
+				if ( lbl >= 0 )
+					counts.put( lbl, counts.contains( lbl ) ? counts.get( lbl ) + 1 : 1 );
+			}
 
 			final float[] affsData = new float[ numberOfElementsPerAffinityBlock ];
 

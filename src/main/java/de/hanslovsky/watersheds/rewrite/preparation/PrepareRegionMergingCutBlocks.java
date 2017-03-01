@@ -1,9 +1,13 @@
 package de.hanslovsky.watersheds.rewrite.preparation;
 
 import java.io.Serializable;
+import java.lang.invoke.MethodHandles;
 import java.util.Arrays;
 import java.util.Iterator;
 
+import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
@@ -26,6 +30,7 @@ import gnu.trove.map.hash.TLongObjectHashMap;
 import gnu.trove.set.TLongSet;
 import gnu.trove.set.hash.TLongHashSet;
 import net.imglib2.Cursor;
+import net.imglib2.Point;
 import net.imglib2.RandomAccess;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.img.array.ArrayImg;
@@ -43,6 +48,11 @@ import scala.Tuple3;
 
 public class PrepareRegionMergingCutBlocks
 {
+
+	public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
+	{
+		LOG.setLevel( Level.INFO );
+	}
 
 	public static class BlockDivision implements Serializable
 	{
@@ -82,6 +92,8 @@ public class PrepareRegionMergingCutBlocks
 		final JavaPairRDD< HashableLongArray, GetInternalEdgesAndSplits.IntraBlockOutput > allEdges =
 				blocksWithLabelsAffinitiesAndCounts.mapToPair( new GetInternalEdgesAndSplits<>( blockDim.getValue(), edgeMerger, edgeWeight, edgeCheck, idService ) ).cache();
 
+		LOG.debug( "After geting internal edges and splits: " + allEdges.count() + " blocks." );
+
 		final JavaPairRDD< HashableLongArray, long[] > initialBlockContains = allEdges
 				.mapToPair( t -> {
 					final TLongLongHashMap nba = t._2().nodeBlockAssignment;
@@ -89,10 +101,11 @@ public class PrepareRegionMergingCutBlocks
 					return new Tuple2<>( t._1(), blocks.toArray() );
 				} );
 
-
 		final JavaPairRDD< HashableLongArray, GetExternalEdges.BlockOutput > interBlockEdges =
 				allEdges.mapToPair( new GetExternalEdges( blockDim, dim, edgeMerger ) ).cache();
 		interBlockEdges.count();
+
+		LOG.debug( "After geting inter-block edges: " + interBlockEdges.count() + " blocks." );
 
 		final TLongLongHashMap filteredNodeBlockAssignments = interBlockEdges
 				.map( t -> t._2().filteredNodeBlockAssignment )
@@ -100,6 +113,7 @@ public class PrepareRegionMergingCutBlocks
 					m1.putAll( m2 );
 					return m1;
 				} );
+
 
 		final JavaPairRDD< Long, BlockDivision > mergeBlocs = interBlockEdges
 				.values()
@@ -118,11 +132,17 @@ public class PrepareRegionMergingCutBlocks
 					return t;
 				} ).cache();
 
+		LOG.debug( "Block divisions: " + mergeBlocs.count() + " blocks." );
+
 		return new Tuple2<>( mergeBlocs, initialBlockContains );
 	}
 
 	public static class GetExternalEdges implements PairFunction< Tuple2< HashableLongArray, GetInternalEdgesAndSplits.IntraBlockOutput >, HashableLongArray, GetExternalEdges.BlockOutput >
 	{
+		public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
+		{
+			LOG.setLevel( Level.TRACE );
+		}
 
 		public static class BlockOutput
 		{
@@ -246,6 +266,10 @@ public class PrepareRegionMergingCutBlocks
 
 	public static class FlattenInputs implements PairFlatMapFunction< TLongObjectHashMap< BlockDivision >, Long, BlockDivision >
 	{
+		public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
+		{
+			LOG.setLevel( Level.INFO );
+		}
 
 		@Override
 		public Iterator< Tuple2< Long, BlockDivision > > call( final TLongObjectHashMap< BlockDivision > t ) throws Exception
@@ -292,7 +316,11 @@ public class PrepareRegionMergingCutBlocks
 			final RealComposite< T > affinity = affinitiesCursor.next();
 			labelsAccess.setPosition( affinitiesCursor );
 			final long label = labelsAccess.get().get();
-			parents.put( label, label );
+			if ( label >= 0 )
+			{
+				LOG.trace( "Adding label to parents map: " + label );
+				parents.put( label, label );
+			}
 			for ( int d = 0; d < blockMax.length; ++d )
 				// TODO is blockMax[ d ] - 1 bug? should it be blockMax[ d ]?
 				// If so -> WHY?
@@ -306,7 +334,12 @@ public class PrepareRegionMergingCutBlocks
 						labelsAccess.fwd( d );
 						final long otherLabel = labelsAccess.get().get();
 						if ( otherLabel != label )
+						{
+							parents.put( otherLabel, otherLabel );
 							addEdge( label, otherLabel, aff, nodeEdgeMap, e, dummy, edgeMerger );
+							if ( LOG.isEnabledFor( Level.TRACE ) && ( label == -1 || otherLabel == -1 ) )
+								LOG.trace( "Added edge: " + label + " " + otherLabel + " " + aff + " " + new Point( affinitiesCursor ) + " " + new Point( labelsAccess ) );
+						}
 						labelsAccess.bck( d );
 					}
 				}

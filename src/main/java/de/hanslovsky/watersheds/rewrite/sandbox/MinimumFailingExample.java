@@ -94,12 +94,13 @@ public class MinimumFailingExample
 	{
 
 		final int nBlocksZ = 3;
+		final int nBlocksY = 1;
 		final int nBlocksX = 4;
 		final int nLabelsPerBlock = 5;
-		final long[] dim = { 30, 4, nBlocksZ * nLabelsPerBlock };
+		final long[] dim = { 30, 4 * nBlocksY, nBlocksZ * nLabelsPerBlock };
 		final long blockDimZ = dim[ 2 ] / nBlocksZ;
 		final long blockDimX = dim[ 0 ] / nBlocksX;
-		final long blockDimY = dim[ 1 ];
+		final long blockDimY = dim[ 1 ] / nBlocksY;
 		final long[] blockDims = { blockDimX, blockDimY, blockDimZ };
 		final long[] nBlocksPerDimension = IntStream.range( 0, dim.length ).mapToLong( i -> ( long ) Math.ceil( dim[ i ] * 1.0 / blockDims[ i ] ) ).toArray();
 		final long nBlocks = Arrays.stream( nBlocksPerDimension ).reduce( 1, ( l1, l2 ) -> l1 * l2 );
@@ -169,6 +170,10 @@ public class MinimumFailingExample
 			}
 
 		};
+
+//		for ( int d = 0; d < affs.numDimensions() - 1; ++d )
+//			for ( final RealComposite< FloatType > h : Views.hyperSlice( Views.collapseReal( affs ), d, affs.max( d ) ) )
+//				System.out.println( h.get( d ) );
 
 		final TLongIntHashMap blockCMap = new TLongIntHashMap();
 		final ArrayImg< LongType, LongArray > blocks = ArrayImgs.longs( dim );

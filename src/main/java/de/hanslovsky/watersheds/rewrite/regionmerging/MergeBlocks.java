@@ -10,7 +10,6 @@ import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaPairRDD;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
-import de.hanslovsky.watersheds.rewrite.regionmerging.RegionMergingArrayBased.GenerateNodeIndexMapping;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.map.hash.TLongIntHashMap;
@@ -72,7 +71,7 @@ public class MergeBlocks
 					}
 					return new RegionMergingInput( nodeIndexMapping.size(), nodeIndexMapping, data.counts, data.outsideNodes, data.edges );
 				} )
-				.mapValues( new GenerateNodeIndexMapping() );
+		;
 	}
 
 	public static JavaPairRDD< Long, RegionMergingInput > mergeSmallBlocks( final JavaPairRDD< Long, RegionMergingInput > rdd, final DisjointSets dj, final int minNodesPerBlock )

@@ -1,5 +1,11 @@
 package de.hanslovsky.watersheds.rewrite.preparation;
 
+import java.lang.invoke.MethodHandles;
+import java.util.Arrays;
+
+import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.broadcast.Broadcast;
 
@@ -15,6 +21,11 @@ import gnu.trove.map.hash.TLongObjectHashMap;
 public class MapNodesAndSplitBlocks
 implements Function< GetExternalEdges.BlockOutput, TLongObjectHashMap< BlockDivision > >
 {
+
+	public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
+	{
+		LOG.setLevel( Level.DEBUG );
+	}
 
 	private final Broadcast< TLongLongHashMap > nodeBlockMapping;
 
@@ -34,6 +45,8 @@ implements Function< GetExternalEdges.BlockOutput, TLongObjectHashMap< BlockDivi
 		final TLongLongHashMap nodeBlockMapping = this.nodeBlockMapping.getValue();
 
 		final TLongObjectHashMap< BlockDivision > regionMergingInputs = new TLongObjectHashMap<>();
+
+		LOG.trace( "Initial block contains " + o.blockIds.length + " sub-blocks: " + Arrays.toString( o.blockIds ) );
 
 		for ( final long id : o.blockIds ) {
 			final BlockDivision in = new BlockDivision( new TLongLongHashMap(), new TLongLongHashMap(), new TLongObjectHashMap<>(), new TDoubleArrayList(), new TLongObjectHashMap<>() );
