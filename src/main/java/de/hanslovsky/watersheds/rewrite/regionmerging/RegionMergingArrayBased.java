@@ -77,6 +77,7 @@ public class RegionMergingArrayBased
 			LOG.info( "Region merging iteration " + iteration );
 			final ArrayList< Object > unpersistList = new ArrayList<>();
 			unpersistList.add( rdd );
+			LOG.info( "Currently " + getNumRegions( rdd.values() ) + "," + rdd.count() + " regions,blocks remaining." );
 
 			logInitialStateAtIteration( rdd, iteration );
 
@@ -90,8 +91,6 @@ public class RegionMergingArrayBased
 			zeroBased.cache();
 			unpersistList.add( zeroBased );
 			zeroBased.count();
-
-			LOG.info( "Currently " + getNumRegions( zeroBased.values() ) + " (" + ensuredWeights.count() + ") regions (blocks) remaining." );
 
 			// TODO why is filter necessary?
 			final double threshold = getCurrentThreshold( ensuredWeights.values().map( t -> t._2() ), maxThreshold, tolerance, ensuredWeights.count() == 1 );
@@ -181,17 +180,19 @@ public class RegionMergingArrayBased
 					it.advance();
 					reverse[ it.value() ] = it.key();
 				}
-				sb.append( "\n" ).append( t._2().nodeIndexMapping );
-				sb.append( "\n" ).append( Arrays.toString( reverse ) );
+				sb.append( "\nNode index mapping: " ).append( t._2().nodeIndexMapping );
+				sb.append( "\nReverse: " ).append( Arrays.toString( reverse ) );
+				sb.append( "\nCounts (" + t._2().counts.size() + "): " ).append( t._2().counts );
+				sb.append( "\nOutside (" + t._2().outsideNodes.size() + "): " ).append( t._2().outsideNodes );
 				LOG.trace( sb.toString() );
 				return k;
 			} ).count();
 		}
 	}
 
-	public static long getNumRegions( final JavaRDD< MergeBlocIn > rdd )
+	public static long getNumRegions( final JavaRDD< RegionMergingInput > rdd )
 	{
-		final int nRegions = rdd.map( t -> t.counts.length - t.outsideNodes.size() / MergeBlocArrayBased.MERGERS_ENTRY_SIZE ).reduce( ( i1, i2 ) -> i1 + i2 );
+		final int nRegions = rdd.map( t -> t.counts.size() - t.outsideNodes.size() ).reduce( ( i1, i2 ) -> i1 + i2 );
 		return nRegions;
 	}
 

@@ -5,7 +5,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.lang3.ArrayUtils;
@@ -42,6 +46,7 @@ import de.hanslovsky.watersheds.rewrite.util.IdServiceZMQ;
 import de.hanslovsky.watersheds.rewrite.util.IterableWithConstant;
 import de.hanslovsky.watersheds.rewrite.util.Util;
 import gnu.trove.iterator.TLongIterator;
+import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
@@ -52,9 +57,6 @@ import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import net.imglib2.img.Img;
 import net.imglib2.img.ImgFactory;
-import net.imglib2.img.array.ArrayImg;
-import net.imglib2.img.array.ArrayImgs;
-import net.imglib2.img.basictypeaccess.array.LongArray;
 import net.imglib2.img.cell.CellImg;
 import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.type.numeric.real.FloatType;
@@ -66,7 +68,6 @@ import net.imglib2.view.composite.CompositeIntervalView;
 import net.imglib2.view.composite.RealComposite;
 import scala.Tuple2;
 import scala.Tuple3;
-import scala.Tuple4;
 
 public class WatershedsSparkWithRegionMergingLoadSegmentation
 {
@@ -87,10 +88,10 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 
 //		final int[] dimsIntervalInt = new int[] { 150, 150, 2 };
-		final int[] dimsIntervalInt = new int[] { 150, 150, 50, 3 };
+		final int[] dimsIntervalInt = new int[] { 150, 150, 2 };
 
-//		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
-		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt.h5";
+		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
+//		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt.h5";
 //		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt-sliced-blocks.h5";
 //		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt-sliced-blocks-only-10-in-z.h5";
 //		final String path = Util.HOME_DIR + "/Dropbox/misc/sample_A.augmented.0-slice-100.hdf";
@@ -167,14 +168,23 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			return vis;
 		};
 
-		run( sc, input, labelsTarget, dimsIntervalNoChannels, labelsTarget.factory(), merger, weightFunc, edgeCheck, threshold, visFac );
+		System.out.println( "Counting..." );
+		final TLongLongHashMap counts = countByLabel( labelsTarget );
+
+		System.out.println( "Creating blocks... " );
+		final ArrayList< Tuple2< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > > blocks =
+				createBlocks( Views.extendValue( input, new FloatType( Float.NaN ) ), Views.extendValue( labelsTarget, new LongType( -1 ) ), dimsNoChannels, dimsIntervalNoChannels, counts );
+		final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksRdd =
+				sc.parallelizePairs( blocks ).cache();
+
+		run( sc, labelsTarget, blocksRdd, dimsIntervalNoChannels, labelsTarget.factory(), merger, weightFunc, edgeCheck, threshold, visFac );
 
 	}
 
 	public static void run(
 			final JavaSparkContext sc,
-			final RandomAccessibleInterval< FloatType > input,
 			final RandomAccessibleInterval< LongType > labelsTarget,
+			final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksRdd,
 			final long[] dimsIntervalNoChannels,
 			final ImgFactory< LongType > labelsImgFactory,
 			final EdgeMerger merger,
@@ -185,40 +195,6 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 	{
 
 		final long[] dimsNoChannels = Intervals.dimensionsAsLongArray( labelsTarget );
-//		final int nThreads = Runtime.getRuntime().availableProcessors() - 1;
-//		final ExecutorService es = Executors.newFixedThreadPool( nThreads );
-//		final ArrayList< Callable< TLongLongHashMap > > tasks = new ArrayList<>();
-//		final int lastDim = labelsTarget.numDimensions() - 1;
-//		final long stepSize = Math.max( labelsTarget.dimension( lastDim ) / nThreads, 1 );
-//		for ( long z = 0; z < labelsTarget.dimension( lastDim ); z += stepSize )
-//		{
-//			final long[] zOffset = new long[ lastDim + 1 ];
-//			zOffset[ lastDim ] = z;
-//			final long[] currentDim = dimsNoChannels.clone();
-//			currentDim[ lastDim ] = Math.min( z + stepSize, dimsNoChannels[ lastDim ] ) - z;
-//			final IntervalView< LongType > oi = Views.offsetInterval( labelsTarget, zOffset, currentDim );
-//
-//			tasks.add( () -> Util.countLabels( oi ) );
-//
-//		}
-//		final List< Future< TLongLongHashMap > > futures = es.invokeAll( tasks );
-//		final TLongLongHashMap counts = Util.countLabels( labelsTarget );
-//		final TLongLongHashMap counts = new TLongLongHashMap();
-//		for ( final Future< TLongLongHashMap > fut : futures )
-//			for ( final TLongLongIterator futIt = fut.get().iterator(); futIt.hasNext(); )
-//			{
-//				futIt.advance();
-//				final long l = futIt.key();
-//				final long count = counts.contains( l ) ? counts.get( l ) + futIt.value() : futIt.value();
-//				counts.put( l, count );
-//			}
-//		System.out.println( "Got counts." );
-//
-//		es.shutdown();
-
-		System.out.println( "Creating blocks... " );
-		final ArrayList< Tuple2< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > > blocks =
-				createBlocks( Views.extendValue( input, new FloatType( Float.NaN ) ), Views.extendValue( labelsTarget, new LongType( -1 ) ), dimsNoChannels, dimsIntervalNoChannels );
 
 		final Context ctx = ZMQ.context( 1 );
 
@@ -228,39 +204,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		blockIdThread.start();
 		final IdServiceZMQ blockIdService = new IdServiceZMQ( blockIdAddr );
 
-		final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksRdd =
-				sc.parallelizePairs( blocks ).cache();
-		System.out.println( "Created " + blocksRdd.count() + " initial blocks..." );
-
-		final JavaPairRDD< HashableLongArray, Tuple4< long[], float[], TLongLongHashMap, ArrayList< Tuple2< HashableLongArray, TLongArrayList > > > > requestForCounts = blocksRdd.mapToPair( t -> {
-			final ArrayImg< LongType, LongArray > labels = ArrayImgs.longs( t._2()._1(), Arrays.stream( dimsIntervalNoChannels ).map( l -> l + 2 ).toArray() );
-			final ArrayList< Tuple2< HashableLongArray, TLongArrayList > > requests = new ArrayList<>();
-			for ( int d = 0; d < dimsIntervalNoChannels.length; ++d )
-			{
-				{
-					final long[] otherPos = t._1().getData().clone();
-					otherPos[ d ] -= dimsIntervalNoChannels[ d ];
-					final TLongArrayList req = new TLongArrayList();
-					for ( final LongType v : Views.hyperSlice( labels, d, 0 ) )
-						if ( v.get() >= 0 )
-							req.add( v.get() );
-					if ( req.size() > 0 )
-						requests.add( new Tuple2<>( new HashableLongArray( otherPos ), req ) );
-				}
-
-				{
-					final long[] otherPos = t._1().getData().clone();
-					otherPos[ d ] += dimsIntervalNoChannels[ d ];
-					final TLongArrayList req = new TLongArrayList();
-					for ( final LongType v : Views.hyperSlice( labels, d, labels.max( d ) ) )
-						if ( v.get() >= 0 )
-							req.add( v.get() );
-					if ( req.size() > 0 )
-						requests.add( new Tuple2<>( new HashableLongArray( otherPos ), req ) );
-				}
-			}
-			return new Tuple2<>( t._1(), new Tuple4<>( t._2()._1(), t._2()._2(), t._2()._3(), requests ) );
-		} );
+		System.out.println( blocksRdd.count() + " initial blocks..." );
 
 		final Broadcast< long[] > dimsIntervalNoChannelsBC = sc.broadcast( dimsIntervalNoChannels );
 
@@ -344,11 +288,48 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 	}
 
+	public static TLongLongHashMap countByLabel( final RandomAccessibleInterval< LongType > labelsTarget ) throws InterruptedException, ExecutionException
+	{
+		final long dims[] = Intervals.dimensionsAsLongArray( labelsTarget );
+		final int nThreads = Runtime.getRuntime().availableProcessors() - 1;
+		final ExecutorService es = Executors.newFixedThreadPool( nThreads );
+		final ArrayList< Callable< TLongLongHashMap > > tasks = new ArrayList<>();
+		final int lastDim = labelsTarget.numDimensions() - 1;
+		final long stepSize = Math.max( labelsTarget.dimension( lastDim ) / nThreads, 1 );
+		for ( long z = 0; z < labelsTarget.dimension( lastDim ); z += stepSize )
+		{
+			final long[] zOffset = new long[ lastDim + 1 ];
+			zOffset[ lastDim ] = z;
+			final long[] currentDim = dims.clone();
+			currentDim[ lastDim ] = Math.min( z + stepSize, dims[ lastDim ] ) - z;
+			final IntervalView< LongType > oi = Views.offsetInterval( labelsTarget, zOffset, currentDim );
+
+			tasks.add( () -> Util.countLabels( oi ) );
+
+		}
+		final List< Future< TLongLongHashMap > > futures = es.invokeAll( tasks );
+		final TLongLongHashMap counts = new TLongLongHashMap();
+		for ( final Future< TLongLongHashMap > fut : futures )
+			for ( final TLongLongIterator futIt = fut.get().iterator(); futIt.hasNext(); )
+			{
+				futIt.advance();
+				final long l = futIt.key();
+				final long count = counts.contains( l ) ? counts.get( l ) + futIt.value() : futIt.value();
+				counts.put( l, count );
+			}
+		System.out.println( "Got counts." );
+
+		es.shutdown();
+
+		return counts;
+	}
+
 	public static ArrayList< Tuple2< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > > createBlocks(
 			final RandomAccessible< FloatType > affs,
 			final RandomAccessible< LongType > labelsExtend,
 			final long[] dimsNoChannels,
-			final long[] dimsIntervalNoChannels )
+			final long[] dimsIntervalNoChannels,
+			final TLongLongHashMap globalCounts )
 	{
 
 		final long[] extendedBlockSize = Arrays.stream( dimsIntervalNoChannels ).map( l -> l + 2 ).toArray();
@@ -371,8 +352,8 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			{
 				final long lbl = l.next().get();
 				labelData[ i ] = lbl;
-				if ( lbl >= 0 )
-					counts.put( lbl, counts.contains( lbl ) ? counts.get( lbl ) + 1 : 1 );
+				if ( lbl >= 0 && !counts.contains( lbl ) )
+					counts.put( lbl, globalCounts.get( lbl ) );
 			}
 
 			final float[] affsData = new float[ numberOfElementsPerAffinityBlock ];

@@ -11,6 +11,7 @@ import java.util.stream.IntStream;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 
 import de.hanslovsky.watersheds.Util;
@@ -21,6 +22,7 @@ import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger.MAX_AFFINITY_MERGER;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.util.EdgeCheck;
+import de.hanslovsky.watersheds.rewrite.util.HashableLongArray;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
 import net.imglib2.AbstractInterval;
@@ -39,6 +41,7 @@ import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.IntervalIndexer;
 import net.imglib2.view.Views;
+import scala.Tuple3;
 
 public class MinimumFailingExample
 {
@@ -206,11 +209,19 @@ public class MinimumFailingExample
 			return vis;
 		};
 
+		final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksRdd = sc.parallelizePairs(
+				WatershedsSparkWithRegionMergingLoadSegmentation.createBlocks(
+						affs,
+						labels,
+						dim,
+						blockDims,
+						counts ) );
+
 		System.out.println( "Running region merging." );
 		WatershedsSparkWithRegionMergingLoadSegmentation.run(
 				sc,
-				affs,
 				labels,
+				blocksRdd,
 				new long[] { blockDimX, blockDimY, blockDimZ },
 				new ArrayImgFactory< LongType >(),
 				merger,

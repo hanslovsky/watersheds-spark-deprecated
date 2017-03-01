@@ -43,8 +43,6 @@ public class OutsideNodeCountRequest
 						requests.get( block ).add( node );
 
 					}
-//					if ( t._1().longValue() == 15 )
-//						System.out.println( "REQUESTS? " + requests );
 					return new Iterator< Tuple2< Long, Tuple2< Long, TLongHashSet > > >()
 					{
 

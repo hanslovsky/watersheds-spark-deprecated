@@ -45,7 +45,7 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 
 	public static Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
 	{
-		LOG.setLevel( Level.DEBUG );
+		LOG.setLevel( Level.INFO );
 	}
 
 	public static class IntraBlockOutput implements Serializable
