@@ -8,8 +8,10 @@ import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.function.PairFunction;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.util.Util;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.map.hash.TLongIntHashMap;
@@ -31,47 +33,16 @@ public class MergeBlocks
 
 		final JavaPairRDD< Long, RemappedData > withRootBlock = withUpdatedBorderNodes.mapToPair( t -> new Tuple2<>( ( long ) dj.findRoot( t._1().intValue() ), t._2() ) );
 
-		final JavaPairRDD< Long, RemappedData > withCorrectOutsideNodes = withRootBlock.mapToPair( t -> {
-			final long root = t._1();
-			final TLongLongHashMap outsideNodes = new TLongLongHashMap();
-			for ( final TLongLongIterator it = t._2().outsideNodes.iterator(); it.hasNext(); )
-			{
-				it.advance();
-				final int r = dj.findRoot( ( int ) it.value() );
-				if ( r != root )
-					outsideNodes.put( it.key(), r );
-			}
+		final JavaPairRDD< Long, RemappedData > withCorrectOutsideNodes = withRootBlock.mapToPair( new FilterOutsideNodes( dj ) );
 
-			return new Tuple2<>( root, new RemappedData( t._2().edges, t._2().counts, outsideNodes, t._2().merges, t._2.borderNodeMappings ) );
-
-		} );
-
-		final JavaPairRDD< Long, ArrayList< RemappedData > > aggregated = withCorrectOutsideNodes
-				.aggregateByKey(
-						new ArrayList<>(),
-						( v1, v2 ) -> {
-							v1.add( v2 );
-							return v1;
-						},
-						( v1, v2 ) -> {
-							v1.addAll( v2 );
-							return v1;
-						} );
+		final JavaPairRDD< Long, ArrayList< RemappedData > > aggregated = withCorrectOutsideNodes.aggregateByKey(
+				new ArrayList<>(),
+				( l, v ) -> Util.addAndReturn( l, v ),
+				( l1, l2 ) -> Util.addAllAndReturn( l1, l2 ) );
 
 		final JavaPairRDD< Long, OriginalLabelData > reduced = aggregated.mapValues( new ReduceBlock() );
 
-		return reduced
-				.mapValues( data -> {
-					final TLongIntHashMap nodeIndexMapping = new TLongIntHashMap();
-					final TLongLongIterator it = data.counts.iterator();
-					for ( int i = 0; it.hasNext(); ++i )
-					{
-						it.advance();
-						nodeIndexMapping.put( it.key(), i );
-					}
-					return new RegionMergingInput( nodeIndexMapping.size(), nodeIndexMapping, data.counts, data.outsideNodes, data.edges );
-				} )
-		;
+		return reduced.mapValues( data -> toRegionMergingInput( data ) );
 	}
 
 	public static JavaPairRDD< Long, RegionMergingInput > mergeSmallBlocks( final JavaPairRDD< Long, RegionMergingInput > rdd, final DisjointSets dj, final int minNodesPerBlock )
@@ -154,6 +125,46 @@ public class MergeBlocks
 					return new RegionMergingInput( rmi.counts.size(), nodeIndexMapping, rmi.counts, rmi.outsideNodes, rmi.edges );
 				} );
 
+	}
+
+	public static class FilterOutsideNodes implements PairFunction< Tuple2< Long, RemappedData >, Long, RemappedData >
+	{
+
+		private final DisjointSets dj;
+
+		public FilterOutsideNodes( final DisjointSets dj )
+		{
+			super();
+			this.dj = dj;
+		}
+
+		@Override
+		public Tuple2< Long, RemappedData > call( final Tuple2< Long, RemappedData > t ) throws Exception
+		{
+			final long root = t._1();
+			final TLongLongHashMap outsideNodes = new TLongLongHashMap();
+			for ( final TLongLongIterator it = t._2().outsideNodes.iterator(); it.hasNext(); )
+			{
+				it.advance();
+				final int r = dj.findRoot( ( int ) it.value() );
+				if ( r != root )
+					outsideNodes.put( it.key(), r );
+			}
+			return new Tuple2<>( root, new RemappedData( t._2().edges, t._2().counts, outsideNodes, t._2().merges, t._2.borderNodeMappings ) );
+		}
+
+	}
+
+	public static RegionMergingInput toRegionMergingInput( final OriginalLabelData data )
+	{
+		final TLongIntHashMap nodeIndexMapping = new TLongIntHashMap();
+		final TLongLongIterator it = data.counts.iterator();
+		for ( int i = 0; it.hasNext(); ++i )
+		{
+			it.advance();
+			nodeIndexMapping.put( it.key(), i );
+		}
+		return new RegionMergingInput( nodeIndexMapping.size(), nodeIndexMapping, data.counts, data.outsideNodes, data.edges );
 	}
 
 }
