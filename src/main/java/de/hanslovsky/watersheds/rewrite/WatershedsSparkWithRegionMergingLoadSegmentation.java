@@ -52,6 +52,9 @@ import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import net.imglib2.img.Img;
 import net.imglib2.img.ImgFactory;
+import net.imglib2.img.array.ArrayImg;
+import net.imglib2.img.array.ArrayImgs;
+import net.imglib2.img.basictypeaccess.array.LongArray;
 import net.imglib2.img.cell.CellImg;
 import net.imglib2.type.numeric.integer.LongType;
 import net.imglib2.type.numeric.real.FloatType;
@@ -63,6 +66,7 @@ import net.imglib2.view.composite.CompositeIntervalView;
 import net.imglib2.view.composite.RealComposite;
 import scala.Tuple2;
 import scala.Tuple3;
+import scala.Tuple4;
 
 public class WatershedsSparkWithRegionMergingLoadSegmentation
 {
@@ -227,6 +231,36 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksRdd =
 				sc.parallelizePairs( blocks ).cache();
 		System.out.println( "Created " + blocksRdd.count() + " initial blocks..." );
+
+		final JavaPairRDD< HashableLongArray, Tuple4< long[], float[], TLongLongHashMap, ArrayList< Tuple2< HashableLongArray, TLongArrayList > > > > requestForCounts = blocksRdd.mapToPair( t -> {
+			final ArrayImg< LongType, LongArray > labels = ArrayImgs.longs( t._2()._1(), Arrays.stream( dimsIntervalNoChannels ).map( l -> l + 2 ).toArray() );
+			final ArrayList< Tuple2< HashableLongArray, TLongArrayList > > requests = new ArrayList<>();
+			for ( int d = 0; d < dimsIntervalNoChannels.length; ++d )
+			{
+				{
+					final long[] otherPos = t._1().getData().clone();
+					otherPos[ d ] -= dimsIntervalNoChannels[ d ];
+					final TLongArrayList req = new TLongArrayList();
+					for ( final LongType v : Views.hyperSlice( labels, d, 0 ) )
+						if ( v.get() >= 0 )
+							req.add( v.get() );
+					if ( req.size() > 0 )
+						requests.add( new Tuple2<>( new HashableLongArray( otherPos ), req ) );
+				}
+
+				{
+					final long[] otherPos = t._1().getData().clone();
+					otherPos[ d ] += dimsIntervalNoChannels[ d ];
+					final TLongArrayList req = new TLongArrayList();
+					for ( final LongType v : Views.hyperSlice( labels, d, labels.max( d ) ) )
+						if ( v.get() >= 0 )
+							req.add( v.get() );
+					if ( req.size() > 0 )
+						requests.add( new Tuple2<>( new HashableLongArray( otherPos ), req ) );
+				}
+			}
+			return new Tuple2<>( t._1(), new Tuple4<>( t._2()._1(), t._2()._2(), t._2()._3(), requests ) );
+		} );
 
 		final Broadcast< long[] > dimsIntervalNoChannelsBC = sc.broadcast( dimsIntervalNoChannels );
 
