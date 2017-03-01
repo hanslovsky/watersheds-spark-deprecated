@@ -3,7 +3,6 @@ package de.hanslovsky.watersheds.rewrite.regionmerging;
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.List;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
@@ -13,6 +12,7 @@ import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.util.Util;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;
 import gnu.trove.iterator.TLongObjectIterator;
@@ -44,7 +44,7 @@ public class OutsideNodeCountRequest
 				.join( combinedRequestsForEachBlock )
 				.values()
 				.flatMapToPair( new HandleRequests() )
-				.aggregateByKey( new ArrayList<>(), ( l, v ) -> addAndReturn( l, v ), ( l1, l2 ) -> addAllAndReturn( l1, l2 ) );
+				.aggregateByKey( new ArrayList<>(), ( l, v ) -> Util.addAndReturn( l, v ), ( l1, l2 ) -> Util.addAllAndReturn( l1, l2 ) );
 		singleRequests.unpersist();
 
 		return rdd.join( response ).mapValues( new ApplyResponse() );
@@ -105,18 +105,6 @@ public class OutsideNodeCountRequest
 			putOrAddAll( target, it.key(), it.value() );
 		}
 		return target;
-	}
-
-	public static < K, L extends List< K > > L addAndReturn( final L l, final K k )
-	{
-		l.add( k );
-		return l;
-	}
-
-	public static < K, L extends List< K > > L addAllAndReturn( final L l, final L toBeAdded )
-	{
-		l.addAll( toBeAdded );
-		return l;
 	}
 
 	public static class HandleRequests implements

@@ -2,6 +2,7 @@ package de.hanslovsky.watersheds.rewrite.util;
 
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Random;
 
 import org.apache.commons.lang.ArrayUtils;
@@ -359,6 +360,18 @@ public class Util
 
 		return bdv;
 
+	}
+
+	public static < K, L extends List< K > > L addAndReturn( final L l, final K k )
+	{
+		l.add( k );
+		return l;
+	}
+
+	public static < K, L extends List< K > > L addAllAndReturn( final L l, final L toBeAdded )
+	{
+		l.addAll( toBeAdded );
+		return l;
 	}
 
 }
