@@ -30,7 +30,6 @@ import ch.systemsx.cisd.hdf5.IHDF5Reader;
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
-import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight.FunkyWeight;
 import de.hanslovsky.watersheds.rewrite.preparation.PrepareRegionMergingCutBlocks;
 import de.hanslovsky.watersheds.rewrite.preparation.PrepareRegionMergingCutBlocks.BlockDivision;
 import de.hanslovsky.watersheds.rewrite.regionmerging.OriginalLabelData;
@@ -146,14 +145,40 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final JavaSparkContext sc = new JavaSparkContext( conf );
 		Logger.getRootLogger().setLevel( Level.ERROR );
 
-		final EdgeMerger merger = new EdgeMerger.MAX_AFFINITY_MERGER();
-//		final FunkyWeightSquared weightFunc = new EdgeWeight.FunkyWeightSquared();
-		final FunkyWeight weightFunc = new EdgeWeight.FunkyWeight();
-//		final EdgeWeight weightFunc = ( EdgeWeight & Serializable ) ( affinity, count1, count2 ) -> Math.min( count1, count2 ) / ( affinity * affinity );
-		final EdgeCheck edgeCheck = ( EdgeCheck & Serializable ) e -> e.weight() <= 0.1;
-//		( EdgeCheck & Serializable ) e -> e.affinity() >= 0.8,
+		final String OPTION = "LOG_COUNT";
+		final EdgeMerger merger;
+		final EdgeWeight weightFunc;
+		switch ( OPTION )
+		{
+		case "AFF_ONLY_MIN":
+			merger = new EdgeMerger.MIN_AFFINITY_MERGER();
+			weightFunc = ( EdgeWeight & Serializable ) ( a, c1, c2 ) -> 1 - a;
+			break;
+		case "AFF_ONLY_MAX":
+			merger = new EdgeMerger.MAX_AFFINITY_MERGER();
+			weightFunc = ( EdgeWeight & Serializable ) ( a, c1, c2 ) -> 1 - a;
+			break;
+		case "AFF_ONLY_AVG":
+			merger = new EdgeMerger.AVG_AFFINITY_MERGER();
+			weightFunc = ( EdgeWeight & Serializable ) ( a, c1, c2 ) -> 1 - a;
+			break;
+		case "FUNKY":
+			merger = new EdgeMerger.MAX_AFFINITY_MERGER();
+			weightFunc = new EdgeWeight.FunkyWeight();
+			break;
+		case "LOG_COUNT":
+			merger = new EdgeMerger.MAX_AFFINITY_MERGER();
+			weightFunc = ( EdgeWeight & Serializable ) ( a, c1, c2 ) -> ( 1 - a ) * Math.log10( 1 + Math.min( c1, c2 ) );
+			break;
+		default:
+			merger = null;
+			weightFunc = null;
+			break;
+		}
 
-		final double threshold = 200.0;
+		final EdgeCheck edgeCheck = ( EdgeCheck & Serializable ) e -> e.affinity() >= 0.5;
+
+		final double threshold = 1;// 100.0;
 
 		final VisitorFactory visFac = ( sc1, labels, blocks, blockToInitialBlockMapBC, labelBlocks ) -> {
 			final VisualizationVisitor vis = new VisualizationVisitor(
