@@ -10,7 +10,13 @@ import gnu.trove.list.array.TDoubleArrayList;
 public class Edge implements Serializable
 {
 
-	public static final int COMMON_SIZE = 5;
+	public static final int STALE_MASK = 1 << 0;
+
+	public static final int OBSOLETE_MASK = 1 << 1;
+
+	public static final int STATUS_MASK = STALE_MASK | OBSOLETE_MASK;
+
+	public static final int COMMON_SIZE = 6;
 
 	private final int dataSize;
 
@@ -19,11 +25,6 @@ public class Edge implements Serializable
 	private final TDoubleArrayList data;
 
 	private int k;
-
-//	public Edge( final TDoubleArrayList data )
-//	{
-//		this( data, 0 );
-//	}
 
 	public Edge( final TDoubleArrayList data, final int dataSize )
 	{
@@ -115,6 +116,36 @@ public class Edge implements Serializable
 		data.set( k + 4, ltd( multiplicity ) );
 	}
 
+	public int status()
+	{
+		return ( int ) dtl( data.get( k + 5 ) );
+	}
+
+	public void status( final int status )
+	{
+		data.set( k + 5, ltd( status ) );
+	}
+
+	public boolean isStale()
+	{
+		return ( status() & STALE_MASK ) > 0;
+	}
+
+	public void setStale()
+	{
+		data.set( k + 5, ltd( status() | STALE_MASK ) );
+	}
+
+	public boolean isObsolete()
+	{
+		return ( status() & OBSOLETE_MASK ) > 0;
+	}
+
+	public void setObsolete()
+	{
+		data.set( k + 5, ltd( status() | OBSOLETE_MASK ) );
+	}
+
 	public int add( final double weight, final double affinity, final long from, final long to, final long multiplicity )
 	{
 		return add( weight, affinity, from, to, multiplicity, DoubleStream.generate( () -> 0.0d ) );
@@ -128,6 +159,7 @@ public class Edge implements Serializable
 		data.add( ltd( from ) );
 		data.add( ltd( to ) );
 		data.add( ltd( multiplicity ) );
+		data.add( STALE_MASK );
 		final OfDouble it = appendix.iterator();
 		for ( int i = 0; i < dataSize; ++i )
 			data.add( it.nextDouble() );
