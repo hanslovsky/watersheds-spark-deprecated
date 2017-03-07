@@ -32,17 +32,20 @@ public class RootEdges implements Function< Tuple2< Long, MergeBlocOut >, Tuple2
 			final int rFrom = map.findRoot( from );
 			final int rTo = map.findRoot( to );
 
-			if ( rFrom != from )
-				counts[ from ] = 0;
-
-			if ( rTo != to )
-				counts[ to ] = 0;
-
-			e.from( rFrom );
-			e.to( rTo );
-
 			if ( rFrom == rTo )
 				e.setObsolete();
+			else
+			{
+				if ( rFrom != from )
+					counts[ from ] = 0;
+
+				if ( rTo != to )
+					counts[ to ] = 0;
+
+				e.from( rFrom );
+				e.to( rTo );
+			}
+
 
 		}
 		return input;
