@@ -136,6 +136,16 @@ public class Edge implements Serializable
 		data.set( k + 5, ltd( status() | STALE_MASK ) );
 	}
 
+	public boolean isActive()
+	{
+		return !isStale();
+	}
+
+	public void setActive()
+	{
+		data.set( k + 5, ltd( status() & ~STALE_MASK ) );
+	}
+
 	public boolean isObsolete()
 	{
 		return ( status() & OBSOLETE_MASK ) > 0;
@@ -144,6 +154,15 @@ public class Edge implements Serializable
 	public void setObsolete()
 	{
 		data.set( k + 5, ltd( status() | OBSOLETE_MASK ) );
+	}
+
+	public boolean isValid()
+	{
+		return !isObsolete();
+	}
+
+	public void setValid() {
+		data.set( k + 5, ltd( status() & ~OBSOLETE_MASK ) );
 	}
 
 	public int add( final double weight, final double affinity, final long from, final long to, final long multiplicity )
