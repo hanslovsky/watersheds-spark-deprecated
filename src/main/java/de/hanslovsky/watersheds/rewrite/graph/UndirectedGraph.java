@@ -57,7 +57,7 @@ public class UndirectedGraph
 		final TLongIntHashMap keepEdges = nodeEdgeMap.get( newNode );
 		final TLongIntHashMap discardEdges = nodeEdgeMap.get( otherNode );
 		this.e1.setIndex( keepEdges.remove( otherNode ) );
-		this.e1.weight( -1.0d );
+		this.e1.setObsolete();
 		discardEdges.remove( newNode );
 
 		for ( final TLongIntIterator discardIt = discardEdges.iterator(); discardIt.hasNext(); )
@@ -72,7 +72,7 @@ public class UndirectedGraph
 			{
 				this.e2.setIndex( keepEdges.get( nodeId ) );
 				edgeMerger.merge( this.e1, this.e2 );
-				this.e1.weight( -1.0d );
+				this.e1.setObsolete();
 
 			}
 			else
@@ -92,7 +92,7 @@ public class UndirectedGraph
 			otherMap.remove( to );
 			otherMap.put( newNode, edgeId );
 			this.e1.setIndex( edgeId );
-			this.e1.weight( Double.NaN );
+			this.e1.setStale();
 		}
 
 		return discardEdges;
@@ -126,10 +126,10 @@ public class UndirectedGraph
 				{
 					fromMap.put( to, i );
 					toMap.put( from, i );
-					e2.weight( -1.0d );
+					e2.setObsolete();
 				}
 				else
-					e1.weight( -1.0d );
+					e1.setObsolete();
 			}
 			else
 			{

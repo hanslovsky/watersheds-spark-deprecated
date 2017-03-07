@@ -44,7 +44,7 @@ public class Util
 			if ( !nodeIndexMapping.contains( f ) || !nodeIndexMapping.contains( t ) )
 			{
 				LOG.trace( "NodeIndexMapping does not contain " + f + " or " + t + " " + nodeIndexMapping.toString() );
-				e.weight( -1.0d );
+				e.setObsolete();
 			}
 			else
 			{
@@ -114,7 +114,7 @@ public class Util
 		{
 			e.setIndex( i );
 			if ( out.outsideNodes.contains( ( int ) e.from() ) || out.outsideNodes.contains( ( int ) e.to() ) )
-				e.weight( Double.NaN );
+				e.setStale();
 			e.from( map[ out.dj.findRoot( ( int ) e.from() ) ] );
 			e.to( map[ out.dj.findRoot( ( int ) e.to() ) ] );
 		}

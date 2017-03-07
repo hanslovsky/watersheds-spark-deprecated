@@ -42,7 +42,7 @@ public class RootEdges implements Function< Tuple2< Long, MergeBlocOut >, Tuple2
 			e.to( rTo );
 
 			if ( rFrom == rTo )
-				e.weight( -1.0 );
+				e.setObsolete();
 
 		}
 		return input;

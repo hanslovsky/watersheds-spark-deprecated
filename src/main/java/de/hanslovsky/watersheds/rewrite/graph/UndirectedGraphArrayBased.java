@@ -70,7 +70,7 @@ public class UndirectedGraphArrayBased implements Serializable
 
 		final int otherNode = from == newNode ? to : from;
 
-		e.weight( -1.0d );
+		e.setObsolete();
 
 		final TIntIntHashMap keepEdges = nodeEdgeMap[ newNode ];
 		final TIntIntHashMap discardEdges = nodeEdgeMap[ otherNode ];
@@ -86,20 +86,20 @@ public class UndirectedGraphArrayBased implements Serializable
 
 			this.e1.setIndex( edgeId );
 
-			if ( nodeId == otherNode || this.e1.weight() < 0.0d )
+			if ( nodeId == otherNode || this.e1.isObsolete() )
 				continue;
 
 			if ( keepEdges.contains( nodeId ) )
 			{
 				this.e2.setIndex( keepEdges.get( nodeId ) );
 				edgeMerger.merge( this.e1, this.e2 );
-				this.e1.weight( -1.0d );
+				this.e1.setObsolete();
 
 			}
 			else
 			{
 				keepEdges.put( nodeId, edgeId );
-				this.e1.weight( Double.NaN );
+				this.e1.setStale();
 			}
 		}
 
@@ -115,7 +115,7 @@ public class UndirectedGraphArrayBased implements Serializable
 			otherMap.remove( to );
 			otherMap.put( newNode, edgeId );
 			this.e1.setIndex( edgeId );
-			this.e1.weight( Double.NaN );
+			this.e1.setStale();
 			this.e1.from( nodeId );
 			this.e1.to( newNode );
 		}
@@ -135,7 +135,7 @@ public class UndirectedGraphArrayBased implements Serializable
 		for ( int i = 0; i < nEdges; ++i )
 		{
 			e1.setIndex( i );
-			if ( e1.weight() == -1.0 )
+			if ( e1.isObsolete() )
 				continue;
 			final int from = ( int ) e1.from();
 			final int to = ( int ) e1.to();
@@ -151,17 +151,8 @@ public class UndirectedGraphArrayBased implements Serializable
 				e2.setIndex( fromMap.get( to ) );
 				LOG.trace( "Edge exists multiple times! " + e1 + " " + e2 + " " + fromMap + " " + toMap );
 				edgeMerger.merge( e1, e2 );
-				e2.weight( Double.NaN );
-				e1.weight( -1.0 );
-//
-//				if ( e1.weight() < e2.weight() )
-//				{
-//					fromMap.put( to, i );
-//					toMap.put( from, i );
-//					e2.weight( -1.0d );
-//				}
-//				else
-//					e1.weight( -1.0d );
+				e2.setStale();
+				e1.setObsolete();
 			}
 			else
 			{

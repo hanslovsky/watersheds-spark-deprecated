@@ -25,7 +25,7 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 	public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
 	{
-		LOG.setLevel( Level.INFO );
+		LOG.setLevel( Level.TRACE );
 	}
 
 	private final EdgeMerger edgeMerger;
@@ -72,18 +72,17 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 		for ( int i = 0; i < e.size(); ++i )
 		{
 			e.setIndex( i );
-			double w = e.weight();
+
 			final long from = e.from(), to = e.to();
-
-			if ( Double.isNaN( w ) )
+			if ( e.isValid() )
 			{
-				w = edgeWeight.weight( e, in.counts[ ( int ) e.from() ], in.counts[ ( int ) e.to() ] );
-				e.weight( w );
-			}
-
-			if ( w >= 0.0 )
-			{
-
+				double w = e.weight();
+				if ( e.isStale() )
+				{
+					w = edgeWeight.weight( e, in.counts[ ( int ) e.from() ], in.counts[ ( int ) e.to() ] );
+					e.weight( w );
+					e.setActive();
+				}
 				LOG.trace( "Adding to queue: " + e.toString() + " (" + in.indexNodeMapping[ ( int ) from ] + ", " + in.indexNodeMapping[ ( int ) to ] + ")" );
 
 				queue.push( i, w );
@@ -93,8 +92,8 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 				if ( in.outsideNodes.contains( ( int ) to ) )
 					borderNodeSet.add( from );
-
 			}
+
 			else
 				LOG.trace( "Not adding to queue: " + e.toString() + " (" + in.indexNodeMapping[ ( int ) from ] + ", " + in.indexNodeMapping[ ( int ) to ] + ")" );
 		}
@@ -111,9 +110,12 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 			final int next = queue.pop();
 			e.setIndex( next );
 			final double w = e.weight();
-			LOG.trace( "Looking at edge " + e + "(" + in.indexNodeMapping[ ( int ) e.from() ] + ", " + in.indexNodeMapping[ ( int ) e.to() ] + ")" );
+			LOG.trace( "Looking at edge " + e + " (" + in.indexNodeMapping[ ( int ) e.from() ] + ", " + in.indexNodeMapping[ ( int ) e.to() ] + ")" );
 
-			if ( Double.isNaN( w ) )
+			if ( e.isObsolete() )
+				continue;
+
+			else if ( e.isStale() )
 			{
 				final int f = dj.findRoot( ( int ) e.from() );
 				final int to = dj.findRoot( ( int ) e.to() );
@@ -122,12 +124,10 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 				e.from( f );
 				e.to( to );
 				e.weight( weight );
+				e.setActive();
 				queue.push( next, weight );
 				continue;
 			}
-
-			else if ( w < 0.0 )
-				continue;
 
 			else if ( w > threshold )
 			{
@@ -159,7 +159,7 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 			// if already merged go on
 			if ( r1 == r2 )
 			{
-				e.weight( -1.0 );
+				e.setObsolete();
 				continue;
 			}
 
@@ -210,7 +210,7 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 		for ( int i = 0; i < e.size(); ++i )
 		{
 			e.setIndex( i );
-			if ( Double.isNaN( e.weight() ) || e.weight() >= 0.0 )
+			if ( e.isValid() )
 			{
 				e.from( dj.findRoot( (int ) e.from() ) );
 				e.to( dj.findRoot( (int ) e.to() ) );

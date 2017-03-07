@@ -39,12 +39,8 @@ public class EnsureWeights implements Function< RegionMergingInput, Tuple2< Regi
 		{
 			e.setIndex( i );
 			if ( e.from() == e.to() )
-				e.weight( -1.0d );
-			else if ( e.weight() < 0.0 )
-			{
-
-			}
-			else
+				e.setObsolete();
+			else if ( e.isValid() )
 			{
 				e.weight( edgeWeight.weight( e, counts.get( e.from() ), counts.get( e.to() ) ) );
 				if ( !outsideNodes.contains( ( int ) e.from() ) && !outsideNodes.contains( ( int ) e.to() ) )
