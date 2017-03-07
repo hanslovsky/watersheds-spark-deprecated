@@ -87,20 +87,33 @@ public class UndirectedGraphArrayBased implements Serializable
 			this.e1.setIndex( edgeId );
 
 			if ( nodeId == otherNode || this.e1.isObsolete() )
+			{
+				this.e1.setObsolete();
 				continue;
+			}
 
 			if ( keepEdges.contains( nodeId ) )
 			{
 				this.e2.setIndex( keepEdges.get( nodeId ) );
-				edgeMerger.merge( this.e1, this.e2 );
-				this.e1.setObsolete();
+				final double w1 = this.e1.weight();
+				final double w2 = this.e2.weight();
 
+				// smaller weight edge is in wrong map
+				if ( w1 < w2 )
+				{
+					edgeMerger.merge( this.e2, this.e1 );
+					keepEdges.put( nodeId, edgeId );
+					this.e2.setObsolete();
+				}
+				else
+				{
+					edgeMerger.merge( this.e1, this.e2 );
+					this.e1.setObsolete();
+				}
 			}
 			else
-			{
 				keepEdges.put( nodeId, edgeId );
-				this.e1.setStale();
-			}
+//				this.e1.setStale();
 		}
 
 
