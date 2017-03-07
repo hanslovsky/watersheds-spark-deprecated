@@ -146,7 +146,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final JavaSparkContext sc = new JavaSparkContext( conf );
 		Logger.getRootLogger().setLevel( Level.ERROR );
 
-		final String OPTION = "AFF_MEDIAN_LOG_COUNT";
+		final String OPTION = "LOG_COUNT";
 		final EdgeMerger merger;
 		final EdgeWeight weightFunc;
 		final EdgeCreator edgeCreator;
@@ -200,7 +200,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 //		final EdgeCheck edgeCheck = ( EdgeCheck & Serializable ) e -> e.affinity() >= 0.97;
 		final EdgeCheck edgeCheck = ( EdgeCheck & Serializable ) e -> e.weight() <= 0.01;
 
-		final double threshold = 0.9;// 100.0;
+		final double threshold = 1.5;// 100.0;
 
 		final VisitorFactory visFac = ( sc1, labels, blocks, blockToInitialBlockMapBC, labelBlocks ) -> {
 			final VisualizationVisitor vis = new VisualizationVisitor(
