@@ -16,7 +16,7 @@ public class UndirectedGraphArrayBased implements Serializable
 
 	public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
 	{
-		LOG.setLevel( Level.INFO );
+		LOG.setLevel( Level.DEBUG );
 	}
 
 	private final TDoubleArrayList edges;
@@ -32,15 +32,15 @@ public class UndirectedGraphArrayBased implements Serializable
 
 	public UndirectedGraphArrayBased( final int nNodes, final TDoubleArrayList edges, final EdgeMerger edgeMerger )
 	{
-		this( edges, nodeEdgeMap( edges, nNodes, edgeMerger ) );
+		this( edges, nodeEdgeMap( edges, nNodes, edgeMerger, edgeMerger.dataSize() ), edgeMerger.dataSize() );
 	}
 
-	private UndirectedGraphArrayBased( final TDoubleArrayList edges, final TIntIntHashMap[] nodeEdgeMap )
+	public UndirectedGraphArrayBased( final TDoubleArrayList edges, final TIntIntHashMap[] nodeEdgeMap, final int edgeDataSize )
 	{
 		this.edges = edges;
 		this.nodeEdgeMap = nodeEdgeMap;
-		this.e1 = new Edge( edges );
-		this.e2 = new Edge( edges );
+		this.e1 = new Edge( edges, edgeDataSize );
+		this.e2 = new Edge( edges, edgeDataSize );
 	}
 
 	public TDoubleArrayList edges()
@@ -124,13 +124,13 @@ public class UndirectedGraphArrayBased implements Serializable
 
 	}
 
-	private static TIntIntHashMap[] nodeEdgeMap( final TDoubleArrayList edges, final int nNodes, final EdgeMerger edgeMerger )
+	private static TIntIntHashMap[] nodeEdgeMap( final TDoubleArrayList edges, final int nNodes, final EdgeMerger edgeMerger, final int edgeDataSize )
 	{
 		final TIntIntHashMap[] nodeEdgeMap = new TIntIntHashMap[ nNodes ];
 		for ( int i = 0; i < nNodes; ++i )
 			nodeEdgeMap[ i ] = new TIntIntHashMap();
-		final Edge e1 = new Edge( edges );
-		final Edge e2 = new Edge( edges );
+		final Edge e1 = new Edge( edges, edgeDataSize );
+		final Edge e2 = new Edge( edges, edgeDataSize );
 		final int nEdges = e1.size();
 		for ( int i = 0; i < nEdges; ++i )
 		{

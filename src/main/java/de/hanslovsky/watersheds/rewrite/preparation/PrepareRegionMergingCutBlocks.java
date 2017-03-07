@@ -15,6 +15,7 @@ import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.broadcast.Broadcast;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeCreator;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.util.EdgeCheck;
@@ -56,25 +57,26 @@ public class PrepareRegionMergingCutBlocks
 
 	public static class BlockDivision implements Serializable
 	{
-		final public TLongLongHashMap counts;
+		public final TLongLongHashMap counts;
 
-		final public TLongLongHashMap outsideNodes;
+		public final TLongLongHashMap outsideNodes;
 
-		final public TDoubleArrayList edges;
+		public final TDoubleArrayList edges;
 
-		final public TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap;
+		public final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap;
 
-		final public Edge e1, e2;
+		public final Edge e1, e2;
 
-		public BlockDivision( final TLongLongHashMap counts, final TLongLongHashMap outsideNodes, final TLongObjectHashMap< TLongHashSet > borderNodes, final TDoubleArrayList edges, final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap )
+
+		public BlockDivision( final TLongLongHashMap counts, final TLongLongHashMap outsideNodes, final TLongObjectHashMap< TLongHashSet > borderNodes, final TDoubleArrayList edges, final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap, final int edgeDataSize )
 		{
 			super();
 			this.counts = counts;
 			this.outsideNodes = outsideNodes;
 			this.edges = edges;
 			this.nodeEdgeMap = nodeEdgeMap;
-			this.e1 = new Edge( this.edges );
-			this.e2 = new Edge( this.edges );
+			this.e1 = new Edge( this.edges, edgeDataSize );
+			this.e2 = new Edge( this.edges, edgeDataSize );
 		}
 
 	}
@@ -84,13 +86,14 @@ public class PrepareRegionMergingCutBlocks
 			final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksWithLabelsAffinitiesAndCounts,
 			final Broadcast< long[] > dim,
 			final Broadcast< long[] > blockDim,
+			final EdgeCreator edgeCreator,
 			final EdgeMerger edgeMerger,
 			final EdgeWeight edgeWeight,
 			final EdgeCheck edgeCheck,
 			final IdService idService )
 	{
 		final JavaPairRDD< HashableLongArray, GetInternalEdgesAndSplits.IntraBlockOutput > allEdges =
-				blocksWithLabelsAffinitiesAndCounts.mapToPair( new GetInternalEdgesAndSplits<>( blockDim.getValue(), edgeMerger, edgeWeight, edgeCheck, idService ) ).cache();
+				blocksWithLabelsAffinitiesAndCounts.mapToPair( new GetInternalEdgesAndSplits<>( blockDim.getValue(), edgeCreator, edgeMerger, edgeWeight, edgeCheck, idService ) ).cache();
 
 		LOG.debug( "After geting internal edges and splits: " + allEdges.count() + " blocks." );
 
@@ -102,7 +105,7 @@ public class PrepareRegionMergingCutBlocks
 				} );
 
 		final JavaPairRDD< HashableLongArray, GetExternalEdges.BlockOutput > interBlockEdges =
-				allEdges.mapToPair( new GetExternalEdges( blockDim, dim, edgeMerger ) ).cache();
+				allEdges.mapToPair( new GetExternalEdges( blockDim, dim, edgeCreator, edgeMerger ) ).cache();
 		interBlockEdges.count();
 
 		LOG.debug( "After geting inter-block edges: " + interBlockEdges.count() + " blocks." );
@@ -120,12 +123,12 @@ public class PrepareRegionMergingCutBlocks
 				.map( new MapNodesAndSplitBlocks( sc.broadcast( filteredNodeBlockAssignments ), edgeMerger ) )
 				.flatMapToPair( new FlattenInputs() )
 				.mapToPair( t -> {
-					final Edge e = new Edge( t._2().edges );
+					final Edge e = new Edge( t._2().edges, edgeMerger.dataSize() );
 					final TLongLongHashMap counts = t._2().counts;
 					for ( int i = 0; i < e.size(); ++i )
 					{
 						e.setIndex( i );
-						e.weight( edgeWeight.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
+						e.weight( edgeWeight.weight( e, counts.get( e.from() ), counts.get( e.to() ) ) );
 						if ( !counts.contains( e.from() ) || !counts.contains( e.to() ) )
 							throw new RuntimeException( "(" + t._1() + ") No counts for " + e.from() + " or " + e.to() + " " + counts.get( e.from() ) + " " + counts.get( e.to() ) );
 					}
@@ -195,13 +198,16 @@ public class PrepareRegionMergingCutBlocks
 
 		private final Broadcast< long[] > dim;
 
+		private final EdgeCreator edgeCreator;
+
 		private final EdgeMerger edgeMerger;
 
-		public GetExternalEdges( final Broadcast< long[] > blockDim, final Broadcast< long[] > dim, final EdgeMerger edgeMerger )
+		public GetExternalEdges( final Broadcast< long[] > blockDim, final Broadcast< long[] > dim, final EdgeCreator edgeCreator, final EdgeMerger edgeMerger )
 		{
 			super();
 			this.blockDim = blockDim;
 			this.dim = dim;
+			this.edgeCreator = edgeCreator;
 			this.edgeMerger = edgeMerger;
 		}
 
@@ -227,10 +233,10 @@ public class PrepareRegionMergingCutBlocks
 			final CompositeIntervalView< FloatType, RealComposite< FloatType > > affinities =
 					Views.collapseReal( ArrayImgs.floats( o.affinities, extendedAffinitiesBlockDim ) );
 
-			final Edge e = new Edge( o.edges );
+			final Edge e = new Edge( o.edges, edgeMerger.dataSize() );
 			final int numberOfInternalEdges = e.size();
-			final Edge dummy = new Edge( new TDoubleArrayList() );
-			dummy.add( Double.NaN, 0.0, 0, 0, 1 );
+			final Edge dummy = new Edge( new TDoubleArrayList(), edgeMerger.dataSize() );
+			edgeCreator.create( dummy, Double.NaN, 0.0, 0, 0, 1 );
 			final TLongObjectHashMap< TLongHashSet > borderNodesToOutsideNodes = new TLongObjectHashMap<>();
 			for ( int d = 0; d < blockDim.length; ++d )
 			{
@@ -241,7 +247,7 @@ public class PrepareRegionMergingCutBlocks
 					final long inner = outer + 1;
 					addEdgesFromNeighborBlocks(
 							labels, affinities, d, inner, outer, o.nodeEdgeMap, e, dummy,
-							edgeMerger, borderNodesToOutsideNodes, blockDim );
+							edgeCreator, edgeMerger, borderNodesToOutsideNodes, blockDim );
 
 				}
 				blockIndices[ d ] += 2;
@@ -251,7 +257,7 @@ public class PrepareRegionMergingCutBlocks
 					final long outer = inner + 1;
 					addEdgesFromNeighborBlocks(
 							labels, affinities, d, inner, outer, o.nodeEdgeMap, e, dummy,
-							edgeMerger, borderNodesToOutsideNodes, blockDim );
+							edgeCreator, edgeMerger, borderNodesToOutsideNodes, blockDim );
 				}
 				blockIndices[ d ] -= 1;
 			}
@@ -305,6 +311,7 @@ public class PrepareRegionMergingCutBlocks
 			final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap,
 			final Edge e,
 			final Edge dummy,
+			final EdgeCreator edgeCreator,
 			final EdgeMerger edgeMerger,
 			final TLongLongHashMap parents )
 	{
@@ -336,7 +343,7 @@ public class PrepareRegionMergingCutBlocks
 						if ( otherLabel != label )
 						{
 							parents.put( otherLabel, otherLabel );
-							addEdge( label, otherLabel, aff, nodeEdgeMap, e, dummy, edgeMerger );
+							addEdge( label, otherLabel, aff, nodeEdgeMap, e, dummy, edgeCreator, edgeMerger );
 							if ( LOG.isEnabledFor( Level.TRACE ) && ( label == -1 || otherLabel == -1 ) )
 								LOG.trace( "Added edge: " + label + " " + otherLabel + " " + aff + " " + new Point( affinitiesCursor ) + " " + new Point( labelsAccess ) );
 						}
@@ -353,6 +360,7 @@ public class PrepareRegionMergingCutBlocks
 			final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap,
 			final Edge e,
 			final Edge dummy,
+			final EdgeCreator edgeCreator,
 			final EdgeMerger edgeMerger )
 	{
 //		if ( label < 0 || otherLabel < 0 || aff < 0.0 || Double.isNaN( aff ) )
@@ -365,12 +373,11 @@ public class PrepareRegionMergingCutBlocks
 		if ( !localEdges.contains( otherLabel ) )
 		{
 			assert !nodeEdgeMap.get( otherLabel ).contains( label );
-			final int index = e.add( Double.NaN, aff, label, otherLabel, 1 );
+			final int index = edgeCreator.create( e, Double.NaN, aff, label, otherLabel, 1 );
 			localEdges.put( otherLabel, index );
 			nodeEdgeMap.get( otherLabel ).put( label, index );
 			return index;
 		}
-//			return g.addEdge( Double.NaN, aff, label, otherLabel, 1 );
 		else
 		{
 			final int index = localEdges.get( otherLabel );
@@ -393,6 +400,7 @@ public class PrepareRegionMergingCutBlocks
 			final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap,
 			final Edge e,
 			final Edge dummy,
+			final EdgeCreator edgeCreator,
 			final EdgeMerger edgeMerger,
 			final TLongObjectHashMap< TLongHashSet > borderNodesToOutsideNodes,
 			final long[] blockDim )
@@ -427,7 +435,7 @@ public class PrepareRegionMergingCutBlocks
 						borderNodesToOutsideNodes.put( label, new TLongHashSet() );
 					final TLongHashSet nodeToOutsideNode = borderNodesToOutsideNodes.get( label );
 					nodeToOutsideNode.add( otherLabel /* neighborId */ );
-					addEdge( label, otherLabel, aff, nodeEdgeMap, e, dummy, edgeMerger );
+					addEdge( label, otherLabel, aff, nodeEdgeMap, e, dummy, edgeCreator, edgeMerger );
 				}
 			}
 		}

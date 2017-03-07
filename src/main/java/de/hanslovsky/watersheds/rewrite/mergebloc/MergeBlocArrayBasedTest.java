@@ -85,7 +85,7 @@ public class MergeBlocArrayBasedTest
 		final UndirectedGraphArrayBased g = new UndirectedGraphArrayBased( nNodes, new EdgeMerger.MAX_AFFINITY_MERGER() );
 		final TDoubleArrayList edges = g.edges();
 		final TIntIntHashMap[] nodeEdgeMap = g.nodeEdgeMap();
-		final Edge edge = new Edge( edges );
+		final Edge edge = new Edge( edges, 0 );
 
 		final RandomAccessible< Pair< RealComposite< FloatType >, LongType > > paired = Views.pair( data, labels );
 
@@ -135,7 +135,7 @@ public class MergeBlocArrayBasedTest
 		for ( int i = 0; i < edge.size(); ++i )
 		{
 			edge.setIndex( i );
-			edge.weight( fw.weight( edge.affinity(), counts[ ( int ) edge.from() ], counts[ ( int ) edge.to() ] ) );
+			edge.weight( fw.weight( edge, counts[ ( int ) edge.from() ], counts[ ( int ) edge.to() ] ) );
 		}
 
 

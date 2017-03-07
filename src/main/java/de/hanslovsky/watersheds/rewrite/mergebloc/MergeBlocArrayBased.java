@@ -57,9 +57,10 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 	@Override
 	public Tuple2< Long, Tuple2< Long, MergeBlocOut > > call( final Tuple2< Long, MergeBlocIn > t ) throws Exception
 	{
+
 		final MergeBlocIn in = t._2();
 		final TDoubleArrayList edges = in.g.edges();
-		final Edge e = new Edge( edges );
+		final Edge e = new Edge( edges, edgeMerger.dataSize() );
 
 		final int nNodes = in.g.nNodes();
 		final DisjointSets dj = new DisjointSets( nNodes );
@@ -76,7 +77,7 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 
 			if ( Double.isNaN( w ) )
 			{
-				w = edgeWeight.weight( e.affinity(), in.counts[ ( int ) e.from() ], in.counts[ ( int ) e.to() ] );
+				w = edgeWeight.weight( e, in.counts[ ( int ) e.from() ], in.counts[ ( int ) e.to() ] );
 				e.weight( w );
 			}
 
@@ -116,7 +117,7 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 			{
 				final int f = dj.findRoot( ( int ) e.from() );
 				final int to = dj.findRoot( ( int ) e.to() );
-				final double weight = edgeWeight.weight( e.affinity(), in.counts[ f ], in.counts[ to ] );
+				final double weight = edgeWeight.weight( e, in.counts[ f ], in.counts[ to ] );
 				// TODO need only weight update?
 				e.from( f );
 				e.to( to );
@@ -191,7 +192,7 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 			in.counts[ n == r1 ? r2 : r1 ] = 0;
 			in.counts[ n ] = c1 + c2;
 
-			final TIntIntHashMap discardEdges = in.g.contract( e, n, this.edgeMerger );
+			final TIntIntHashMap discardEdges = in.g.contract( e, n, edgeMerger );
 			discardEdges.clear();
 
 			dj.findRoot( r1 );
@@ -205,7 +206,7 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 		}
 
 		final TDoubleArrayList returnEdges = new TDoubleArrayList();
-		final Edge rE = new Edge( returnEdges );
+		final Edge rE = new Edge( returnEdges, edgeMerger.dataSize() );
 		for ( int i = 0; i < e.size(); ++i )
 		{
 			e.setIndex( i );
@@ -245,28 +246,6 @@ public class MergeBlocArrayBased implements PairFunction< Tuple2< Long, MergeBlo
 						merges,
 						in.indexNodeMapping,
 						borderNodes ) ) );
-	}
-
-	private static TDoubleArrayList filterEdges( final TDoubleArrayList edges, final long[] counts, final EdgeWeight edgeWeight )
-	{
-		final TDoubleArrayList filteredEdges = new TDoubleArrayList();
-		final Edge e = new Edge( edges );
-		final Edge f = new Edge( filteredEdges );
-
-		for ( int i = 0; i < e.size(); ++i )
-		{
-			e.setIndex( i );
-			final double w = e.weight();
-			if ( w < 0.0d )
-				continue;
-
-			final int from = (int) e.from();
-			final int to = (int) e.to();
-			f.add( Double.isNaN( w ) ? edgeWeight.weight( w, counts[ from ], counts[ to ] ) : w, e.affinity(), from, to, e.multiplicity() );
-
-		}
-
-		return filteredEdges;
 	}
 
 }

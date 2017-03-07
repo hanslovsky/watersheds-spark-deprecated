@@ -61,7 +61,7 @@ public class MergeBloc implements PairFunction< Tuple2< Long, MergeBlocData >, T
 	{
 		final MergeBlocData in = t._2();
 		final TDoubleArrayList edges = in.g.edges();
-		final Edge e = new Edge( edges );
+		final Edge e = new Edge( edges, 0 );
 
 		final DisjointSetsHashMap dj = new DisjointSetsHashMap();
 		for ( final TLongObjectIterator< TLongIntHashMap > it = in.g.nodeEdgeMap().iterator(); it.hasNext(); )
@@ -91,7 +91,7 @@ public class MergeBloc implements PairFunction< Tuple2< Long, MergeBlocData >, T
 
 			else if ( Double.isNaN( e.weight() ) )
 			{
-				final double weight = edgeWeight.weight( e.affinity(), in.counts.get( e.from() ), in.counts.get( e.to() ) );
+				final double weight = edgeWeight.weight( e, in.counts.get( e.from() ), in.counts.get( e.to() ) );
 				e.weight( weight );
 				queue.push( next, weight );
 				continue;

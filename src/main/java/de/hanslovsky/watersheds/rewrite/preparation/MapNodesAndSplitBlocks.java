@@ -2,6 +2,7 @@ package de.hanslovsky.watersheds.rewrite.preparation;
 
 import java.lang.invoke.MethodHandles;
 import java.util.Arrays;
+import java.util.stream.IntStream;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
@@ -49,11 +50,11 @@ implements Function< GetExternalEdges.BlockOutput, TLongObjectHashMap< BlockDivi
 		LOG.trace( "Initial block contains " + o.blockIds.length + " sub-blocks: " + Arrays.toString( o.blockIds ) );
 
 		for ( final long id : o.blockIds ) {
-			final BlockDivision in = new BlockDivision( new TLongLongHashMap(), new TLongLongHashMap(), new TLongObjectHashMap<>(), new TDoubleArrayList(), new TLongObjectHashMap<>() );
+			final BlockDivision in = new BlockDivision( new TLongLongHashMap(), new TLongLongHashMap(), new TLongObjectHashMap<>(), new TDoubleArrayList(), new TLongObjectHashMap<>(), edgeMerger.dataSize() );
 			regionMergingInputs.put( id, in );
 		}
 
-		final Edge e = new Edge( o.edges );
+		final Edge e = new Edge( o.edges, edgeMerger.dataSize() );
 		final int nEdges = e.size();
 
 		// add intra block edges
@@ -80,7 +81,7 @@ implements Function< GetExternalEdges.BlockOutput, TLongObjectHashMap< BlockDivi
 				if ( !in.nodeEdgeMap.contains( to ) )
 					in.nodeEdgeMap.put( to, new TLongIntHashMap() );
 
-				final int index = in.e1.add( w, a, from, to, m );
+				final int index = in.e1.add( w, a, from, to, m, IntStream.range( 0, e.getDataSize() ).mapToDouble( k -> e.getData( k ) ) );
 
 				in.nodeEdgeMap.get( from ).put( to, index );
 				in.nodeEdgeMap.get( to ).put( from, index );
@@ -109,16 +110,17 @@ implements Function< GetExternalEdges.BlockOutput, TLongObjectHashMap< BlockDivi
 				if ( !in2.nodeEdgeMap.contains( to ) )
 					in2.nodeEdgeMap.put( to, new TLongIntHashMap() );
 
-				final int index1 = in1.e1.add( w, a, from, to, m );
+				final int index1 = in1.e1.add( w, a, from, to, m, IntStream.range( 0, e.getDataSize() ).mapToDouble( k -> e.getData( k ) ) );
 				in1.nodeEdgeMap.get( from ).put( to, index1 );
 				in1.nodeEdgeMap.get( to ).put( from, index1 );
 
-				final int index2 = in2.e1.add( w, a, from, to, m );
+				final int index2 = in2.e1.add( w, a, from, to, m, IntStream.range( 0, e.getDataSize() ).mapToDouble( k -> e.getData( k ) ) );
 				in2.nodeEdgeMap.get( from ).put( to, index2 );
 				in2.nodeEdgeMap.get( to ).put( from, index2 );
 
 				in1.outsideNodes.put( to, r2 );
 				in2.outsideNodes.put( from, r1 ); // was in1.,outsideNodes
+
 			}
 		}
 
@@ -157,7 +159,7 @@ implements Function< GetExternalEdges.BlockOutput, TLongObjectHashMap< BlockDivi
 			if ( !in.nodeEdgeMap.contains( n2 ) )
 				in.nodeEdgeMap.put( n2, new TLongIntHashMap() );
 
-			final int index = in.e1.add( w, a, from, to, m );
+			final int index = in.e1.add( w, a, from, to, m, IntStream.range( 0, e.getDataSize() ).mapToDouble( k -> e.getData( k ) ) );
 
 			in.nodeEdgeMap.get( from ).put( to, index );
 			in.nodeEdgeMap.get( to ).put( from, index );

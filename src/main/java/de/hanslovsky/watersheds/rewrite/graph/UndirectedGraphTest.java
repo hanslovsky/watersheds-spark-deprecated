@@ -15,7 +15,7 @@ public class UndirectedGraphTest
 		final DisjointSetsHashMap dj = new DisjointSetsHashMap( parents, new TLongLongHashMap(), 0 );
 
 		final TDoubleArrayList edges = new TDoubleArrayList();
-		final Edge e = new Edge( edges );
+		final Edge e = new Edge( edges, 0 );
 		e.add( 1.0, 2.0, 230, 235, 1 );
 		e.add( 2.0, 3.0, 235, 272, 1 );
 		e.add( 4.0, 1.0, 235, 236, 2 );
@@ -25,7 +25,7 @@ public class UndirectedGraphTest
 		dj.findRoot( 236 );
 		dj.findRoot( 272 );
 
-		final UndirectedGraph g = new UndirectedGraph( edges );
+		final UndirectedGraph g = new UndirectedGraph( edges, 0 );
 
 		for ( int i = 0; i < e.size(); ++i )
 		{
@@ -44,7 +44,7 @@ public class UndirectedGraphTest
 			final long r2 = dj.findRoot( 272 );
 			final long n = dj.join( r1, r2 );
 			System.out.println( r1 + " " + r2 + " " + n );
-			final Edge edge = new Edge( edges );
+			final Edge edge = new Edge( edges, 0 );
 			edge.setIndex( 1 );
 			g.contract( edge, n, new EdgeMerger.MAX_AFFINITY_MERGER() );
 		}

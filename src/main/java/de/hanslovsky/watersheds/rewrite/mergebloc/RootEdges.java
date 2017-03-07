@@ -9,10 +9,18 @@ import scala.Tuple2;
 public class RootEdges implements Function< Tuple2< Long, MergeBlocOut >, Tuple2< Long, MergeBlocOut > >
 {
 
+	private final int edgeDataSize;
+
+	public RootEdges( final int edgeDataSize )
+	{
+		super();
+		this.edgeDataSize = edgeDataSize;
+	}
+
 	@Override
 	public Tuple2< Long, MergeBlocOut > call( final Tuple2< Long, MergeBlocOut > input ) throws Exception
 	{
-		final Edge e = new Edge( input._2().edges );
+		final Edge e = new Edge( input._2().edges, edgeDataSize );
 		final DisjointSets map = input._2().dj;
 		final long[] counts = input._2().counts;
 		for ( int i = 0; i < e.size(); ++i )

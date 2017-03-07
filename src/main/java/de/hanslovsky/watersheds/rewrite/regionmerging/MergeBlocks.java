@@ -27,9 +27,9 @@ public class MergeBlocks
 		LOG.setLevel( Level.INFO );
 	}
 
-	public static JavaPairRDD< Long, RegionMergingInput > mergeRemappedData( final JavaPairRDD< Long, RemappedData > noRoot, final DisjointSets dj )
+	public static JavaPairRDD< Long, RegionMergingInput > mergeRemappedData( final JavaPairRDD< Long, RemappedData > noRoot, final DisjointSets dj, final int edgeDataSize )
 	{
-		final JavaPairRDD< Long, RemappedData > withUpdatedBorderNodes = OutsideNodeCountRequest.request( noRoot );
+		final JavaPairRDD< Long, RemappedData > withUpdatedBorderNodes = OutsideNodeCountRequest.request( noRoot, edgeDataSize );
 
 		final JavaPairRDD< Long, RemappedData > withRootBlock = withUpdatedBorderNodes.mapToPair( t -> new Tuple2<>( ( long ) dj.findRoot( t._1().intValue() ), t._2() ) );
 
@@ -40,13 +40,14 @@ public class MergeBlocks
 				( l, v ) -> Util.addAndReturn( l, v ),
 				( l1, l2 ) -> Util.addAllAndReturn( l1, l2 ) );
 
-		final JavaPairRDD< Long, OriginalLabelData > reduced = aggregated.mapValues( new ReduceBlock() );
+		final JavaPairRDD< Long, OriginalLabelData > reduced = aggregated.mapValues( new ReduceBlock( edgeDataSize ) );
 
 		return reduced.mapValues( data -> toRegionMergingInput( data ) );
 	}
 
-	public static JavaPairRDD< Long, RegionMergingInput > mergeSmallBlocks( final JavaPairRDD< Long, RegionMergingInput > rdd, final DisjointSets dj, final int minNodesPerBlock )
+	public static JavaPairRDD< Long, RegionMergingInput > mergeSmallBlocks( final JavaPairRDD< Long, RegionMergingInput > rdd, final DisjointSets dj, final int minNodesPerBlock, final int edgeDataSize )
 	{
+
 		final List< Tuple2< Long, Long > > joins = rdd
 				.mapToPair( t -> {
 					final long self = t._1();
@@ -58,7 +59,7 @@ public class MergeBlocks
 					else
 					{
 
-						final Edge e = new Edge( rmi.edges );
+						final Edge e = new Edge( rmi.edges, edgeDataSize );
 						double bestWeight = Double.MAX_VALUE;
 						long bestNeighbor = self;
 						for ( int i = 0; i < e.size(); ++i )

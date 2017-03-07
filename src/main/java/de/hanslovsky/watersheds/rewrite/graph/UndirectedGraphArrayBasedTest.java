@@ -13,7 +13,7 @@ public class UndirectedGraphArrayBasedTest
 		final TLongLongHashMap parents = new TLongLongHashMap();
 
 		final TDoubleArrayList edges = new TDoubleArrayList();
-		final Edge e = new Edge( edges );
+		final Edge e = new Edge( edges, 0 );
 		e.add( 1.0, 2.0, 230, 235, 1 );
 		e.add( 2.0, 3.0, 235, 272, 1 );
 		e.add( 4.0, 1.0, 235, 236, 1 );
@@ -28,7 +28,7 @@ public class UndirectedGraphArrayBasedTest
 			nodeIndexMapping.put( indexNodeMapping[i], i );
 
 		final TDoubleArrayList mappedEdges = new TDoubleArrayList();
-		final Edge mappedE = new Edge( mappedEdges );
+		final Edge mappedE = new Edge( mappedEdges, 0 );
 		for ( int i = 0; i < e.size(); ++i )
 		{
 			e.setIndex( i );
@@ -48,7 +48,7 @@ public class UndirectedGraphArrayBasedTest
 		final DisjointSets dj = new DisjointSets( indexNodeMapping.length );
 		System.out.println();
 		{
-			final Edge edge = new Edge( mappedEdges );
+			final Edge edge = new Edge( mappedEdges, 0 );
 			edge.setIndex( 1 );
 			final int r1 = dj.findRoot( ( int ) edge.from() );
 			final int r2 = dj.findRoot( ( int ) edge.to() );

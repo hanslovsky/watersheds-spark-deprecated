@@ -28,6 +28,7 @@ import bdv.img.h5.H5Utils;
 import ch.systemsx.cisd.hdf5.HDF5Factory;
 import ch.systemsx.cisd.hdf5.IHDF5Reader;
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeCreator;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.preparation.PrepareRegionMergingCutBlocks;
@@ -141,44 +142,65 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		// start spark server
 		System.out.println( "Starting Spark server... " );
-		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[*]" ).set( "spark.driver.maxResultSize", "4g" );
+		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[1]" ).set( "spark.driver.maxResultSize", "4g" );
 		final JavaSparkContext sc = new JavaSparkContext( conf );
 		Logger.getRootLogger().setLevel( Level.ERROR );
 
-		final String OPTION = "LOG_COUNT";
+		final String OPTION = "AFF_MEDIAN_LOG_COUNT";
 		final EdgeMerger merger;
 		final EdgeWeight weightFunc;
+		final EdgeCreator edgeCreator;
+		final int nBins = 100;
+		final double min = 0.0;
+		final double max = 1.0;
 		switch ( OPTION )
 		{
 		case "AFF_ONLY_MIN":
 			merger = new EdgeMerger.MIN_AFFINITY_MERGER();
-			weightFunc = ( EdgeWeight & Serializable ) ( a, c1, c2 ) -> 1 - a;
+			weightFunc = ( EdgeWeight & Serializable ) ( e, c1, c2 ) -> 1 - e.affinity();
+			edgeCreator = new EdgeCreator.SerializableCreator();
 			break;
 		case "AFF_ONLY_MAX":
 			merger = new EdgeMerger.MAX_AFFINITY_MERGER();
-			weightFunc = ( EdgeWeight & Serializable ) ( a, c1, c2 ) -> 1 - a;
+			weightFunc = ( EdgeWeight & Serializable ) ( e, c1, c2 ) -> 1 - e.affinity();
+			edgeCreator = new EdgeCreator.SerializableCreator();
 			break;
 		case "AFF_ONLY_AVG":
 			merger = new EdgeMerger.AVG_AFFINITY_MERGER();
-			weightFunc = ( EdgeWeight & Serializable ) ( a, c1, c2 ) -> 1 - a;
+			weightFunc = ( EdgeWeight & Serializable ) ( e, c1, c2 ) -> 1 - e.affinity();
+			edgeCreator = new EdgeCreator.SerializableCreator();
 			break;
 		case "FUNKY":
 			merger = new EdgeMerger.MAX_AFFINITY_MERGER();
 			weightFunc = new EdgeWeight.FunkyWeight();
+			edgeCreator = new EdgeCreator.SerializableCreator();
 			break;
 		case "LOG_COUNT":
-			merger = new EdgeMerger.MAX_AFFINITY_MERGER();
-			weightFunc = ( EdgeWeight & Serializable ) ( a, c1, c2 ) -> ( 1 - a ) * Math.log10( 1 + Math.min( c1, c2 ) );
+			merger = new EdgeMerger.AVG_AFFINITY_MERGER();
+			weightFunc = ( EdgeWeight & Serializable ) ( e, c1, c2 ) -> ( 1 - e.affinity() ) * Math.log10( 1 + Math.min( c1, c2 ) );
+			edgeCreator = new EdgeCreator.SerializableCreator();
+			break;
+		case "AFF_MEDIAN":
+			merger = new EdgeMerger.MEDIAN_AFFINITY_MERGER( nBins );
+			weightFunc = new EdgeWeight.MedianAffinityWeight( nBins, min, max );
+			edgeCreator = new EdgeCreator.AffinityHistogram( nBins, min, max );
+			break;
+		case "AFF_MEDIAN_LOG_COUNT":
+			merger = new EdgeMerger.MEDIAN_AFFINITY_MERGER( nBins );
+			weightFunc = new EdgeWeight.MedianAffinityLogCountWeight( nBins, min, max );
+			edgeCreator = new EdgeCreator.AffinityHistogram( nBins, min, max );
 			break;
 		default:
 			merger = null;
 			weightFunc = null;
+			edgeCreator = null;
 			break;
 		}
 
-		final EdgeCheck edgeCheck = ( EdgeCheck & Serializable ) e -> e.affinity() >= 0.5;
+//		final EdgeCheck edgeCheck = ( EdgeCheck & Serializable ) e -> e.affinity() >= 0.97;
+		final EdgeCheck edgeCheck = ( EdgeCheck & Serializable ) e -> e.weight() <= 0.01;
 
-		final double threshold = 1;// 100.0;
+		final double threshold = 0.9;// 100.0;
 
 		final VisitorFactory visFac = ( sc1, labels, blocks, blockToInitialBlockMapBC, labelBlocks ) -> {
 			final VisualizationVisitor vis = new VisualizationVisitor(
@@ -202,7 +224,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksRdd =
 				sc.parallelizePairs( blocks ).cache();
 
-		run( sc, labelsTarget, blocksRdd, dimsIntervalNoChannels, labelsTarget.factory(), merger, weightFunc, edgeCheck, threshold, visFac );
+		run( sc, labelsTarget, blocksRdd, dimsIntervalNoChannels, labelsTarget.factory(), edgeCreator, merger, weightFunc, edgeCheck, threshold, visFac );
 
 	}
 
@@ -212,6 +234,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			final JavaPairRDD< HashableLongArray, Tuple3< long[], float[], TLongLongHashMap > > blocksRdd,
 			final long[] dimsIntervalNoChannels,
 			final ImgFactory< LongType > labelsImgFactory,
+			final EdgeCreator edgeCreator,
 			final EdgeMerger merger,
 			final EdgeWeight weightFunc,
 			final EdgeCheck edgeCheck,
@@ -243,6 +266,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 						blocksRdd,
 						sc.broadcast( dimsNoChannels ),
 						sc.broadcast( dimsIntervalNoChannels ),
+						edgeCreator,
 						merger,
 						weightFunc,
 						edgeCheck,
@@ -293,7 +317,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		final Img< LongType > blockZero = labelsImgFactory.create( labelsTarget, new LongType() );
 //		final TLongLongHashMap labelBlockmap = generateLabelBlockMap( graphs );
-		final TLongLongHashMap labelBlockmap = generateLabelBlockMapFromRegionMergingInput( finalRmIn );
+		final TLongLongHashMap labelBlockmap = generateLabelBlockMapFromRegionMergingInput( finalRmIn, merger.dataSize() );
 
 		for ( final Pair< LongType, LongType > p : Views.interval( Views.pair( labelsTarget, blockZero ), blockZero ) )
 			p.getB().set( labelBlockmap.get( p.getA().get() ) );
@@ -401,14 +425,14 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		return blocks;
 	}
 
-	public static TLongLongHashMap generateLabelBlockMap( final JavaPairRDD< Long, BlockDivision > graphs )
+	public static TLongLongHashMap generateLabelBlockMap( final JavaPairRDD< Long, BlockDivision > graphs, final int edgeDataSize )
 	{
 		final TLongLongHashMap labelBlockmap = new TLongLongHashMap();
 		for ( final Tuple2< Long, BlockDivision > g : graphs.collect() )
 		{
 			final long id = g._1();
 			final TLongLongHashMap cons = g._2().outsideNodes;
-			final Edge e = new Edge( g._2().edges );
+			final Edge e = new Edge( g._2().edges, edgeDataSize );
 			for ( int i = 0; i < e.size(); ++i )
 			{
 				e.setIndex( i );
@@ -423,14 +447,14 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		return labelBlockmap;
 	}
 
-	public static TLongLongHashMap generateLabelBlockMapFromRegionMergingInput( final JavaPairRDD< Long, RegionMergingInput > rmIn )
+	public static TLongLongHashMap generateLabelBlockMapFromRegionMergingInput( final JavaPairRDD< Long, RegionMergingInput > rmIn, final int edgeDataSize )
 	{
 		final TLongLongHashMap labelBlockmap = new TLongLongHashMap();
 		for ( final Tuple2< Long, RegionMergingInput > g : rmIn.collect() )
 		{
 			final long id = g._1();
 			final TLongLongHashMap cons = g._2().outsideNodes;
-			final Edge e = new Edge( g._2().edges );
+			final Edge e = new Edge( g._2().edges, edgeDataSize );
 			for ( int i = 0; i < e.size(); ++i )
 			{
 				e.setIndex( i );
@@ -445,7 +469,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 		return labelBlockmap;
 	}
 
-	public static final Tuple2< JavaPairRDD< Long, RegionMergingInput >, DisjointSets > mergeSmallBlocks( final JavaSparkContext sc, final JavaPairRDD< Long, RegionMergingInput > rmIn, final int nNodes )
+	public static final Tuple2< JavaPairRDD< Long, RegionMergingInput >, DisjointSets > mergeSmallBlocks( final JavaSparkContext sc, final JavaPairRDD< Long, RegionMergingInput > rmIn, final int nNodes, final int edgeDataSize )
 	{
 		final JavaPairRDD< Long, Tuple2< Long, RegionMergingInput > > smallBlocksMapping = rmIn.mapToPair( t -> {
 			final long self = t._1();
@@ -456,7 +480,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 				otherBlock = self;
 			else
 			{
-				final Edge e = new Edge( in.edges );
+				final Edge e = new Edge( in.edges, edgeDataSize );
 				double minWeight = Double.MAX_VALUE;
 				long minBlock = self;
 				for ( int i = 0; i < e.size(); ++i )
@@ -507,7 +531,7 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 							return v1;
 						} );
 
-		final JavaPairRDD< Long, OriginalLabelData > reduced = aggregated.mapValues( new ReduceBlock() );
+		final JavaPairRDD< Long, OriginalLabelData > reduced = aggregated.mapValues( new ReduceBlock( edgeDataSize ) );
 		final JavaPairRDD< Long, RegionMergingInput > finalRmIn = reduced.mapToPair( t -> {
 			final OriginalLabelData old = t._2();
 			final TLongIntHashMap nodeIndexMapping = new TLongIntHashMap();

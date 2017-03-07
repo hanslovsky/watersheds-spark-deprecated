@@ -1,32 +1,68 @@
 package de.hanslovsky.watersheds.rewrite.graph;
 
 import java.io.Serializable;
+import java.util.PrimitiveIterator.OfDouble;
+import java.util.stream.DoubleStream;
+import java.util.stream.IntStream;
 
 import gnu.trove.list.array.TDoubleArrayList;
 
 public class Edge implements Serializable
 {
 
-	public static int SIZE = 5;
+	public static final int COMMON_SIZE = 5;
+
+	private final int dataSize;
+
+	private final int stride;
 
 	private final TDoubleArrayList data;
 
 	private int k;
 
-	public Edge( final TDoubleArrayList data )
+//	public Edge( final TDoubleArrayList data )
+//	{
+//		this( data, 0 );
+//	}
+
+	public Edge( final TDoubleArrayList data, final int dataSize )
 	{
 		super();
 		this.data = data;
+		this.dataSize = dataSize;
+		this.stride = COMMON_SIZE + dataSize;
+
+		assert data.size() % stride == 0;
 	}
 
 	public int size()
 	{
-		return data.size() / SIZE;
+		return data.size() / stride;
+	}
+
+	public int getDataSize()
+	{
+		return dataSize;
+	}
+
+	public int getStride()
+	{
+		return stride;
+	}
+
+	public double getData( final int i )
+	{
+		return data.get( this.k + COMMON_SIZE + i );
+	}
+
+	public void setData( final int i, final double d )
+	{
+		data.set( this.k + COMMON_SIZE + i, d );
 	}
 
 	public void setIndex( final int k )
 	{
-		this.k = SIZE * k;
+		this.k = stride * k;
 	}
 
 	public double weight()
@@ -81,23 +117,35 @@ public class Edge implements Serializable
 
 	public int add( final double weight, final double affinity, final long from, final long to, final long multiplicity )
 	{
+		return add( weight, affinity, from, to, multiplicity, DoubleStream.generate( () -> 0.0d ) );
+	}
+
+	public int add( final double weight, final double affinity, final long from, final long to, final long multiplicity, final DoubleStream appendix )
+	{
 		final int index = size();
 		data.add( weight );
 		data.add( affinity );
 		data.add( ltd( from ) );
 		data.add( ltd( to ) );
 		data.add( ltd( multiplicity ) );
+		final OfDouble it = appendix.iterator();
+		for ( int i = 0; i < dataSize; ++i )
+			data.add( it.nextDouble() );
 		return index;
 	}
 
 	public int add( final Edge e )
 	{
-		return add( e.weight(), e.affinity(), e.from(), e.to(), e.multiplicity() );
+		assert e.dataSize == dataSize;
+
+		final int offset = e.k + COMMON_SIZE;
+
+		return add( e.weight(), e.affinity(), e.from(), e.to(), e.multiplicity(), IntStream.range( offset, offset + dataSize ).mapToDouble( i -> e.data.get( i ) ) );
 	}
 
 	public int remove()
 	{
-		data.remove( k, SIZE );
+		data.remove( k, stride );
 		return size();
 	}
 
@@ -119,7 +167,7 @@ public class Edge implements Serializable
 	@Override
 	public String toString()
 	{
-		return "( " + k / SIZE + " , " + from() + " , " + to() + " , " + weight() + " , " + affinity() + " , " + multiplicity() + " )";
+		return "( " + k / stride + " , " + from() + " , " + to() + " , " + weight() + " , " + affinity() + " , " + multiplicity() + " )";
 	}
 
 }

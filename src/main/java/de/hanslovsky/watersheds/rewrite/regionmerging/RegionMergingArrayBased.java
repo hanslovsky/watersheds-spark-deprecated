@@ -79,7 +79,7 @@ public class RegionMergingArrayBased
 			unpersistList.add( rdd );
 			LOG.info( "Currently " + getNumRegions( rdd.values() ) + "," + rdd.count() + " regions,blocks remaining." );
 
-			logInitialStateAtIteration( rdd, iteration );
+			logInitialStateAtIteration( rdd, iteration, edgeMerger.dataSize() );
 
 			LOG.debug( "Current block roots: " + Arrays.toString( IntStream.range( 0, ( int ) nOriginalBlocks ).map( i -> dj.findRoot( i ) ).toArray() ) );
 
@@ -115,8 +115,8 @@ public class RegionMergingArrayBased
 			findCommonBlockRoots( mergedEdges.mapValues( t -> t._1() ), dj, nOriginalBlocks );
 
 			final JavaPairRDD< Long, Tuple2< Long, RemappedData > > remappedData = mergedEdges
-					.mapValues( new RootEdges() )
-					.mapValues( new RemapToOriginalIndices() );
+					.mapValues( new RootEdges( edgeMerger.dataSize() ) )
+					.mapValues( new RemapToOriginalIndices( edgeMerger.dataSize() ) );
 			remappedData.cache();
 			unpersistList.add( remappedData );
 			remappedData.count();
@@ -124,7 +124,7 @@ public class RegionMergingArrayBased
 
 			final JavaPairRDD< Long, RemappedData > noRoot = remappedData.mapValues( t -> t._2() );
 
-			rdd = MergeBlocks.mergeRemappedData( noRoot, dj ).cache();
+			rdd = MergeBlocks.mergeRemappedData( noRoot, dj, edgeMerger.dataSize() ).cache();
 			rdd.count();
 
 			LOG.info( "" );
@@ -153,14 +153,14 @@ public class RegionMergingArrayBased
 		});
 	}
 
-	public static < K > void logInitialStateAtIteration( final JavaPairRDD< K, RegionMergingInput > rdd, final int iteration )
+	public static < K > void logInitialStateAtIteration( final JavaPairRDD< K, RegionMergingInput > rdd, final int iteration, final int edgeDataSize )
 	{
 		if ( LOG.getLevel().isGreaterOrEqual( Level.TRACE ) )
 		{
 			LOG.trace( "Logging initial state at iteration " + iteration );
 			rdd.map( t -> {
 				final K k = t._1();
-				final Edge e = new Edge( t._2().edges );
+				final Edge e = new Edge( t._2().edges, edgeDataSize );
 				final StringBuilder sb = new StringBuilder( "Logging initial edges for block " + k );
 				for ( int i = 0; i < e.size(); ++i )
 				{

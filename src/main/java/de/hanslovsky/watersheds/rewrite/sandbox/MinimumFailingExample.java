@@ -17,6 +17,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import de.hanslovsky.watersheds.rewrite.VisualizationVisitor;
 import de.hanslovsky.watersheds.rewrite.WatershedsSparkWithRegionMergingLoadSegmentation;
 import de.hanslovsky.watersheds.rewrite.WatershedsSparkWithRegionMergingLoadSegmentation.VisitorFactory;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeCreator;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger.MAX_AFFINITY_MERGER;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
@@ -97,7 +98,7 @@ public class MinimumFailingExample
 	{
 
 		final int nBlocksZ = 3;
-		final int nBlocksY = 1;
+		final int nBlocksY = 2;
 		final int nBlocksX = 4;
 		final int nLabelsPerBlock = 5;
 		final long[] dim = { 30, 4 * nBlocksY, nBlocksZ * nLabelsPerBlock };
@@ -154,7 +155,7 @@ public class MinimumFailingExample
 			@Override
 			public RandomAccess< FloatType > randomAccess()
 			{
-				final float[] vals = { 0.0f, 1.0f, 1.0f };
+				final float[] vals = { 0.0f, 0.0f, 1.0f };
 				final long[] maxs = Arrays.stream( dim ).map( i -> i - 1 ).toArray();
 				final float oob = Float.NaN;
 				final FloatType f = new FloatType();
@@ -201,7 +202,7 @@ public class MinimumFailingExample
 		final MAX_AFFINITY_MERGER merger = new EdgeMerger.MAX_AFFINITY_MERGER();
 //		final FunkyWeight weightFunc = new EdgeWeight.FunkyWeight();
 		final EdgeCheck edgeCheck = new EdgeCheck.AlwaysTrue();
-		final EdgeWeight weightFunc = ( Serializable & EdgeWeight ) ( affinity, count1, count2 ) -> 1.0 - affinity;
+		final EdgeWeight weightFunc = ( Serializable & EdgeWeight ) ( e, count1, count2 ) -> 1.0 - e.affinity();
 
 		final VisitorFactory visFac = ( sc1, labels1, blocks1, blockToInitialBlockMapBC, labelBlocks ) -> {
 
@@ -224,6 +225,7 @@ public class MinimumFailingExample
 				blocksRdd,
 				new long[] { blockDimX, blockDimY, blockDimZ },
 				new ArrayImgFactory< LongType >(),
+				new EdgeCreator.SerializableCreator(),
 				merger,
 				weightFunc,
 				edgeCheck,

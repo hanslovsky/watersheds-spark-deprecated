@@ -32,14 +32,15 @@ public class ToZeroBasedIndexing implements Function< RegionMergingInput, MergeB
 	@Override
 	public MergeBlocIn call( final RegionMergingInput input ) throws Exception
 	{
-		LOG.debug( "Mapping to zero based index (" + new Edge( input.edges ).size() + " edges)." );
+		final int edgeDataSize = edgerMergeBC.getValue().dataSize() ;
+		LOG.debug( "Mapping to zero based index (" + new Edge( input.edges, edgeDataSize).size() + " edges)." );
 
-		final UndirectedGraphArrayBased g = new UndirectedGraphArrayBased( input.nNodes, Util.mapEdges( input.edges, input.nodeIndexMapping ), edgerMergeBC.getValue() );
+		final UndirectedGraphArrayBased g = new UndirectedGraphArrayBased( input.nNodes, Util.mapEdges( input.edges, input.nodeIndexMapping, edgeDataSize ), edgerMergeBC.getValue() );
 
 		if ( LOG.getLevel().isGreaterOrEqual( Level.TRACE ) )
 		{
 			final StringBuilder sb = new StringBuilder( "Logging edges after graph construction" );
-			final Edge e = new Edge( g.edges() );
+			final Edge e = new Edge( g.edges(), edgeDataSize );
 			for ( int i = 0; i < e.size(); ++i )
 			{
 				e.setIndex( i );

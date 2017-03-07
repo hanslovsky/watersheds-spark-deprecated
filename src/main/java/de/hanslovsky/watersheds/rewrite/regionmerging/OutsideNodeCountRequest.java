@@ -30,7 +30,7 @@ public class OutsideNodeCountRequest
 		LOG.setLevel( Level.INFO );
 	}
 
-	public static JavaPairRDD< Long, RemappedData > request( final JavaPairRDD< Long, RemappedData > rdd )
+	public static JavaPairRDD< Long, RemappedData > request( final JavaPairRDD< Long, RemappedData > rdd, final int edgeDataSize )
 	{
 
 		final JavaPairRDD< Long, Tuple2< Long, TLongHashSet > > singleRequests = rdd.flatMapToPair( new AssignRequestsToBlockIds() );
@@ -47,7 +47,7 @@ public class OutsideNodeCountRequest
 				.aggregateByKey( new ArrayList<>(), ( l, v ) -> Util.addAndReturn( l, v ), ( l1, l2 ) -> Util.addAllAndReturn( l1, l2 ) );
 		singleRequests.unpersist();
 
-		return rdd.join( response ).mapValues( new ApplyResponse() );
+		return rdd.join( response ).mapValues( new ApplyResponse( edgeDataSize ) );
 	}
 
 	public static class AssignRequestsToBlockIds implements PairFlatMapFunction< Tuple2< Long, RemappedData >, Long, Tuple2< Long, TLongHashSet > >
@@ -161,6 +161,14 @@ public class OutsideNodeCountRequest
 	Function< Tuple2< RemappedData, ArrayList< Tuple2< TLongLongHashMap, TLongLongHashMap > > >, RemappedData >
 	{
 
+		private final int edgeDataSize;
+
+		public ApplyResponse( final int edgeDataSize )
+		{
+			super();
+			this.edgeDataSize = edgeDataSize;
+		}
+
 		@Override
 		public RemappedData call( final Tuple2< RemappedData, ArrayList< Tuple2< TLongLongHashMap, TLongLongHashMap > > > t ) throws Exception
 		{
@@ -184,7 +192,7 @@ public class OutsideNodeCountRequest
 				counts.putAll( cts._2() );
 			}
 
-			final Edge e = new Edge( t._1().edges );
+			final Edge e = new Edge( t._1().edges, edgeDataSize );
 			for ( int i = 0; i < e.size(); ++i )
 			{
 				e.setIndex( i );

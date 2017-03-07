@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.apache.spark.api.java.function.PairFunction;
 
 import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeCreator;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.util.DisjointSetsHashMap;
@@ -96,6 +97,8 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 
 	private final long[] blockDim;
 
+	private final EdgeCreator edgeCreator;
+
 	private final EdgeMerger edgeMerger;
 
 	private final EdgeWeight edgeWeight;
@@ -106,6 +109,7 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 
 	public GetInternalEdgesAndSplits2(
 			final long[] blockDim,
+			final EdgeCreator edgeCreator,
 			final EdgeMerger edgeMerger,
 			final EdgeWeight func,
 			final EdgeCheck edgeCheck,
@@ -113,6 +117,7 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 	{
 		super();
 		this.blockDim = blockDim;
+		this.edgeCreator = edgeCreator;
 		this.edgeMerger = edgeMerger;
 		this.edgeWeight = func;
 		this.edgeCheck = edgeCheck;
@@ -137,14 +142,14 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 
 		final TDoubleArrayList edges = new TDoubleArrayList();
 		final TDoubleArrayList edgesDummy = new TDoubleArrayList();
-		final Edge e = new Edge( edges );
-		final Edge dummy = new Edge( edgesDummy );
+		final Edge e = new Edge( edges, edgeMerger.dataSize() );
+		final Edge dummy = new Edge( edgesDummy, edgeMerger.dataSize() );
 		dummy.add( Double.NaN, 0.0, 0, 0, 1 );
 		final TLongLongHashMap counts = t._2()._3();
 		final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap = new TLongObjectHashMap<>();
 
 		final TLongLongHashMap parents = new TLongLongHashMap();
-		PrepareRegionMergingCutBlocks.addEdges( innerLabels, innerAffinities, blockDim, nodeEdgeMap, e, dummy, edgeMerger, parents );
+		PrepareRegionMergingCutBlocks.addEdges( innerLabels, innerAffinities, blockDim, nodeEdgeMap, e, dummy, edgeCreator, edgeMerger, parents );
 		final int nIntraBlockEdges = e.size();
 
 
@@ -156,7 +161,7 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 		for ( int i = 0; i < nIntraBlockEdges; ++i )
 		{
 			e.setIndex( i );
-			e.weight( edgeWeight.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
+			e.weight( edgeWeight.weight( e, counts.get( e.from() ), counts.get( e.to() ) ) );
 			if ( edgeCheck.isGoodEdge( e ) )
 				dj.join( dj.findRoot( e.from() ), dj.findRoot( e.to() ) );
 			else
@@ -319,12 +324,12 @@ PairFunction< Tuple2< K, Tuple3< long[], float[], TLongLongHashMap > >, K, GetIn
 		System.out.println( lRa.get() );
 
 		final AtomicLong startId = new AtomicLong( l.length );
-		final GetInternalEdgesAndSplits2< Long > splits = new GetInternalEdgesAndSplits2<>( blockDim, new EdgeMerger.MAX_AFFINITY_MERGER(), new EdgeWeight.FunkyWeight(), ( e ) -> e.affinity() > 0, ( n ) -> {
+		final GetInternalEdgesAndSplits2< Long > splits = new GetInternalEdgesAndSplits2<>( blockDim, new EdgeCreator.SerializableCreator(), new EdgeMerger.MAX_AFFINITY_MERGER(), new EdgeWeight.FunkyWeight(), ( e ) -> e.affinity() > 0, ( n ) -> {
 			return startId.getAndIncrement();
 		} );
 
 		final Tuple2< Long, IntraBlockOutput > res = splits.call( new Tuple2<>( 1l, new Tuple3<>( l, a, counts ) ) );
-		final Edge e = new Edge( res._2().edges );
+		final Edge e = new Edge( res._2().edges, 0 );
 		for ( int i = 0; i < e.size(); ++i )
 		{
 			e.setIndex( i );

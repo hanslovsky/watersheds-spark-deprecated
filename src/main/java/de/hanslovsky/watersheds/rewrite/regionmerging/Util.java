@@ -28,12 +28,12 @@ public class Util
 		LOG.setLevel( Level.INFO );
 	}
 
-	public static TDoubleArrayList mapEdges( final TDoubleArrayList edges, final TLongIntHashMap nodeIndexMapping )
+	public static TDoubleArrayList mapEdges( final TDoubleArrayList edges, final TLongIntHashMap nodeIndexMapping, final int edgeDataSize )
 	{
 
 		final TDoubleArrayList mappedEdges = new TDoubleArrayList();
-		final Edge e = new Edge( edges );
-		final Edge m = new Edge( mappedEdges );
+		final Edge e = new Edge( edges, edgeDataSize );
+		final Edge m = new Edge( mappedEdges, edgeDataSize );
 		LOG.trace( "Mapping to zero based: " + e.size() + " edges." );
 		for ( int i = 0; i < e.size(); ++i )
 		{
@@ -48,8 +48,10 @@ public class Util
 			}
 			else
 			{
-				final int idx = m.add( e.weight(), e.affinity(), nodeIndexMapping.get( e.from() ), nodeIndexMapping.get( e.to() ), e.multiplicity() );
+				final int idx = m.add( e );
 				m.setIndex( idx );
+				m.from( nodeIndexMapping.get( f ) );
+				m.to( nodeIndexMapping.get( t ) );
 				LOG.trace( "Adding edge " + m + " from " + e );
 			}
 		}

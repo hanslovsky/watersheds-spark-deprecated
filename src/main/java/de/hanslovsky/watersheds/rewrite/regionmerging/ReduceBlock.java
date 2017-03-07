@@ -12,15 +12,22 @@ import gnu.trove.map.hash.TLongLongHashMap;
 public class ReduceBlock implements Function< ArrayList< RemappedData >, OriginalLabelData >
 {
 
+	private final int edgeDataSize;
+
+	public ReduceBlock( final int edgeDataSize )
+	{
+		super();
+		this.edgeDataSize = edgeDataSize;
+	}
+
 	@Override
 	public OriginalLabelData call( final ArrayList< RemappedData > mappedDatas ) throws Exception
 	{
 		final TDoubleArrayList allEdges = new TDoubleArrayList();
-		final Edge ae = new Edge( allEdges );
+		final Edge ae = new Edge( allEdges, edgeDataSize );
 
 		final TLongLongHashMap allCounts = new TLongLongHashMap();
 		final TLongLongHashMap allOutsideNodes = new TLongLongHashMap();
-
 		final TLongLongHashMap parents = new TLongLongHashMap();
 
 		for ( final RemappedData md : mappedDatas )
@@ -39,13 +46,15 @@ public class ReduceBlock implements Function< ArrayList< RemappedData >, Origina
 
 		for ( final RemappedData md : mappedDatas )
 		{
-			final Edge e = new Edge( md.edges );
+			final Edge e = new Edge( md.edges, edgeDataSize );
 			for ( int i = 0; i < e.size(); ++i )
 			{
 				e.setIndex( i );
 				final long from = dj.findRoot( e.from() );
 				final long to = dj.findRoot( e.to() );
-				ae.add( e.weight(), e.affinity(), from, to, e.multiplicity() );
+				ae.add( e );
+				ae.from( from );
+				ae.to( to );
 			}
 		}
 

@@ -31,6 +31,7 @@ import com.google.gson.JsonObject;
 import bdv.img.h5.H5Utils;
 import bdv.util.BdvFunctions;
 import bdv.util.BdvStackSource;
+import de.hanslovsky.watersheds.rewrite.graph.EdgeCreator;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.io.AffinitiesChunkLoader;
@@ -372,6 +373,7 @@ public class PrepareRegionMergingCutBlocksTest
 						blocksRdd,
 						sc.broadcast( dimsNoChannels ),
 						sc.broadcast( dimsIntervalNoChannels ),
+						new EdgeCreator.SerializableCreator(),
 						merger,
 						weightFunc, ( EdgeCheck & Serializable ) e -> e.affinity() > 0.5,
 						blockIdService );

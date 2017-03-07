@@ -32,7 +32,7 @@ public class EnsureWeights implements Function< RegionMergingInput, Tuple2< Regi
 	public Tuple2< RegionMergingInput, Double > call( final RegionMergingInput in ) throws Exception
 	{
 		double maxWeight = Double.NEGATIVE_INFINITY;
-		final Edge e = new Edge( in.edges );
+		final Edge e = new Edge( in.edges, edgeWeight.dataSize() );
 		final TLongLongHashMap outsideNodes = in.outsideNodes;
 		final TLongLongHashMap counts = in.counts;
 		for ( int i = 0; i < e.size(); ++i )
@@ -46,7 +46,7 @@ public class EnsureWeights implements Function< RegionMergingInput, Tuple2< Regi
 			}
 			else
 			{
-				e.weight( edgeWeight.weight( e.affinity(), counts.get( e.from() ), counts.get( e.to() ) ) );
+				e.weight( edgeWeight.weight( e, counts.get( e.from() ), counts.get( e.to() ) ) );
 				if ( !outsideNodes.contains( ( int ) e.from() ) && !outsideNodes.contains( ( int ) e.to() ) )
 					maxWeight = Math.max( e.weight(), maxWeight );
 			}
@@ -55,7 +55,7 @@ public class EnsureWeights implements Function< RegionMergingInput, Tuple2< Regi
 		if ( LOG.getLevel().isGreaterOrEqual( Level.TRACE ) )
 		{
 			final StringBuilder sb = new StringBuilder( "Logging ensured edges: " );
-			final Edge edg = new Edge( in.edges );
+			final Edge edg = new Edge( in.edges, edgeWeight.dataSize() );
 			for ( int i = 0; i < edg.size(); ++i )
 			{
 				edg.setIndex( i );

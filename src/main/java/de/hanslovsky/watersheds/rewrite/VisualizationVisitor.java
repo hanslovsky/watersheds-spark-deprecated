@@ -198,16 +198,7 @@ public class VisualizationVisitor implements Visitor
 
 		LOG.info( "Mapping merges to each block." );
 		final JavaPairRDD< HashableLongArray, ArrayList< Tuple2< TLongArrayList, long[] > > > mergesForEachBlockAggregated = mergesForEachBlock
-				.aggregateByKey(
-						new ArrayList<>(),
-						( al, v ) -> {
-							al.add( v );
-							return al;
-						},
-						( al1, al2 ) -> {
-							al1.addAll( al2 );
-							return al1;
-						} );
+				.aggregateByKey( new ArrayList<>(), ( al, v ) -> Util.addAndReturn( al, v ), ( al1, al2 ) -> Util.addAllAndReturn( al1, al2 ) );
 
 		LOG.info( "Painting labels in each block." );
 		final JavaPairRDD< HashableLongArray, long[] > previous = labelBlocks.get( labelBlocks.size() - 1 );
@@ -239,8 +230,10 @@ public class VisualizationVisitor implements Visitor
 		labelBlocks.add( current.cache() );
 
 		current.count();
+		LOG.info( "Painted labels in each block." );
 
 		unpersistList.add( labelBlocks.remove( 0 ) );
+		previous.count();
 
 		final Img< LongType > img = factory.create( images.get( 0 ), new LongType() );
 		for ( final Tuple2< HashableLongArray, long[] > currentData : current.collect() )

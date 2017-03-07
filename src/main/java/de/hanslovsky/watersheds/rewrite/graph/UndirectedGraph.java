@@ -14,22 +14,22 @@ public class UndirectedGraph
 
 	private final Edge e1, e2;
 
-	public UndirectedGraph()
+	public UndirectedGraph( final int edgeDataSize )
 	{
-		this( new TDoubleArrayList() );
+		this( new TDoubleArrayList(), edgeDataSize );
 	}
 
-	public UndirectedGraph( final TDoubleArrayList edges )
+	public UndirectedGraph( final TDoubleArrayList edges, final int edgeDataSize )
 	{
-		this( edges, nodeEdgeMap( edges ) );
+		this( edges, nodeEdgeMap( edges, edgeDataSize ), edgeDataSize );
 	}
 
-	private UndirectedGraph( final TDoubleArrayList edges, final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap )
+	private UndirectedGraph( final TDoubleArrayList edges, final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap, final int edgeDataSize )
 	{
 		this.edges = edges;
 		this.nodeEdgeMap = nodeEdgeMap;
-		this.e1 = new Edge( edges );
-		this.e2 = new Edge( edges );
+		this.e1 = new Edge( edges, edgeDataSize );
+		this.e2 = new Edge( edges, edgeDataSize );
 	}
 
 	public TDoubleArrayList edges()
@@ -99,11 +99,11 @@ public class UndirectedGraph
 
 	}
 
-	private static TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap( final TDoubleArrayList edges )
+	private static TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap( final TDoubleArrayList edges, final int edgeDataSize )
 	{
 		final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap = new TLongObjectHashMap<>();
-		final Edge e1 = new Edge( edges );
-		final Edge e2 = new Edge( edges );
+		final Edge e1 = new Edge( edges, edgeDataSize );
+		final Edge e2 = new Edge( edges, edgeDataSize );
 		final int nEdges = e1.size();
 		for ( int i = 0; i < nEdges; ++i )
 		{

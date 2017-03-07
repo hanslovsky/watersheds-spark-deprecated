@@ -23,6 +23,14 @@ public class RemapToOriginalIndices implements Function< Tuple2< Long, MergeBloc
 		LOG.setLevel( Level.INFO );
 	}
 
+	private final int edgeDataSize;
+
+	public RemapToOriginalIndices( final int edgeDataSize )
+	{
+		super();
+		this.edgeDataSize = edgeDataSize;
+	}
+
 	@Override
 	public Tuple2< Long, RemappedData > call( final Tuple2< Long, MergeBlocOut > t ) throws Exception
 	{
@@ -32,7 +40,7 @@ public class RemapToOriginalIndices implements Function< Tuple2< Long, MergeBloc
 		final TDoubleArrayList edges = new TDoubleArrayList( out.edges );
 
 		// map back edges
-		Util.remapEdges( new Edge( edges ), out, map );
+		Util.remapEdges( new Edge( edges, edgeDataSize ), out, map );
 
 		// map back counts
 		final TLongLongHashMap countsInBlock = Util.remapCounts( out, map );
@@ -58,7 +66,7 @@ public class RemapToOriginalIndices implements Function< Tuple2< Long, MergeBloc
 
 		if ( LOG.getLevel().isGreaterOrEqual( Level.TRACE ) )
 		{
-			final Edge e = new Edge( edges );
+			final Edge e = new Edge( edges, edgeDataSize );
 			final StringBuilder sb = new StringBuilder( "Logging re-mapped edges: " );
 			for ( int i = 0; i < e.size(); ++i )
 			{

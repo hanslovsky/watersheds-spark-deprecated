@@ -47,10 +47,10 @@ public class MergeBlocTest
 		final CompositeIntervalView< FloatType, RealComposite< FloatType > > data = Views.collapseReal( H5Utils.loadFloat( path, "main", cellSize ) );
 		final Img< LongType > labels = H5Utils.loadUnsignedLong( path, "zws", cellSizeLabels );
 
-		final UndirectedGraph g = new UndirectedGraph();
+		final UndirectedGraph g = new UndirectedGraph( 0 );
 		final TDoubleArrayList edges = g.edges();
 		final TLongObjectHashMap< TLongIntHashMap > nodeEdgeMap = g.nodeEdgeMap();
-		final Edge edge = new Edge( edges );
+		final Edge edge = new Edge( edges, 0 );
 
 		final TLongLongHashMap counts = new TLongLongHashMap();
 
@@ -124,7 +124,7 @@ public class MergeBlocTest
 		for ( int i = 0; i < edge.size(); ++i )
 		{
 			edge.setIndex( i );
-			edge.weight( fw.weight( edge.affinity(), counts.get( edge.from() ), edge.to() ) );
+			edge.weight( fw.weight( edge, counts.get( edge.from() ), edge.to() ) );
 		}
 
 		final TLongArrayList merges = new TLongArrayList();
