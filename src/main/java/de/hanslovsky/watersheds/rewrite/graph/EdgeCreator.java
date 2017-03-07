@@ -37,7 +37,7 @@ public interface EdgeCreator extends EdgeDataSize
 
 		public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
 		{
-			LOG.setLevel( Level.TRACE );
+			LOG.setLevel( Level.INFO );
 		}
 
 		private final int nBins;

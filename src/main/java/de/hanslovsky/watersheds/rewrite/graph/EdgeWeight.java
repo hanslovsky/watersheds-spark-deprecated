@@ -41,7 +41,7 @@ public interface EdgeWeight extends EdgeDataSize
 
 		public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
 		{
-			LOG.setLevel( Level.DEBUG );
+			LOG.setLevel( Level.INFO );
 		}
 
 		private final int nBins;

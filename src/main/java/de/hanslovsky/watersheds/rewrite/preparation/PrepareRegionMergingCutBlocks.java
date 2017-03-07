@@ -144,7 +144,7 @@ public class PrepareRegionMergingCutBlocks
 	{
 		public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
 		{
-			LOG.setLevel( Level.TRACE );
+			LOG.setLevel( Level.INFO );
 		}
 
 		public static class BlockOutput

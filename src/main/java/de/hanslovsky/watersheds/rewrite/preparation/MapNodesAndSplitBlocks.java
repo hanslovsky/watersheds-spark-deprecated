@@ -25,7 +25,7 @@ implements Function< GetExternalEdges.BlockOutput, TLongObjectHashMap< BlockDivi
 
 	public static final Logger LOG = LogManager.getLogger( MethodHandles.lookup().lookupClass() );
 	{
-		LOG.setLevel( Level.DEBUG );
+		LOG.setLevel( Level.INFO );
 	}
 
 	private final Broadcast< TLongLongHashMap > nodeBlockMapping;
