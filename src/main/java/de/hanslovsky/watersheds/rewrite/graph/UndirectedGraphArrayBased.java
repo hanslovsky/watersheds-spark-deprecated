@@ -7,6 +7,8 @@ import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
+import de.hanslovsky.watersheds.rewrite.graph.edge.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.edge.EdgeMerger;
 import gnu.trove.iterator.TIntIntIterator;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TIntIntHashMap;

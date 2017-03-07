@@ -13,9 +13,9 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 
-import de.hanslovsky.watersheds.rewrite.graph.Edge;
-import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
-import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
+import de.hanslovsky.watersheds.rewrite.graph.edge.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.edge.EdgeMerger;
+import de.hanslovsky.watersheds.rewrite.graph.edge.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocArrayBased;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocIn;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocOut;

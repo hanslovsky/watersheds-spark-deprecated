@@ -2,7 +2,7 @@ package de.hanslovsky.watersheds.rewrite.mergebloc;
 
 import org.apache.spark.api.java.function.Function;
 
-import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.edge.Edge;
 import net.imglib2.algorithm.morphology.watershed.DisjointSets;
 import scala.Tuple2;
 

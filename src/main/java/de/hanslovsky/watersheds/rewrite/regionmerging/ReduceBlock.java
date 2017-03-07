@@ -4,7 +4,7 @@ import java.util.ArrayList;
 
 import org.apache.spark.api.java.function.Function;
 
-import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.edge.Edge;
 import de.hanslovsky.watersheds.rewrite.util.DisjointSetsHashMap;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TLongLongHashMap;

@@ -2,7 +2,7 @@ package de.hanslovsky.watersheds.rewrite.util;
 
 import java.io.Serializable;
 
-import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.edge.Edge;
 
 public interface EdgeCheck
 {

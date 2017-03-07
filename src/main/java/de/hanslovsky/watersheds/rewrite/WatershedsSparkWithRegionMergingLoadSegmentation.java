@@ -27,10 +27,10 @@ import org.zeromq.ZMQ.Socket;
 import bdv.img.h5.H5Utils;
 import ch.systemsx.cisd.hdf5.HDF5Factory;
 import ch.systemsx.cisd.hdf5.IHDF5Reader;
-import de.hanslovsky.watersheds.rewrite.graph.Edge;
-import de.hanslovsky.watersheds.rewrite.graph.EdgeCreator;
-import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
-import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
+import de.hanslovsky.watersheds.rewrite.graph.edge.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.edge.EdgeCreator;
+import de.hanslovsky.watersheds.rewrite.graph.edge.EdgeMerger;
+import de.hanslovsky.watersheds.rewrite.graph.edge.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.preparation.PrepareRegionMergingCutBlocks;
 import de.hanslovsky.watersheds.rewrite.preparation.PrepareRegionMergingCutBlocks.BlockDivision;
 import de.hanslovsky.watersheds.rewrite.regionmerging.OriginalLabelData;
@@ -87,8 +87,8 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 	{
 
 
-//		final int[] dimsIntervalInt = new int[] { 150, 150, 2 };
 		final int[] dimsIntervalInt = new int[] { 150, 150, 2 };
+//		final int[] dimsIntervalInt = new int[] { 150, 150, 50, 3 };
 
 		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt2D.h5";
 //		final String path = Util.HOME_DIR + "/Dropbox/misc/excerpt.h5";
@@ -142,11 +142,11 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 
 		// start spark server
 		System.out.println( "Starting Spark server... " );
-		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[1]" ).set( "spark.driver.maxResultSize", "4g" );
+		final SparkConf conf = new SparkConf().setAppName( "Watersheds" ).setMaster( "local[*]" ).set( "spark.driver.maxResultSize", "4g" );
 		final JavaSparkContext sc = new JavaSparkContext( conf );
 		Logger.getRootLogger().setLevel( Level.ERROR );
 
-		final String OPTION = "LOG_COUNT";
+		final String OPTION = "AFF_MEDIAN";
 		final EdgeMerger merger;
 		final EdgeWeight weightFunc;
 		final EdgeCreator edgeCreator;
@@ -197,10 +197,10 @@ public class WatershedsSparkWithRegionMergingLoadSegmentation
 			break;
 		}
 
-//		final EdgeCheck edgeCheck = ( EdgeCheck & Serializable ) e -> e.affinity() >= 0.97;
-		final EdgeCheck edgeCheck = ( EdgeCheck & Serializable ) e -> e.weight() <= 0.01;
+		final EdgeCheck edgeCheck = ( EdgeCheck & Serializable ) e -> e.affinity() >= 0.99;
+//		final EdgeCheck edgeCheck = ( EdgeCheck & Serializable ) e -> e.weight() <= 0.01;
 
-		final double threshold = 1.5;// 100.0;
+		final double threshold = 0.9;
 
 		final VisitorFactory visFac = ( sc1, labels, blocks, blockToInitialBlockMapBC, labelBlocks ) -> {
 			final VisualizationVisitor vis = new VisualizationVisitor(

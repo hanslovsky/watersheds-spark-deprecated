@@ -14,10 +14,10 @@ import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.broadcast.Broadcast;
 
-import de.hanslovsky.watersheds.rewrite.graph.Edge;
-import de.hanslovsky.watersheds.rewrite.graph.EdgeCreator;
-import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
-import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
+import de.hanslovsky.watersheds.rewrite.graph.edge.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.edge.EdgeCreator;
+import de.hanslovsky.watersheds.rewrite.graph.edge.EdgeMerger;
+import de.hanslovsky.watersheds.rewrite.graph.edge.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.util.EdgeCheck;
 import de.hanslovsky.watersheds.rewrite.util.HashableLongArray;
 import de.hanslovsky.watersheds.rewrite.util.IdService;

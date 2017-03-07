@@ -10,7 +10,7 @@ import org.zeromq.ZMQ;
 import org.zeromq.ZMQ.Context;
 import org.zeromq.ZMQ.Socket;
 
-import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.edge.Edge;
 import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TLongLongHashMap;
 

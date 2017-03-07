@@ -10,7 +10,7 @@ import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.function.PairFunction;
 
-import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.edge.Edge;
 import de.hanslovsky.watersheds.rewrite.util.Util;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.iterator.TLongLongIterator;

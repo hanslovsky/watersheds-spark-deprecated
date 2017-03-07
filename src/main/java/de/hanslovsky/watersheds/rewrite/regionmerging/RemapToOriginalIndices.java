@@ -7,7 +7,7 @@ import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.function.Function;
 
-import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.edge.Edge;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocOut;
 import de.hanslovsky.watersheds.rewrite.util.DisjointSetsHashMap;
 import gnu.trove.list.array.TDoubleArrayList;

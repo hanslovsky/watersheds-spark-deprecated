@@ -7,9 +7,9 @@ import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.function.PairFunction;
 
-import de.hanslovsky.watersheds.rewrite.graph.Edge;
-import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
-import de.hanslovsky.watersheds.rewrite.graph.EdgeWeight;
+import de.hanslovsky.watersheds.rewrite.graph.edge.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.edge.EdgeMerger;
+import de.hanslovsky.watersheds.rewrite.graph.edge.EdgeWeight;
 import de.hanslovsky.watersheds.rewrite.util.ChangeablePriorityQueue;
 import gnu.trove.iterator.TLongIterator;
 import gnu.trove.list.array.TDoubleArrayList;

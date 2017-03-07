@@ -6,7 +6,7 @@ import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
-import de.hanslovsky.watersheds.rewrite.graph.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.edge.Edge;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocOut;
 import gnu.trove.iterator.TIntLongIterator;
 import gnu.trove.iterator.TLongIntIterator;

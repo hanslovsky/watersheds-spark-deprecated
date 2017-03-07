@@ -1,4 +1,4 @@
-package de.hanslovsky.watersheds.rewrite.graph;
+package de.hanslovsky.watersheds.rewrite.graph.edge;
 
 import java.io.Serializable;
 import java.util.PrimitiveIterator.OfDouble;

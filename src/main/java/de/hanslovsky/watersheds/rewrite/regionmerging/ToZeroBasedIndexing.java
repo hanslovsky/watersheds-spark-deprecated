@@ -8,9 +8,9 @@ import org.apache.log4j.Logger;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.broadcast.Broadcast;
 
-import de.hanslovsky.watersheds.rewrite.graph.Edge;
-import de.hanslovsky.watersheds.rewrite.graph.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.graph.UndirectedGraphArrayBased;
+import de.hanslovsky.watersheds.rewrite.graph.edge.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.edge.EdgeMerger;
 import de.hanslovsky.watersheds.rewrite.mergebloc.MergeBlocIn;
 
 public class ToZeroBasedIndexing implements Function< RegionMergingInput, MergeBlocIn >

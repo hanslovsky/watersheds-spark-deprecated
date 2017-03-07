@@ -1,5 +1,7 @@
 package de.hanslovsky.watersheds.rewrite.graph;
 
+import de.hanslovsky.watersheds.rewrite.graph.edge.Edge;
+import de.hanslovsky.watersheds.rewrite.graph.edge.EdgeMerger;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.TLongIntHashMap;
 import gnu.trove.map.hash.TLongLongHashMap;
