@@ -1,6 +1,5 @@
 package de.hanslovsky.watersheds.rewrite;
 
-import de.hanslovsky.watersheds.rewrite.ViewsFailureTest.AvgConverter;
 import net.imglib2.Cursor;
 import net.imglib2.Interval;
 import net.imglib2.Point;
@@ -12,12 +11,15 @@ import net.imglib2.algorithm.neighborhood.DiamondShape.NeighborhoodsAccessible;
 import net.imglib2.algorithm.neighborhood.Neighborhood;
 import net.imglib2.converter.AbstractConvertedRandomAccess;
 import net.imglib2.converter.AbstractConvertedRandomAccessible;
+import net.imglib2.converter.Converter;
 import net.imglib2.converter.Converters;
 import net.imglib2.img.array.ArrayImg;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.basictypeaccess.array.FloatArray;
+import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.view.Views;
+import net.imglib2.view.composite.Composite;
 import net.imglib2.view.composite.CompositeIntervalView;
 import net.imglib2.view.composite.RealComposite;
 
@@ -56,6 +58,10 @@ public class ViewsFailureTest2
 		iterateAndPrint( nh2.randomAccess(), xyPosition );
 
 	}
+
+	// ---------------------------------------------------------------------------------------------------------
+	// HELPERS
+	// ---------------------------------------------------------------------------------------------------------
 
 	public static void iterateAndPrint( final RandomAccess< ? extends Neighborhood< ? > > nh, final long[] pos )
 	{
@@ -110,6 +116,34 @@ public class ViewsFailureTest2
 		public AbstractConvertedRandomAccess< T, T > copy()
 		{
 			return new LoggingAccess<>( source.copyRandomAccess() );
+		}
+
+	}
+
+	public static class AvgConverter< T extends RealType< T >, C extends Composite< T > > implements Converter< C, T >
+	{
+
+		private final int nDim;
+
+		public AvgConverter( final int nDim )
+		{
+			super();
+			this.nDim = nDim;
+		}
+
+		@Override
+		public void convert( final C input, final T output )
+		{
+			int count = 0;
+			output.setZero();
+			for ( int i = 0; i < nDim; ++i )
+				if ( !Double.isNaN( input.get( i ).getRealDouble() ) )
+				{
+					output.add( input.get( i ) );
+					++count;
+				}
+			if ( count > 0 )
+				output.mul( 1.0 / count );
 		}
 
 	}
