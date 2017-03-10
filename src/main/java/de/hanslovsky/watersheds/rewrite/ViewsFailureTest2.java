@@ -1,5 +1,8 @@
 package de.hanslovsky.watersheds.rewrite;
 
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
 import net.imglib2.Cursor;
 import net.imglib2.Interval;
 import net.imglib2.Point;
@@ -11,12 +14,9 @@ import net.imglib2.algorithm.neighborhood.DiamondShape.NeighborhoodsAccessible;
 import net.imglib2.algorithm.neighborhood.Neighborhood;
 import net.imglib2.converter.AbstractConvertedRandomAccess;
 import net.imglib2.converter.AbstractConvertedRandomAccessible;
-import net.imglib2.converter.Converter;
-import net.imglib2.converter.Converters;
 import net.imglib2.img.array.ArrayImg;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.basictypeaccess.array.FloatArray;
-import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.view.Views;
 import net.imglib2.view.composite.Composite;
@@ -27,7 +27,7 @@ public class ViewsFailureTest2
 {
 	public static void main( final String[] args )
 	{
-		final long[] dims = { 3, 3, 2, 3 };
+		final long[] dims = { 3, 3, 2, 1 };
 		final ArrayImg< FloatType, FloatArray > imgs = ArrayImgs.floats( dims );
 		for ( int z = 0; z < dims[ 2 ]; ++z )
 			for ( final FloatType h : Views.hyperSlice( imgs, 2, z ) )
@@ -36,8 +36,6 @@ public class ViewsFailureTest2
 		final boolean logPosition = false;
 		final CompositeIntervalView< FloatType, RealComposite< FloatType > > collapsed = Views.collapseReal( logPosition ? Views.interval( log( imgs ), imgs ) : imgs );
 
-		final AvgConverter< FloatType, RealComposite< FloatType > > avgConv = new AvgConverter<>( 2 );
-
 		final DiamondShape shape = new DiamondShape( 1 );
 
 		final long[] xyPosition = { 1, 1 };
@@ -45,17 +43,16 @@ public class ViewsFailureTest2
 		final int sliceAxis = 2;
 		final long slicePos = 1;
 
-
 		final RandomAccessibleInterval< RealComposite< FloatType > > hs1 = Views.hyperSlice( collapsed, sliceAxis, slicePos );
-		final RandomAccessibleInterval< FloatType > avg1 = Converters.convert( hs1, avgConv, new FloatType() );
-		final NeighborhoodsAccessible< FloatType > nh1 = shape.neighborhoodsRandomAccessible( avg1 );
-		final NeighborhoodsAccessible< FloatType > nh2 = shape.neighborhoodsRandomAccessible( Views.extendValue( avg1, new FloatType( Float.NaN ) ) );
+
+		final NeighborhoodsAccessible< RealComposite< FloatType > > nh1 = shape.neighborhoodsRandomAccessible( hs1 );
+		final NeighborhoodsAccessible< RealComposite< FloatType > > nh2 = shape.neighborhoodsRandomAccessible( Views.extendValue( hs1, Views.collapseReal( ArrayImgs.floats( 1, dims[ 3 ] ) ).randomAccess().get() ) );
 
 		System.out.println( "Without extension: " );
-		iterateAndPrint( nh1.randomAccess(), xyPosition );
+		iterateAndPrintComposite( nh1.randomAccess(), xyPosition, ( int ) dims[ 3 ] );
 
 		System.out.println( "With extension: " );
-		iterateAndPrint( nh2.randomAccess(), xyPosition );
+		iterateAndPrintComposite( nh2.randomAccess(), xyPosition, ( int ) dims[ 3 ] );
 
 	}
 
@@ -63,11 +60,14 @@ public class ViewsFailureTest2
 	// HELPERS
 	// ---------------------------------------------------------------------------------------------------------
 
-	public static void iterateAndPrint( final RandomAccess< ? extends Neighborhood< ? > > nh, final long[] pos )
+	public static void iterateAndPrintComposite( final RandomAccess< ? extends Neighborhood< ? extends Composite< ? > > > nh, final long[] pos, final int nDim )
 	{
 		nh.setPosition( pos );
-		for ( final Cursor< ? > n = nh.get().cursor(); n.hasNext(); )
-			System.out.println( n.next() + " " + new Point( n ) );
+		for ( final Cursor< ? extends Composite< ? > > n = nh.get().cursor(); n.hasNext(); )
+		{
+			final Composite< ? > c = n.next();
+			System.out.println( IntStream.range( 0, nDim ).mapToObj( i -> c.get( i ) ).collect( Collectors.toList() ) + " " + new Point( n ) );
+		}
 	}
 
 	public static < T > LoggingAccessible< T > log( final RandomAccessible< T > ra )
@@ -120,31 +120,5 @@ public class ViewsFailureTest2
 
 	}
 
-	public static class AvgConverter< T extends RealType< T >, C extends Composite< T > > implements Converter< C, T >
-	{
-
-		private final int nDim;
-
-		public AvgConverter( final int nDim )
-		{
-			super();
-			this.nDim = nDim;
-		}
-
-		@Override
-		public void convert( final C input, final T output )
-		{
-			int count = 0;
-			output.setZero();
-			for ( int i = 0; i < nDim; ++i )
-				if ( !Double.isNaN( input.get( i ).getRealDouble() ) )
-				{
-					output.add( input.get( i ) );
-					++count;
-				}
-			if ( count > 0 )
-				output.mul( 1.0 / count );
-		}
-
-	}
 }
+
